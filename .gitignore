@@ -5,7 +5,7 @@
 *.dll
 *.obj
 *.def
-src/[Mm]akefile
+#src/[Mm]akefile
 test/[Mm]akefile
 examples/[Mm]akefile
 test/dtest
