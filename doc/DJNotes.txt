@@ -1,0 +1,4 @@
+Boost is installed in /usr/local/lib/ (resp. include).
+A previous homebrew install is in /usr/local/libexec/boost/1.76/lib (resp. include) and linked to from /opt/local/lib.
+The Boost libraries are installed using macports as dylibs.
+ls
