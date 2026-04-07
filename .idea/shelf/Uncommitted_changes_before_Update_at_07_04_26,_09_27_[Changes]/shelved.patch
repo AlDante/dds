@@ -1,0 +1,631 @@
+Index: src/Par.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>/*\n   DDS, a bridge double dummy solver.\n\n   Copyright (C) 2006-2014 by Bo Haglund /\n   2014-2018 by Bo Haglund & Soren Hein.\n\n   See LICENSE and README.\n*/\n\n\n#include <stdexcept>\n#include <algorithm>\n#include <string.h>\n\n#include \"dds.h\"\n#include \"PBN.h\"\n\nusing namespace std;\n\n\nstruct par_suits_type\n{\n  int suit;\n  int tricks;\n  int score;\n};\n\nstruct best_par_type\n{\n  int par_denom;\n  int par_tricks;\n};\n\nstruct parContr2Type\n{\n  char contracts[10];\n  int denom;\n};\n\nint stat_contr[5] = {0, 0, 0, 0, 0};\n\n/* index 1: 0=NT, 1=Major, 2=Minor index 2: contract level 1-7 */\nconst int max_low[3][8] = {\n  {0, 0, 1, 0, 1, 2, 0, 0}, \n  {0, 0, 1, 2, 0, 1, 0, 0}, \n  {0, 0, 1, 2, 3, 0, 0, 0}\n}; \n\n\nint STDCALL CalcParPBN(\n  ddTableDealPBN tableDealPBN,\n  ddTableResults * tablep, \n  int vulnerable, \n  parResults * presp)\n{\n  int res;\n  ddTableDeal tableDeal;\n  int STDCALL CalcPar(ddTableDeal tableDeal, int vulnerable,\n                      ddTableResults * tablep, parResults * presp);\n\n  if (ConvertFromPBN(tableDealPBN.cards, tableDeal.cards) != 1)\n    return RETURN_PBN_FAULT;\n\n  res = CalcPar(tableDeal, vulnerable, tablep, presp);\n\n  return res;\n}\n\n\nint rawscore(\n  int denom,\n  int tricks,\n  int isvul);\n\nvoid SideSeats(\n  int dr,\n  int i,\n  int t1,\n  int t2,\n  int order,\n  parResultsMaster sidesRes[2]);\n\nvoid CalcOverTricks(\n  int i,\n  int max_lower,\n  int tricks,\n  int order,\n  parResultsMaster sidesRes[2]);\n\nint CalcMultiContracts(\n  int max_lower,\n  int tricks);\n\nint VulnerDefSide(\n  int side,\n  int vulnerable);\n\n\nint STDCALL Par(\n  ddTableResults * tablep, \n  parResults * presp,\n  int vulnerable)\n{\n  /* vulnerable 0: None 1: Both 2: NS 3: EW */\n\n  /* The code for calculation of par score / contracts is based upon the\n  perl code written by Matthew Kidd ACBLmerge. He has kindly given me \n  permission to include a C++ adaptation in DDS. */\n\n  /* The Par function computes the par result and contracts. */\n\n  parResultsMaster sidesRes[2];\n  int res, k;\n  char temp[8], buff[3];\n  int denom_conv[5] = { 4, 0, 1, 2, 3 };\n  char contr_sep[2] = { ',', '\\0' };\n  char seats[6][4] = { \n    { \"N \" }, { \"E \" }, { \"S \" }, { \"W \" }, { \"NS \" }, { \"EW \" } };\n\n  res = SidesParBin(tablep, sidesRes, vulnerable);\n\n  if (res != RETURN_NO_FAULT)\n    return res;\n\n  presp->parScore[0][0] = 'N';\n  presp->parScore[0][1] = 'S';\n  presp->parScore[0][2] = ' ';\n  presp->parScore[0][3] = '\\0';\n  presp->parScore[1][0] = 'E';\n  presp->parScore[1][1] = 'W';\n  presp->parScore[1][2] = ' ';\n  presp->parScore[1][3] = '\\0';\n\n  sprintf(temp, \"%d\", sidesRes[0].score);\n  strcat(presp->parScore[0], temp);\n  sprintf(temp, \"%d\", sidesRes[1].score);\n  strcat(presp->parScore[1], temp);\n\n  presp->parContractsString[0][0] = 'N';\n  presp->parContractsString[0][1] = 'S';\n  presp->parContractsString[0][2] = ':';\n  presp->parContractsString[0][3] = '\\0';\n  presp->parContractsString[1][0] = 'E';\n  presp->parContractsString[1][1] = 'W';\n  presp->parContractsString[1][2] = ':';\n  presp->parContractsString[1][3] = '\\0';\n\n  if (sidesRes[0].score == 0)\n  {\n    /* Neither side can make anything.*/\n\n    return RETURN_NO_FAULT;\n  }\n\n  for (int i = 0; i <= 1; i++)\n  {\n    if (sidesRes[i].contracts[0].underTricks > 0)\n    {\n      /* Sacrifice*/\n\n      for (k = 0; k < sidesRes[i].number; k++)\n      {\n\n        strcat(presp->parContractsString[i], \n          seats[sidesRes[i].contracts[k].seats]);\n        sprintf(temp, \"%d\", sidesRes[i].contracts[k].level);\n        buff[0] = static_cast<char>(\n          cardSuit[denom_conv[sidesRes[i].contracts[k].denom]]);\n        buff[1] = 'x';\n        buff[2] = '\\0';\n        strcat(temp, buff);\n        strcat(presp->parContractsString[i], temp);\n        if (k != (sidesRes[i].number - 1))\n          strcat(presp->parContractsString[i], contr_sep);\n      }\n    }\n    else\n    {\n      /* Make */\n\n      for (k = 0; k < sidesRes[i].number; k++)\n      {\n\n        strcat(presp->parContractsString[i], \n          seats[sidesRes[i].contracts[k].seats]);\n\n        int n = CalcMultiContracts(sidesRes[i].contracts[k].overTricks, \n          sidesRes[i].contracts[k].overTricks\n            + sidesRes[i].contracts[k].level + 6);\n\n\n        sprintf(temp, \"%d\", n);\n        buff[0] = static_cast<char>(\n          cardSuit[denom_conv[sidesRes[i].contracts[k].denom]]);\n        buff[1] = '\\0';\n        strcat(temp, buff);\n        strcat(presp->parContractsString[i], temp);\n        if (k != (sidesRes[i].number - 1))\n          strcat(presp->parContractsString[i], contr_sep);\n      }\n    }\n  }\n\n  return RETURN_NO_FAULT;\n}\n\n#ifndef DEALER_PAR_ENGINE_ONLY\n\nint STDCALL SidesParBin(\n  ddTableResults * tablep,\n  parResultsMaster sidesRes[2],\n  int vulnerable)\n{\n\n  /* vulnerable 0: None 1: Both 2: NS 3: EW */\n\n  /* The code for calculation of par score / contracts is based upon the\n  perl code written by Matthew Kidd ACBLmerge. He has kindly given me \n  permission to include a C++ adaptation in DDS. */\n\n  /* The Par function computes the par result and contracts. */\n\n\n  int denom_conv[5] = { 4, 0, 1, 2, 3 };\n  /* Preallocate for efficiency. These hold result from last direction\n  (N-S or E-W) examined. */\n  int j, k, m, isvul;\n  int current_side, both_sides_once_flag, denom_max = 0, max_lower;\n  int new_score_flag, sc1, sc2, sc3;\n  int prev_par_denom = 0, prev_par_tricks = 0;\n  int denom_filter[5] = { 0, 0, 0, 0, 0 };\n  int no_filtered[2] = { 0, 0 };\n  int no_of_denom[2];\n  int best_par_score[2];\n  int best_par_sacut[2];\n  best_par_type best_par[5][2]; /* 1st index order number. */\n\n  int ut = 0, t1, t2, tt, score, dr, tu, tu_max, t3[5], t4[5], n;\n  par_suits_type par_suits[5];\n\n  int par_denom[2] = { -1, -1 }; /* 0-4 = NT,S,H,D,C */\n  int par_tricks[2] = { 6, 6 }; /* Initial \"contract\" beats 0 NT */\n  int par_score[2] = { 0, 0 };\n  int par_sacut[2] = { 0, 0 }; /* Undertricks for sacrifice (0 if not sac) */\n\n\n  /* Find best par result for N-S (i==0) or E-W (i==1). These will\n  nearly always be the same, but when we have a \"hot\" situation\n  they will not be. */\n\n  for (int i = 0; i <= 1; i++)\n  {\n    /* Start with the with the offensive side (current_side = 0) and \n    alternate between sides seeking the to improve the result for the \n    current side.*/\n\n    no_filtered[i] = 0;\n    for (m = 0; m <= 4; m++)\n      denom_filter[m] = 0;\n\n    current_side = 0;\n    both_sides_once_flag = 0;\n    while (1)\n    {\n\n      /* Find best contract for current side that beats current contract.\n      Choose highest contract if results are equal. */\n\n      k = (i + current_side) % 2;\n\n      isvul = ((vulnerable == 1) || \n        (k ? (vulnerable == 3) : (vulnerable == 2)));\n\n      new_score_flag = 0;\n      prev_par_denom = par_denom[i];\n      prev_par_tricks = par_tricks[i];\n\n      /* Calculate tricks and score values and\n      store them for each denomination in structure par_suits[5]. */\n\n      n = 0;\n      for (j = 0; j <= 4; j++)\n      {\n        if (denom_filter[j] == 0)\n        {\n          /* Current denomination is not filtered out. */\n          t1 = k ? tablep->resTable[denom_conv[j]][1] : \n            tablep->resTable[denom_conv[j]][0];\n          t2 = k ? tablep->resTable[denom_conv[j]][3] : \n            tablep->resTable[denom_conv[j]][2];\n          tt = max(t1, t2);\n          /* tt is the maximum number of tricks current side can take in\n          denomination.*/\n\n          par_suits[n].suit = j;\n          par_suits[n].tricks = tt;\n\n          if ((tt > par_tricks[i]) || ((tt == par_tricks[i]) &&\n                                       (j < par_denom[i])))\n            par_suits[n].score = rawscore(j, tt, isvul);\n          else\n            par_suits[n].score = rawscore(-1, prev_par_tricks - tt, isvul);\n          n++;\n        }\n      }\n\n      /* Sort the items in the par_suits structure with decreasing order \n      of the values on the scores. */\n\n      for (int s = 1; s < n; s++)\n      {\n        par_suits_type tmp = par_suits[s];\n        int r = s;\n        for (; r && tmp.score > par_suits[r - 1].score; --r)\n          par_suits[r] = par_suits[r - 1];\n        par_suits[r] = tmp;\n      }\n\n      /* Do the iteration as before but now in the order of the sorted \n      denominations. */\n\n      for (m = 0; m < n; m++)\n      {\n        j = par_suits[m].suit;\n        tt = par_suits[m].tricks;\n\n        if ((tt > par_tricks[i]) || ((tt == par_tricks[i]) &&\n                                     (j < par_denom[i])))\n        {\n          /* Can bid higher and make contract.*/\n          score = rawscore(j, tt, isvul);\n        }\n        else\n        {\n          /* Bidding higher in this denomination will not beat previous \n          denomination and may be a sacrifice. */\n          ut = prev_par_tricks - tt;\n          if (j >= prev_par_denom)\n          {\n            /* Sacrifices higher than 7N are not permitted (but long ago\n            the official rules did not prohibit bidding higher than 7N!) */\n            if (prev_par_tricks == 13)\n              continue;\n            /* It will be necessary to bid one level higher, resulting in\n            one more undertrick. */\n            ut++;\n          }\n          /* Not a sacrifice (due to par_tricks > prev_par_tricks) */\n          if (ut <= 0)\n            continue;\n          /* Compute sacrifice.*/\n          score = rawscore(-1, ut, isvul);\n        }\n\n        if (current_side == 1)\n          score = -score;\n\n        if (((current_side == 0) && (score > par_score[i])) ||\n            ((current_side == 1) && (score < par_score[i])))\n        {\n          new_score_flag = 1;\n          par_score[i] = score;\n          par_denom[i] = j;\n\n          if (((current_side == 0) && (score > 0)) ||\n              ((current_side == 1) && (score < 0)))\n          {\n            /* New par score from a making contract.\n            Can immediately update since score at same level in higher\n            ranking suit is always >= score in lower ranking suit and\n            better than any sacrifice. */\n\n            par_tricks[i] = tt;\n            par_sacut[i] = 0;\n          }\n          else\n          {\n            par_tricks[i] = tt + ut;\n            par_sacut[i] = ut;\n          }\n        }\n      }\n\n\n      if (!new_score_flag && both_sides_once_flag)\n      {\n        if (no_filtered[i] == 0)\n        {\n          best_par_score[i] = par_score[i];\n          if (best_par_score[i] == 0)\n            break;\n          best_par_sacut[i] = par_sacut[i];\n          no_of_denom[i] = 0;\n        }\n        else if (best_par_score[i] != par_score[i])\n          break;\n        if (no_filtered[i] >= 5)\n          break;\n        denom_filter[par_denom[i]] = 1;\n        no_filtered[i]++;\n        best_par[no_of_denom[i]][i].par_denom = par_denom[i];\n        best_par[no_of_denom[i]][i].par_tricks = par_tricks[i];\n        no_of_denom[i]++;\n        both_sides_once_flag = 0;\n        current_side = 0;\n        par_denom[i] = -1;\n        par_tricks[i] = 6;\n        par_score[i] = 0;\n        par_sacut[i] = 0;\n      }\n      else\n      {\n        both_sides_once_flag = 1;\n        current_side = 1 - current_side;\n      }\n    }\n  }\n\n  /* Output: \"best par score\" */\n  sidesRes[0].score = best_par_score[0];\n  sidesRes[1].score = best_par_score[1];\n\n  if (best_par_score[0] == 0)\n  {\n    /* Neither side can make anything.*/\n    sidesRes[0].contracts[0].denom = 0;\n    sidesRes[0].contracts[0].level = 0;\n    sidesRes[0].contracts[0].overTricks = 0;\n    sidesRes[0].contracts[0].underTricks = 0;\n    sidesRes[0].contracts[0].seats = 0;\n    sidesRes[0].number = 1;\n    sidesRes[1].contracts[0].denom = 0;\n    sidesRes[1].contracts[0].level = 0;\n    sidesRes[1].contracts[0].overTricks = 0;\n    sidesRes[1].contracts[0].underTricks = 0;\n    sidesRes[1].contracts[0].seats = 0;\n    sidesRes[1].number = 1;\n    return RETURN_NO_FAULT;\n  }\n\n  for (int i = 0; i <= 1; i++)\n  {\n    sidesRes[i].number = no_of_denom[i];\n    sidesRes[i].score = best_par_score[i];\n\n    if (best_par_sacut[i] > 0)\n    {\n      /* Sacrifice */\n      dr = (best_par_score[i] > 0) ? 0 : 1;\n      /* Sort the items in the best_par structure with increasing order \n      of the values on denom. */\n\n      for (int s = 1; s < no_of_denom[i]; s++)\n      {\n        best_par_type tmp = best_par[s][i];\n        int r = s;\n        for (; r && tmp.par_denom < best_par[r - 1][i].par_denom; --r)\n          best_par[r][i] = best_par[r - 1][i];\n        best_par[r][i] = tmp;\n      }\n\n      for (m = 0; m < no_of_denom[i]; m++)\n      {\n\n        j = best_par[m][i].par_denom;\n\n        t1 = ((dr + i) % 2) ? tablep->resTable[denom_conv[j]][0] : \n          tablep->resTable[denom_conv[j]][1];\n        t2 = ((dr + i) % 2) ? tablep->resTable[denom_conv[j]][2] : \n          tablep->resTable[denom_conv[j]][3];\n        tt = (t1 > t2) ? t1 : t2;\n\n        SideSeats(dr, i, t1, t2, m, sidesRes);\n        sidesRes[i].contracts[m].denom = j;\n        sidesRes[i].contracts[m].level = best_par[m][i].par_tricks - 6;\n        sidesRes[i].contracts[m].overTricks = 0;\n        sidesRes[i].contracts[m].underTricks = best_par_sacut[i];\n\n      }\n    }\n    else\n    {\n      /* Par contract is a makeable contract.*/\n\n      dr = (best_par_score[i] < 0) ? 0 : 1;\n\n      tu_max = 0;\n      for (m = 0; m <= 4; m++)\n      {\n        t3[m] = ((dr + i) % 2 == 0) ? tablep->resTable[denom_conv[m]][0] :\n          tablep->resTable[denom_conv[m]][1];\n        t4[m] = ((dr + i) % 2 == 0) ? tablep->resTable[denom_conv[m]][2] :\n          tablep->resTable[denom_conv[m]][3];\n        tu = (t3[m] > t4[m]) ? t3[m] : t4[m];\n        if (tu > tu_max)\n        {\n          tu_max = tu;\n          denom_max = m; \n          /* Lowest if several denominations have max tricks. */\n        }\n      }\n\n      for (m = 0; m < no_of_denom[i]; m++)\n      {\n        j = best_par[m][i].par_denom;\n\n        t1 = ((dr + i) % 2) ? tablep->resTable[denom_conv[j]][0] : \n          tablep->resTable[denom_conv[j]][1];\n        t2 = ((dr + i) % 2) ? tablep->resTable[denom_conv[j]][2] : \n          tablep->resTable[denom_conv[j]][3];\n        tt = (t1 > t2) ? t1 : t2;\n\n        SideSeats(dr, i, t1, t2, m, sidesRes);\n\n        if (denom_max < j)\n          max_lower = best_par[m][i].par_tricks - tu_max - 1;\n        else\n          max_lower = best_par[m][i].par_tricks - tu_max;\n\n        /* max_lower is the maximal contract lowering, otherwise \n        opponent contract is higher. It is already known that par_score \n        is high enough to make opponent sacrifices futile.\n        To find the actual contract lowering allowed, it must be \n        checked that the lowered contract still gets the score bonus \n        points that is present in par score.*/\n\n        sc2 = (best_par_score[i] >= 0 ?\n          best_par_score[i] : -best_par_score[i]);\n        /* Score for making the tentative lower par contract. */\n        while (max_lower > 0)\n        {\n          if (denom_max < j)\n            sc1 = -rawscore(-1, \n              best_par[m][i].par_tricks - max_lower - tu_max,\n              VulnerDefSide(best_par_score[0] > 0, vulnerable));\n          else\n            sc1 = -rawscore(-1, \n              best_par[m][i].par_tricks - max_lower - tu_max + 1,\n              VulnerDefSide(best_par_score[0] > 0, vulnerable));\n          /* Score for undertricks needed to beat the tentative \n          lower par contract.*/\n\n          if (sc2 < sc1)\n            break;\n          else\n            max_lower--;\n\n          /* Tentative lower par contract must be 1 trick higher, \n          since the cost for the sacrifice is too small. */\n        }\n\n        int opp_tricks = max(t3[j], t4[j]);\n\n        while (max_lower > 0)\n        {\n          sc3 = -rawscore(-1, \n            best_par[m][i].par_tricks - max_lower - opp_tricks,\n            VulnerDefSide(best_par_score[0] > 0, vulnerable));\n\n          /* If opponents to side with par score start the bidding \n          and has a sacrifice in the par denom on the same trick level \n          as implied by current max_lower, then max_lower must be \n          decremented. */\n\n          if ((sc2 > sc3) && (best_par_score[i] < 0))\n            /* Opposite side with best par score starts the bidding. */\n            max_lower--;\n          else\n            break;\n        }\n\n        switch (j)\n        {\n          case 0:\n            k = 0;\n            break;\n          case 1:\n          case 2:\n            k = 1;\n            break;\n          case 3:\n          case 4:\n            k = 2;\n            break;\n          default:\n            return RETURN_UNKNOWN_FAULT;\n            // j not in (0..4)\n        }\n\n        max_lower = min(max_low[k][best_par[m][i].par_tricks - 6], \n          max_lower);\n\n        sidesRes[i].contracts[m].denom = j;\n        sidesRes[i].contracts[m].underTricks = 0;\n\n        CalcOverTricks(i, max_lower, best_par[m][i].par_tricks, \n          m, sidesRes);\n\n        sidesRes[i].contracts[m].level = best_par[m][i].par_tricks - 6 - \n          sidesRes[i].contracts[m].overTricks;\n\n      }\n    }\n  }\n\n  /* Filter out par contracts where the other side has a higher par \n  contract.  This can happen when par scores differ for the two sides. */\n\n  int opp_side[2];\n\n  int denom_to_remove[2][5] = { { 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0 } };\n\n  int dom_denom[2] = { -1, -1 };\t/* Dominating denom */\n\n  int dom_level[2] = { -1, -1 };\t/* Dominating level */\n\n  for (int i = 0; i < 2; i++)\n  {\n    k = 0;\n    opp_side[i] = (i == 0) ? 1 : 0;\n\n    while (k < sidesRes[opp_side[i]].number)\n    {\n      j = sidesRes[opp_side[i]].contracts[k].denom;\n      int ss = sidesRes[opp_side[i]].contracts[k].level + \n               sidesRes[opp_side[i]].contracts[k].overTricks;\n\n      if (ss > dom_level[opp_side[i]] ||\n         (ss == dom_level[opp_side[i]] && j < dom_denom[opp_side[i]]))\n      {\n        if (((i == 0) && \n           ((sidesRes[opp_side[i]].contracts[k].seats % 2) != 0)) ||\n           ((i == 1) && \n           ((sidesRes[opp_side[i]].contracts[k].seats % 2) == 0)))\n        {\n          dom_denom[opp_side[i]] = j;\n          dom_level[opp_side[i]] = \n            sidesRes[opp_side[i]].contracts[k].level + \n            sidesRes[opp_side[i]].contracts[k].overTricks;\n        }\n      }\n      k++;\n    }\n  }\n\n  if ((dom_denom[0] != -1) && (dom_denom[1] != -1))\n  {\n\n    /* Remove par contracts that can be dominated by the other side. */\n\n    for (int i = 0; i < 2; i++)\n    {\n      opp_side[i] = (i == 0) ? 1 : 0;\n\n      for (k = 0; k < sidesRes[i].number; k++)\n      {\n        j = sidesRes[i].contracts[k].denom;\n\n        if (((sidesRes[i].contracts[k].level + \n          sidesRes[i].contracts[k].overTricks) < \n          dom_level[opp_side[i]]) ||\n          (((sidesRes[i].contracts[k].level + \n          sidesRes[i].contracts[k].overTricks) == dom_level[opp_side[i]])\n             && (dom_denom[opp_side[i]] < sidesRes[i].contracts[k].denom)))\n          denom_to_remove[i][j] = 1;\n      }\n\n      int mm = 0;\n\n      for (k = 0; k < sidesRes[i].number; k++)\n      {\n        j = sidesRes[i].contracts[k].denom;\n        if (denom_to_remove[i][j] != 1)\n        {\n          sidesRes[i].contracts[mm] = sidesRes[i].contracts[k];\n          mm++;\n        }\n      }\n      sidesRes[i].number = mm;\n    }\n\n  }\n\n  return RETURN_NO_FAULT;\n}\n#else\n\nint STDCALL SidesParBin(\n  ddTableResults * tablep,\n  parResultsMaster sidesRes[2],\n  int vulnerable)\n{\n\n  int res, h, hbest[2], i, k, m, index;\n  parResultsMaster parRes2[4];\n  int cross_index[4][5] = { \n    { -1, -1, -1, -1, -1 }, \n    { -1, -1, -1, -1, -1 }, \n    { -1, -1, -1, -1, -1 }, \n    { -1, -1, -1, -1, -1 } };\n\n  for (h = 0; h <= 3; h++)\n  {\n\n    res = DealerParBin(tablep, &parRes2[h], h, vulnerable);\n\n    if (res != RETURN_NO_FAULT)\n      return res;\n\n    if (parRes2[h].score == 0)\n    {\n      sidesRes[0].number = 1;\n      sidesRes[0].score = 0;\n      sidesRes[1].number = 1;\n      sidesRes[1].score = 0;\n\n      return RETURN_NO_FAULT;\n    }\n  }\n\n\n  for (h = 0; h <= 3; h++)\n  {\n    for (k = 0; k < parRes2[h].number; k++)\n      /* Corresponding index and denom  */\n      cross_index[h][parRes2[h].contracts[k].denom] = k;\n  }\n\n  for (i = 0; i <= 1; i++)\n    /* Sides 0 and 1 */\n  {\n    if (parRes2[2 + i].score != parRes2[i].score)\n    {\n      if (i == 0)\n      {\n        if (parRes2[2 + i].score > parRes2[i].score)\n          hbest[i] = 2 + i;\n        else\n          hbest[i] = i;\n      }\n      else\n      {\n        if (parRes2[2 + i].score < parRes2[i].score)\n          hbest[i] = 2 + i;\n        else\n          hbest[i] = i;\n      }\n\n      sidesRes[i].number = parRes2[hbest[i]].number;\n      if (i == 0)\n        sidesRes[i].score = parRes2[hbest[i]].score;\n      else\n        sidesRes[i].score = -parRes2[hbest[i]].score;\n\n\n      for (k = 0; k < sidesRes[i].number; k++)\n        sidesRes[i].contracts[k] = parRes2[hbest[i]].contracts[k];\n    }\n    else\n    {\n      if (i == 0)\n        sidesRes[i].score = parRes2[0].score;\n      else\n        sidesRes[i].score = -parRes2[1].score;\n\n      index = 0;\n\n      for (m = 0; m < 5; m++)\n      {\n        /* Iterate through denoms */\n\n        if ((cross_index[2 + i][m] == -1) && (cross_index[i][m] == -1))\n        {\n          continue;\n        }\n        else if (cross_index[2 + i][m] == -1)\n        {\n          if (((i == 0) && ((parRes2[i].contracts[index].seats % 2) != 0)) || \n          ((i == 1) && ((parRes2[i].contracts[index].seats % 2) == 0)))\n            continue;\n          sidesRes[i].contracts[index] = \n            parRes2[i].contracts[cross_index[i][m]];\n          index++;\n        }\n        else if (cross_index[i][m] == -1)\n        {\n          if (((i == 0) && ((parRes2[i].contracts[index].seats % 2) != 0)) || \n          ((i == 1) && ((parRes2[i].contracts[index].seats % 2) == 0)))\n            continue;\n          sidesRes[i].contracts[index] = \n            parRes2[2 + i].contracts[cross_index[2 + i][m]];\n          index++;\n        }\n        else if (parRes2[2 + i].contracts[cross_index[2 + i][m]].level == \n          parRes2[i].contracts[cross_index[i][m]].level)\n        {\n          sidesRes[i].contracts[index] = \n            parRes2[i].contracts[cross_index[i][m]];\n          index++;\n        }\n        else if (((i == 0) && (parRes2[i].score > 0) || \n          (i == 1) && (parRes2[i].score < 0)) &&\n            (parRes2[2 + i].contracts[cross_index[2 + i][m]].level > \n            parRes2[i].contracts[cross_index[i][m]].level))\n        {\n          sidesRes[i].contracts[index] = \n            parRes2[i].contracts[cross_index[i][m]];\n          index++;\n        }\n        else if (((i == 0) && (parRes2[i].score < 0) || (i == 1) && \n          (parRes2[i].score > 0)) &&\n                 (parRes2[2 + i].contracts[cross_index[2 + i][m]].level < \n                 parRes2[i].contracts[cross_index[i][m]].level))\n        {\n          sidesRes[i].contracts[index] = \n            parRes2[i].contracts[cross_index[i][m]];\n          index++;\n        }\n        else\n        {\n          sidesRes[i].contracts[index] = \n            parRes2[2 + i].contracts[cross_index[2 + i][m]];\n          index++;\n        }\n      }\n      sidesRes[i].number = index;\n    }\n  }\n\n\n  return RETURN_NO_FAULT;\n}\n\n#endif\n\nint rawscore(int denom, int tricks, int isvul)\n{\n  int game_bonus, level, score;\n\n  /* Computes score for undoubled contract or a doubled contract with\n     for a given number of undertricks. These are the only possibilities\n     for a par contract (aside from a passed out hand).\n\n     denom - 0 = NT, 1 = Spades, 2 = Hearts, 3 = Diamonds, 4 = Clubs\n       (same order as results from double dummy solver); -1 undertricks\n     tricks - For making contracts (7-13); otherwise, number of \n       undertricks.\n     isvul - True if vulnerable */\n\n  if (denom == -1)\n  {\n    if (isvul)\n      return -300 * tricks + 100;\n    if (tricks <= 3)\n      return -200 * tricks + 100;\n    return -300 * tricks + 400;\n  }\n  else\n  {\n    level = tricks - 6;\n    game_bonus = 0;\n    if (denom == 0)\n    {\n      score = 10 + 30 * level;\n      if (level >= 3)\n        game_bonus = 1;\n    }\n    else if ((denom == 1) || (denom == 2))\n    {\n      score = 30 * level;\n      if (level >= 4)\n        game_bonus = 1;\n    }\n    else\n    {\n      score = 20 * level;\n      if (level >= 5)\n        game_bonus = 1;\n    }\n    if (game_bonus)\n    {\n      score += (isvul ? 500 : 300);\n    }\n    else\n      score += 50;\n\n    if (level == 6)\n    {\n      score += (isvul ? 750 : 500);\n    }\n    else if (level == 7)\n    {\n      score += (isvul ? 1500 : 1000);\n    }\n  }\n\n  return score;\n}\n\n\nvoid SideSeats(\n  int dr, \n  int i, \n  int t1, \n  int t2, \n  int order, \n  parResultsMaster sidesRes[2])\n{\n\n  if ((dr + i) % 2 )\n  {\n    if (t1 == t2)\n    {\n      sidesRes[i].contracts[order].seats = 4;\n    }\n    else if (t1 > t2)\n    {\n      sidesRes[i].contracts[order].seats = 0;\n    }\n    else\n    {\n      sidesRes[i].contracts[order].seats = 2;\n    }\n  }\n  else\n  {\n    if (t1 == t2)\n    {\n      sidesRes[i].contracts[order].seats = 5;\n    }\n    else if (t1 > t2)\n    {\n      sidesRes[i].contracts[order].seats = 1;\n    }\n    else\n    {\n      sidesRes[i].contracts[order].seats = 3;\n    }\n  }\n  return;\n}\n\nvoid CalcOverTricks(\n  int i, \n  int max_lower, \n  int tricks, \n  int order, \n  parResultsMaster sidesRes[2])\n{\n  switch (tricks - 6)\n  {\n    case 5:\n      if (max_lower == 3)\n      {\n        sidesRes[i].contracts[order].overTricks = 3;\n      }\n      else if (max_lower == 2)\n      {\n        sidesRes[i].contracts[order].overTricks = 2;\n      }\n      else if (max_lower == 1)\n      {\n        sidesRes[i].contracts[order].overTricks = 1;\n      }\n      else\n      {\n        sidesRes[i].contracts[order].overTricks = 0;\n      }\n      break;\n    case 4:\n      if (max_lower == 3)\n      {\n        sidesRes[i].contracts[order].overTricks = 3;\n      }\n      else if (max_lower == 2)\n      {\n        sidesRes[i].contracts[order].overTricks = 2;\n      }\n      else if (max_lower == 1)\n      {\n        sidesRes[i].contracts[order].overTricks = 1;\n      }\n      else\n      {\n        sidesRes[i].contracts[order].overTricks = 0;\n      }\n      break;\n    case 3:\n      if (max_lower == 2)\n      {\n        sidesRes[i].contracts[order].overTricks = 2;\n      }\n      else if (max_lower == 1)\n      {\n        sidesRes[i].contracts[order].overTricks = 1;\n      }\n      else\n      {\n        sidesRes[i].contracts[order].overTricks = 0;\n      }\n      break;\n    case 2:\n      if (max_lower == 1)\n      {\n        sidesRes[i].contracts[order].overTricks = 1;\n      }\n      else\n      {\n        sidesRes[i].contracts[order].overTricks = 0;\n      }\n      break;\n    default:\n      sidesRes[i].contracts[order].overTricks = 0;\n  }\n  return;\n}\n\n\nint VulnerDefSide(int side, int vulnerable)\n{\n  if (vulnerable == 0)\n    return 0;\n  else if (vulnerable == 1)\n    return 1;\n  else if (side)\n  {\n    /* N/S makes par contract. */\n    if (vulnerable == 2)\n      return 0;\n    else\n      return 1;\n  }\n  else\n  {\n    if (vulnerable == 3)\n      return 0;\n    else\n      return 1;\n  }\n}\n\n\n\nint CalcMultiContracts(int max_lower, int tricks)\n{\n  int n;\n\n  switch (tricks - 6)\n  {\n    case 5:\n      if (max_lower == 3)\n      {\n        n = 2345;\n      }\n      else if (max_lower == 2)\n      {\n        n = 345;\n      }\n      else if (max_lower == 1)\n      {\n        n = 45;\n      }\n      else\n      {\n        n = 5;\n      }\n      break;\n    case 4:\n      if (max_lower == 3)\n      {\n        n = 1234;\n      }\n      else if (max_lower == 2)\n      {\n        n = 234;\n      }\n      else if (max_lower == 1)\n      {\n        n = 34;\n      }\n      else\n      {\n        n = 4;\n      }\n      break;\n    case 3:\n      if (max_lower == 2)\n      {\n        n = 123;\n      }\n      else if (max_lower == 1)\n      {\n        n = 23;\n      }\n      else\n      {\n        n = 3;\n      }\n      break;\n    case 2:\n      if (max_lower == 1)\n      {\n        n = 12;\n      }\n      else\n      {\n        n = 2;\n      }\n      break;\n    default:\n      n = tricks - 6;\n  }\n  return n;\n}\n\nint STDCALL CalcPar(\n  ddTableDeal tableDeal, \n  int vulnerable,\n  ddTableResults * tablep, \n  parResults * presp)\n{\n\n  int res;\n\n  res = CalcDDtable(tableDeal, tablep);\n\n  if (res != 1)\n    return res;\n\n  res = Par(tablep, presp, vulnerable);\n\n  return res;\n}\n\n\nint STDCALL DealerParBin(\n  ddTableResults * tablep,\n  parResultsMaster * presp,\n  int dealer,\n  int vulnerable)\n{\n  /* dealer 0: North 1: East 2: South 3: West */\n  /* vulnerable 0: None 1: Both 2: NS 3: EW */\n\n  parResultsDealer parResDealer;\n  parContr2Type parContr2[10];\n  int k, delta;\n\n  int res = DealerPar(tablep, &parResDealer, dealer, vulnerable);\n\n  if (res != RETURN_NO_FAULT)\n  {\n    return res;\n  }\n\n  if (parResDealer.contracts[0][0] == 'p')\n  {\n    /*Passed out, i.e. no par contract can be found.*/\n    presp->number = 1;\n    presp->score = 0;\n    return RETURN_NO_FAULT;\n  }\n\n\n  for (k = 0; k < parResDealer.number; k++)\n  {\n\n    for (int u = 0; u < 10; u++)\n      parContr2[k].contracts[u] = parResDealer.contracts[k][u];\n\n    if (parResDealer.contracts[k][1] == 'N')\n      parContr2[k].denom = 0;\n    else if (parResDealer.contracts[k][1] == 'S')\n      parContr2[k].denom = 1;\n    else if (parResDealer.contracts[k][1] == 'H')\n      parContr2[k].denom = 2;\n    else if (parResDealer.contracts[k][1] == 'D')\n      parContr2[k].denom = 3;\n    else if (parResDealer.contracts[k][1] == 'C')\n      parContr2[k].denom = 4;\n  }\n\n  for (int s = 1; s < parResDealer.number; s++)\n  {\n    parContr2Type tmp = parContr2[s];\n    int r = s;\n    for (; r && tmp.denom < parContr2[r - 1].denom; --r)\n      parContr2[r] = parContr2[r - 1];\n    parContr2[r] = tmp;\n  }\n\n  presp->score = parResDealer.score;\n  presp->number = parResDealer.number;\n\n  for (k = 0; k < parResDealer.number; k++)\n  {\n    delta = 1;\n\n    presp->contracts[k].level = int(parContr2[k].contracts[0] - '0');\n\n    switch (parContr2[k].contracts[1])\n    {\n      case 'N':\n        presp->contracts[k].denom = 0;\n        break;\n      case 'S':\n        presp->contracts[k].denom = 1;\n        break;\n      case 'H':\n        presp->contracts[k].denom = 2;\n        break;\n      case 'D':\n        presp->contracts[k].denom = 3;\n        break;\n      case 'C':\n        presp->contracts[k].denom = 4;\n        break;\n      default:\n        return RETURN_UNKNOWN_FAULT;\n        // denomination not in (NSHDC)\n    }\n\n    if (strstr(parContr2[k].contracts, \"NS\"))\n      presp->contracts[k].seats = 4;\n    else if (strstr(parContr2[k].contracts, \"EW\"))\n      presp->contracts[k].seats = 5;\n    else if (strstr(parContr2[k].contracts, \"-N\"))\n    {\n      presp->contracts[k].seats = 0;\n      delta = 0;\n    }\n    else if (strstr(parContr2[k].contracts, \"-E\"))\n    {\n      presp->contracts[k].seats = 1;\n      delta = 0;\n    }\n    else if (strstr(parContr2[k].contracts, \"-S\"))\n    {\n      presp->contracts[k].seats = 2;\n      delta = 0;\n    }\n    else if (strstr(parContr2[k].contracts, \"-W\"))\n    {\n      presp->contracts[k].seats = 3;\n      delta = 0;\n    }\n\n    if (parResDealer.contracts[0][2] == '*')\n    {\n      /* Sacrifice */\n      presp->contracts[k].underTricks =\n        static_cast<int>(parContr2[k].contracts[6 + delta] - '0');\n      presp->contracts[k].overTricks = 0;\n    }\n    else\n      /* Make */\n\n    {\n      if (strchr(parContr2[k].contracts, '+'))\n        presp->contracts[k].overTricks =\n          static_cast<int>(parContr2[k].contracts[5 + delta] - '0');\n      else\n        presp->contracts[k].overTricks = 0;\n      presp->contracts[k].underTricks = 0;\n    }\n  }\n  return RETURN_NO_FAULT;\n}\n\n\nint STDCALL SidesPar(\n  ddTableResults * tablep, \n  parResultsDealer sidesRes[2], \n  int vulnerable)\n{\n  parResultsMaster parm[2];\n  int res, i, k;\n  char buff[4];\n\n  res = SidesParBin(tablep, parm, vulnerable);\n\n  if (res != RETURN_NO_FAULT)\n    return res;\n\n  /*Convert the bin results to DealerPar format. */\n  for (i = 0; i <= 1; i++)\n  {\n    sidesRes[i].score = parm[i].score;\n    sidesRes[i].number = parm[i].number;\n\n    for (k = 0; k < sidesRes[i].number; k++)\n    {\n      sprintf(sidesRes[i].contracts[k], \"%d\", parm[i].contracts[k].level);\n      switch (parm[i].contracts[k].denom)\n      {\n        case 0:\n          strcat(sidesRes[i].contracts[k], \"N\");\n          break;\n        case 1:\n          strcat(sidesRes[i].contracts[k], \"S\");\n          break;\n        case 2:\n          strcat(sidesRes[i].contracts[k], \"H\");\n          break;\n        case 3:\n          strcat(sidesRes[i].contracts[k], \"D\");\n          break;\n        case 4:\n          strcat(sidesRes[i].contracts[k], \"C\");\n          break;\n        default:\n          // Cannot happen, but keeps gcc happy.\n          break;\n      }\n      if (parm[i].contracts[k].underTricks > 0)\n        /* Sacrifice */\n        strcat(sidesRes[i].contracts[k], \"*\");\n      switch (parm[i].contracts[k].seats)\n      {\n        case 0:\n          strcat(sidesRes[i].contracts[k], \"-N\");\n          break;\n        case 1:\n          strcat(sidesRes[i].contracts[k], \"-E\");\n          break;\n        case 2:\n          strcat(sidesRes[i].contracts[k], \"-S\");\n          break;\n        case 3:\n          strcat(sidesRes[i].contracts[k], \"-W\");\n          break;\n        case 4:\n          strcat(sidesRes[i].contracts[k], \"-NS\");\n          break;\n        case 5:\n          strcat(sidesRes[i].contracts[k], \"-EW\");\n          break;\n        default:\n          // Cannot happen, but keeps gcc happy.\n          break;\n      }\n      if (parm[i].contracts[k].underTricks > 0)\n      {\n        /* Sacrifice */\n        sprintf(buff, \"-%d\", parm[i].contracts[k].underTricks);\n        strcat(sidesRes[i].contracts[k], buff);\n      }\n      else if (parm[i].contracts[k].overTricks > 0)\n      {\n        /* Make */\n        sprintf(buff, \"+%d\", parm[i].contracts[k].overTricks);\n        strcat(sidesRes[i].contracts[k], buff);\n      }\n    }\n  }\n\n  return RETURN_NO_FAULT;\n}\n\n\n\nint STDCALL ConvertToDealerTextFormat(\n  parResultsMaster * pres, \n  char * resp)\n{\n  int k, i;\n  char buff[20];\n\n  sprintf(resp, \"Par %d: \", pres->score);\n\n  for (k = 0; k < pres->number; k++)\n  {\n\n    if (k != 0)\n      strcat(resp, \" \");\n\n    switch (pres->contracts[k].seats)\n    {\n      case 0:\n        strcat(resp, \"N \");\n        break;\n      case 1:\n        strcat(resp, \"E \");\n        break;\n      case 2:\n        strcat(resp, \"S \");\n        break;\n      case 3:\n        strcat(resp, \"W \");\n        break;\n      case 4:\n        strcat(resp, \"NS \");\n        break;\n      case 5:\n        strcat(resp, \"EW \");\n        break;\n      default:\n        return RETURN_UNKNOWN_FAULT;\n        // Seats not in (N,W,S,W,NS,EW)\n    }\n\n    for (i = 0; i < 10; i++)\n      buff[i] = '\\0';\n    sprintf(buff, \"%d\", pres->contracts[k].level);\n    strcat(resp, buff);\n\n    switch (pres->contracts[k].denom)\n    {\n      case 0:\n        strcat(resp, \"N\");\n        break;\n      case 1:\n        strcat(resp, \"S\");\n        break;\n      case 2:\n        strcat(resp, \"H\");\n        break;\n      case 3:\n        strcat(resp, \"D\");\n        break;\n      case 4:\n        strcat(resp, \"C\");\n        break;\n      default:\n        return RETURN_UNKNOWN_FAULT;\n        // denom not in /N,S,H,D,C)\n    }\n\n    if (pres->contracts[k].underTricks > 0)\n    {\n      strcat(resp, \"x-\");\n      for (i = 0; i < 10; i++)\n        buff[i] = '\\0';\n      sprintf(buff, \"%d\", pres->contracts[k].underTricks);\n      strcat(resp, buff);\n    }\n    else if (pres->contracts[k].overTricks > 0)\n    {\n      strcat(resp, \"+\");\n      for (i = 0; i < 10; i++)\n        buff[i] = '\\0';\n      sprintf(buff, \"%d\", pres->contracts[k].overTricks);\n      strcat(resp, buff);\n    }\n  }\n  return RETURN_NO_FAULT;\n}\n\n\nint STDCALL ConvertToSidesTextFormat(\n  parResultsMaster * pres, \n  parTextResults * resp)\n{\n  int k, i, j;\n  char buff[20];\n\n  for (i = 0; i < 2; i++)\n    for (k = 0; k < 128; k++)\n      resp->parText[i][k] = '\\0';\n\n  if (pres->score == 0)\n  {\n    sprintf(resp->parText[0], \"Par 0\");\n    return RETURN_NO_FAULT;\n  }\n\n  for (i = 0; i < 2; i++)\n  {\n\n    sprintf(resp->parText[i], \"Par %d: \", (pres + i)->score);\n\n    for (k = 0; k < (pres + i)->number; k++)\n    {\n\n      if (k != 0)\n        strcat(resp->parText[i], \" \");\n\n      switch ((pres + i)->contracts[k].seats)\n      {\n        case 0:\n          strcat(resp->parText[i], \"N \");\n          break;\n        case 1:\n          strcat(resp->parText[i], \"E \");\n          break;\n        case 2:\n          strcat(resp->parText[i], \"S \");\n          break;\n        case 3:\n          strcat(resp->parText[i], \"W \");\n          break;\n        case 4:\n          strcat(resp->parText[i], \"NS \");\n          break;\n        case 5:\n          strcat(resp->parText[i], \"EW \");\n          break;\n        default:\n          return RETURN_UNKNOWN_FAULT;\n          // Seats not in (N,W,S,W,NS,EW)\n      }\n\n      for (j = 0; j < 10; j++)\n        buff[j] = '\\0';\n      sprintf(buff, \"%d\", (pres + i)->contracts[k].level);\n      strcat(resp->parText[i], buff);\n\n      switch ((pres + i)->contracts[k].denom)\n      {\n        case 0:\n          strcat(resp->parText[i], \"NT\");\n          break;\n        case 1:\n          strcat(resp->parText[i], \"S\");\n          break;\n        case 2:\n          strcat(resp->parText[i], \"H\");\n          break;\n        case 3:\n          strcat(resp->parText[i], \"D\");\n          break;\n        case 4:\n          strcat(resp->parText[i], \"C\");\n          break;\n        default:\n          return RETURN_UNKNOWN_FAULT;\n          // denom not in (N,S,H,D,C)\n      }\n\n      if ((pres + i)->contracts[k].underTricks > 0)\n      {\n        strcat(resp->parText[i], \"x-\");\n        for (j = 0; j < 10; j++)\n          buff[j] = '\\0';\n        sprintf(buff, \"%d\", (pres + i)->contracts[k].underTricks);\n        strcat(resp->parText[i], buff);\n      }\n      else if ((pres + i)->contracts[k].overTricks > 0)\n      {\n        strcat(resp->parText[i], \"+\");\n        for (j = 0; j < 10; j++)\n          buff[j] = '\\0';\n        sprintf(buff, \"%d\", (pres + i)->contracts[k].overTricks);\n        strcat(resp->parText[i], buff);\n      }\n    }\n\n    if (i == 0)\n    {\n      if ((pres->score != -(pres + 1)->score) || (pres->number != (pres + 1)->number))\n      {\n        resp->equal = false;\n      }\n      else\n      {\n        resp->equal = true;\n        for (k = 0; k < pres->number; k++)\n        {\n          if ((pres->contracts[k].denom != (pres + 1)->contracts[k].denom) ||\n              (pres->contracts[k].level != (pres + 1)->contracts[k].level) ||\n              (pres->contracts[k].overTricks != (pres + 1)->contracts[k].overTricks) ||\n              (pres->contracts[k].seats != (pres + 1)->contracts[k].seats) ||\n              (pres->contracts[k].underTricks != (pres + 1)->contracts[k].underTricks))\n          {\n            resp->equal = false;\n            break;\n          }\n        }\n      }\n    }\n  }\n\n  return RETURN_NO_FAULT;\n}\n\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/Par.cpp b/src/Par.cpp
+--- a/src/Par.cpp	(revision 326c921297638ae813f6b29c53cd18bfccf40cb1)
++++ b/src/Par.cpp	(date 1775550344609)
+@@ -131,9 +131,9 @@
+   presp->parScore[1][2] = ' ';
+   presp->parScore[1][3] = '\0';
+ 
+-  sprintf(temp, "%d", sidesRes[0].score);
++   snprintf(temp, sizeof(temp), "%d", sidesRes[0].score);
+   strcat(presp->parScore[0], temp);
+-  sprintf(temp, "%d", sidesRes[1].score);
++  snprintf(temp, sizeof(temp), "%d", sidesRes[1].score);
+   strcat(presp->parScore[1], temp);
+ 
+   presp->parContractsString[0][0] = 'N';
+@@ -163,7 +163,7 @@
+ 
+         strcat(presp->parContractsString[i], 
+           seats[sidesRes[i].contracts[k].seats]);
+-        sprintf(temp, "%d", sidesRes[i].contracts[k].level);
++        snprintf(temp, sizeof(temp), "%d", sidesRes[i].contracts[k].level);
+         buff[0] = static_cast<char>(
+           cardSuit[denom_conv[sidesRes[i].contracts[k].denom]]);
+         buff[1] = 'x';
+@@ -189,7 +189,7 @@
+             + sidesRes[i].contracts[k].level + 6);
+ 
+ 
+-        sprintf(temp, "%d", n);
++        snprintf(temp, sizeof(temp), "%d", n);
+         buff[0] = static_cast<char>(
+           cardSuit[denom_conv[sidesRes[i].contracts[k].denom]]);
+         buff[1] = '\0';
+@@ -1290,7 +1290,7 @@
+ 
+     for (k = 0; k < sidesRes[i].number; k++)
+     {
+-      sprintf(sidesRes[i].contracts[k], "%d", parm[i].contracts[k].level);
++      snprintf(sidesRes[i].contracts[k], sizeof(sidesRes[i].contracts[k]), "%d", parm[i].contracts[k].level);
+       switch (parm[i].contracts[k].denom)
+       {
+         case 0:
+@@ -1342,13 +1342,13 @@
+       if (parm[i].contracts[k].underTricks > 0)
+       {
+         /* Sacrifice */
+-        sprintf(buff, "-%d", parm[i].contracts[k].underTricks);
++        snprintf(buff, sizeof(buff), "-%d", parm[i].contracts[k].underTricks);
+         strcat(sidesRes[i].contracts[k], buff);
+       }
+       else if (parm[i].contracts[k].overTricks > 0)
+       {
+         /* Make */
+-        sprintf(buff, "+%d", parm[i].contracts[k].overTricks);
++        snprintf(buff, sizeof(buff), "+%d", parm[i].contracts[k].overTricks);
+         strcat(sidesRes[i].contracts[k], buff);
+       }
+     }
+@@ -1366,7 +1366,7 @@
+   int k, i;
+   char buff[20];
+ 
+-  sprintf(resp, "Par %d: ", pres->score);
++  snprintf(resp, sizeof(resp), "Par %d: ", pres->score);
+ 
+   for (k = 0; k < pres->number; k++)
+   {
+@@ -1401,7 +1401,7 @@
+ 
+     for (i = 0; i < 10; i++)
+       buff[i] = '\0';
+-    sprintf(buff, "%d", pres->contracts[k].level);
++    snprintf(buff, sizeof(buff), "%d", pres->contracts[k].level);
+     strcat(resp, buff);
+ 
+     switch (pres->contracts[k].denom)
+@@ -1431,7 +1431,7 @@
+       strcat(resp, "x-");
+       for (i = 0; i < 10; i++)
+         buff[i] = '\0';
+-      sprintf(buff, "%d", pres->contracts[k].underTricks);
++      snprintf(buff, sizeof(buff), "%d", pres->contracts[k].underTricks);
+       strcat(resp, buff);
+     }
+     else if (pres->contracts[k].overTricks > 0)
+@@ -1439,7 +1439,7 @@
+       strcat(resp, "+");
+       for (i = 0; i < 10; i++)
+         buff[i] = '\0';
+-      sprintf(buff, "%d", pres->contracts[k].overTricks);
++      snprintf(buff, sizeof(buff), "%d", pres->contracts[k].overTricks);
+       strcat(resp, buff);
+     }
+   }
+@@ -1460,14 +1460,14 @@
+ 
+   if (pres->score == 0)
+   {
+-    sprintf(resp->parText[0], "Par 0");
++    snprintf(resp->parText[0], sizeof(resp->parText[0]), "Par 0");
+     return RETURN_NO_FAULT;
+   }
+ 
+   for (i = 0; i < 2; i++)
+   {
+ 
+-    sprintf(resp->parText[i], "Par %d: ", (pres + i)->score);
++    snprintf(resp->parText[i], sizeof(resp->parText[i]),"Par %d: ", (pres + i)->score);
+ 
+     for (k = 0; k < (pres + i)->number; k++)
+     {
+@@ -1502,7 +1502,7 @@
+ 
+       for (j = 0; j < 10; j++)
+         buff[j] = '\0';
+-      sprintf(buff, "%d", (pres + i)->contracts[k].level);
++      snprintf(buff, sizeof(buff), "%d", (pres + i)->contracts[k].level);
+       strcat(resp->parText[i], buff);
+ 
+       switch ((pres + i)->contracts[k].denom)
+@@ -1532,7 +1532,7 @@
+         strcat(resp->parText[i], "x-");
+         for (j = 0; j < 10; j++)
+           buff[j] = '\0';
+-        sprintf(buff, "%d", (pres + i)->contracts[k].underTricks);
++        snprintf(buff, sizeof(buff), "%d", (pres + i)->contracts[k].underTricks);
+         strcat(resp->parText[i], buff);
+       }
+       else if ((pres + i)->contracts[k].overTricks > 0)
+@@ -1540,7 +1540,7 @@
+         strcat(resp->parText[i], "+");
+         for (j = 0; j < 10; j++)
+           buff[j] = '\0';
+-        sprintf(buff, "%d", (pres + i)->contracts[k].overTricks);
++        snprintf(buff, sizeof(buff), "%d", (pres + i)->contracts[k].overTricks);
+         strcat(resp->parText[i], buff);
+       }
+     }
+Index: .idea/.gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+new file mode 100644
+--- /dev/null	(date 1733479312000)
++++ b/.idea/.gitignore	(date 1733479312000)
+@@ -0,0 +1,8 @@
++# Default ignored files
++/shelf/
++/workspace.xml
++# Editor-based HTTP Client requests
++/httpRequests/
++# Datasource local storage ignored files
++/dataSources/
++/dataSources.local.xml
+Index: src/CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+new file mode 100644
+--- /dev/null	(date 1735658047000)
++++ b/src/CMakeLists.txt	(date 1735658047000)
+@@ -0,0 +1,13 @@
++cmake_minimum_required(VERSION 3.30)
++project(dds)
++
++message(STATUS,  "CMAKE_MODULE_PATH is: " ${CMAKE_MODULE_PATH})
++
++set(CMAKE_CXX_STANDARD 17)
++#SET(BOOST_ROOT "/opt/local/libexec/boost/1.76/")
++
++find_package(Boost REQUIRED)
++#find_package(OpenMP REQUIRED)
++
++include_directories(../dds/include ../dds/examples /opt/homebrew/opt/libomp/include  . ${Boost_INCLUDE_DIRS} )
++#target_link_libraries(dds ${Boost_LIBRARIES})
+Index: .idea/editor.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/editor.xml b/.idea/editor.xml
+new file mode 100644
+--- /dev/null	(date 1775477454585)
++++ b/.idea/editor.xml	(date 1775477454585)
+@@ -0,0 +1,346 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="BackendCodeEditorSettings">
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CDeclarationWithImplicitIntType/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CommentTypo/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=ConstevalIfIsAlwaysConstant/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppAbstractClassWithoutSpecifier/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppAbstractFinalClass/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppAbstractVirtualFunctionCallInCtor/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppAccessSpecifierWithNoDeclarations/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppAwaiterTypeIsNotClass/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppBooleanIncrementExpression/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppBoostFormatBadCode/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppBoostFormatLegacyCode/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppBoostFormatMixedArgs/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppBoostFormatTooFewArgs/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppBoostFormatTooManyArgs/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppCStyleCast/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppCVQualifierCanNotBeAppliedToReference/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppClassCanBeFinal/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppClassIsIncomplete/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppClassNeedsConstructorBecauseOfUninitializedMember/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppClassNeverUsed/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppCompileTimeConstantCanBeReplacedWithBooleanConstant/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppConceptNeverUsed/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppConditionalExpressionCanBeSimplified/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppConstParameterInDeclaration/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppConstValueFunctionReturnType/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppCoroutineCallResolveError/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAArrayIndexOutOfBounds/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAConstantConditions/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAConstantFunctionResult/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAConstantParameter/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFADeletedPointer/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAEndlessLoop/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAInfiniteRecursion/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAInvalidatedMemory/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFALocalValueEscapesFunction/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFALocalValueEscapesScope/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFALoopConditionNotUpdated/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAMemoryLeak/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFANotInitializedField/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFANullDereference/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFATimeOver/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAUnreachableCode/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAUnreachableFunctionCall/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAUnreadVariable/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDFAUnusedValue/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeclarationHidesLocal/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeclarationHidesUncapturedLocal/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeclarationSpecifierWithoutDeclarators/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeclaratorDisambiguatedAsFunction/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeclaratorNeverUsed/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeclaratorUsedBeforeInitialization/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDefaultCaseNotHandledInSwitchStatement/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDefaultInitializationWithNoUserConstructor/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDefaultIsUsedAsIdentifier/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDefaultedSpecialMemberFunctionIsImplicitlyDeleted/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDefinitionsOrder/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeletingVoidPointer/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDependentTemplateWithoutTemplateKeyword/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDependentTypeWithoutTypenameKeyword/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeprecatedEntity/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeprecatedOverridenMethod/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDeprecatedRegisterStorageClassSpecifier/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDereferenceOperatorLimitExceeded/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDiscardedPostfixOperatorResult/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDoxygenSyntaxError/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDoxygenUndocumentedParameter/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppDoxygenUnresolvedReference/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEmptyDeclaration/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceCVQualifiersOrder/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceCVQualifiersPlacement/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceDoStatementBraces/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceForStatementBraces/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceFunctionDeclarationStyle/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceIfStatementBraces/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceNestedNamespacesStyle/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceOverridingDestructorStyle/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceOverridingFunctionStyle/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceTypeAliasCodeStyle/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnforceWhileStatementBraces/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEntityAssignedButNoRead/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEntityUsedOnlyInUnevaluatedContext/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEnumeratorNeverUsed/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEqualOperandsInBinaryExpression/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppEvaluationFailure/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppExplicitSpecializationInNonNamespaceScope/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppExpressionWithoutSideEffects/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppFinalFunctionInFinalClass/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppFinalNonOverridingVirtualFunction/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppForLoopCanBeReplacedWithWhile/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppForwardEnumDeclarationWithoutUnderlyingType/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppFunctionDoesntReturnValue/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppFunctionIsNotImplemented/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppFunctionResultShouldBeUsed/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppFunctionalStyleCast/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppHeaderHasBeenAlreadyIncluded/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppHiddenFunction/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppHidingFunction/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppIdenticalOperandsInBinaryExpression/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppIfCanBeReplacedByConstexprIf/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppImplicitDefaultConstructorNotAvailable/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppIncompatiblePointerConversion/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppIncompleteSwitchStatement/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppInconsistentNaming/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppIntegralToPointerConversion/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppInvalidLineContinuation/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppJoinDeclarationAndAssignment/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppLambdaCaptureNeverUsed/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppLocalVariableMayBeConst/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppLocalVariableMightNotBeInitialized/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppLocalVariableWithNonTrivialDtorIsNeverUsed/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppLongFloat/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMemberFunctionMayBeConst/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMemberFunctionMayBeStatic/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMemberInitializersOrder/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMismatchedClassTags/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMissingIncludeGuard/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMissingKeywordThrow/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppModulePartitionWithSeveralPartitionUnits/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMsExtAddressOfClassRValue/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMsExtBindingRValueToLvalueReference/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMsExtCopyElisionInCopyInitDeclarator/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMsExtDoubleUserConversionInCopyInit/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMsExtNotInitializedStaticConstLocalVar/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMsExtReinterpretCastFromNullptr/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMultiCharacterLiteral/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMultiCharacterWideLiteral/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMustBePublicVirtualToImplementInterface/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppMutableSpecifierOnReferenceMember/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNoDiscardExpression/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNodiscardFunctionWithoutReturnValue/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNonExceptionSafeResourceAcquisition/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNonExplicitConversionOperator/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNonExplicitConvertingConstructor/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNonInlineFunctionDefinitionInHeaderFile/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNonInlineVariableDefinitionInHeaderFile/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppNotAllPathsReturnValue/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppObjectMemberMightNotBeInitialized/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppOutParameterMustBeWritten/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppParameterMayBeConst/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppParameterMayBeConstPtrOrRef/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppParameterNamesMismatch/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppParameterNeverUsed/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPassValueParameterByConstReference/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPointerConversionDropsQualifiers/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPointerToIntegralConversion/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPolymorphicClassWithNonVirtualPublicDestructor/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPossiblyErroneousEmptyStatements/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPossiblyUninitializedMember/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPossiblyUnintendedObjectSlicing/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrecompiledHeaderIsNotIncluded/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrecompiledHeaderNotFound/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrintfBadFormat/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrintfExtraArg/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrintfMissedArg/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrintfRiskyFormat/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppPrivateSpecialMemberFunctionIsNotImplemented/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRangeBasedForIncompatibleReference/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedefinitionOfDefaultArgumentInOverrideFunction/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantAccessSpecifier/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantBaseClassAccessSpecifier/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantBaseClassInitializer/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantBooleanExpressionArgument/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantCastExpression/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantComplexityInComparison/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantConditionalExpression/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantConstSpecifier/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantControlFlowJump/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantDereferencingAndTakingAddress/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantElaboratedTypeSpecifier/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantElseKeyword/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantElseKeywordInsideCompoundStatement/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantEmptyDeclaration/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantEmptyStatement/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantExportKeyword/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantFwdClassOrEnumSpecifier/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantInlineSpecifier/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantLambdaParameterList/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantMemberInitializer/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantNamespaceDefinition/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantParentheses/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantQualifier/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantQualifierADL/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantStaticSpecifierOnMemberAllocationFunction/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantStaticSpecifierOnThreadLocalLocalVariable/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantTemplateArguments/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantTemplateKeyword/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantTypenameKeyword/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantVoidArgumentList/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRedundantZeroInitializerInAggregateInitialization/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppReinterpretCastFromVoidPtr/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppRemoveRedundantBraces/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppReplaceMemsetWithZeroInitialization/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppReplaceTieWithStructuredBinding/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppReturnNoValueInNonVoidFunction/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppSmartPointerVsMakeFunction/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppSomeObjectMembersMightNotBeInitialized/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppSpecialFunctionWithoutNoexceptSpecification/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppStaticAssertFailure/@EntryIndexedValue" value="ERROR" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppStaticDataMemberInUnnamedStruct/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppStaticSpecifierOnAnonymousNamespaceMember/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppStringLiteralToCharPointerConversion/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTabsAreDisallowed/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTemplateArgumentsCanBeDeduced/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTemplateParameterNeverUsed/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTemplateParameterShadowing/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppThrowExpressionCanBeReplacedWithRethrow/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTooWideScope/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTooWideScopeInitStatement/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppTypeAliasNeverUsed/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUninitializedDependentBaseClass/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUninitializedNonStaticDataMember/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnionMemberOfReferenceType/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnmatchedPragmaEndRegionDirective/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnmatchedPragmaRegionDirective/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnnamedNamespaceInHeaderFile/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnnecessaryWhitespace/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnsignedZeroComparison/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUnusedIncludeDirective/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseAlgorithmWithCount/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseAssociativeContains/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseAuto/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseAutoForNumeric/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseElementsView/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseEraseAlgorithm/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseFamiliarTemplateSyntaxForGenericLambdas/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseRangeAlgorithm/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseStdSize/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseStructuredBinding/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUseTypeTraitAlias/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUserDefinedLiteralSuffixDoesNotStartWithUnderscore/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppUsingResultOfAssignmentAsCondition/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppVariableCanBeMadeConstexpr/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppVirtualFunctionCallInsideCtor/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppVirtualFunctionInFinalClass/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppVolatileParameterInDeclaration/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppWarningDirective/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppWrongIncludesOrder/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppWrongSlashesInIncludeDirective/@EntryIndexedValue" value="HINT" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppZeroConstantCanBeReplacedWithNullptr/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=CppZeroValuedExpressionUsedAsNullPointer/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=IdentifierTypo/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=IfStdIsConstantEvaluatedCanBeReplaced/@EntryIndexedValue" value="SUGGESTION" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=StdIsConstantEvaluatedWillAlwaysEvaluateToConstant/@EntryIndexedValue" value="WARNING" type="string" />
++    <option name="/Default/CodeInspection/Highlighting/InspectionSeverities/=StringLiteralTypo/@EntryIndexedValue" value="DO_NOT_SHOW" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppClangFormat/EnableClangFormatSupport/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_ARGUMENT/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_BINARY_EXPRESSIONS_CHAIN/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_CALLS_CHAIN/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_EXPRESSION/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_EXTENDS_LIST/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_FOR_STMT/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_PARAMETER/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_TYPE_ARGUMENT/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTILINE_TYPE_PARAMETER/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_MULTIPLE_DECLARATION/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ALIGN_TERNARY/@EntryValue" value="ALIGN_ALL" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/ANONYMOUS_METHOD_DECLARATION_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/BLANK_LINES_AROUND_CLASS_DEFINITION/@EntryValue" value="1" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/BLANK_LINES_AROUND_DECLARATIONS/@EntryValue" value="0" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/BLANK_LINES_AROUND_FUNCTION_DECLARATION/@EntryValue" value="1" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/BLANK_LINES_AROUND_FUNCTION_DEFINITION/@EntryValue" value="1" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/BREAK_TEMPLATE_DECLARATION/@EntryValue" value="LINE_BREAK" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/CASE_BLOCK_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/CONTINUOUS_LINE_INDENT/@EntryValue" value="Double" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/FREE_BLOCK_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INDENT_ACCESS_SPECIFIERS_FROM_CLASS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INDENT_CASE_FROM_SWITCH/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INDENT_CLASS_MEMBERS_FROM_ACCESS_SPECIFIERS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INDENT_COMMENT/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INDENT_SIZE/@EntryValue" value="4" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INDENT_STYLE/@EntryValue" value="Space" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INITIALIZER_BRACES/@EntryValue" value="END_OF_LINE_NO_SPACE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INT_ALIGN_EQ/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/INVOCABLE_DECLARATION_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/KEEP_BLANK_LINES_IN_CODE/@EntryValue" value="2" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/KEEP_BLANK_LINES_IN_DECLARATIONS/@EntryValue" value="2" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/KEEP_USER_LINEBREAKS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/LINE_BREAK_AFTER_COLON_IN_MEMBER_INITIALIZER_LISTS/@EntryValue" value="ON_SINGLE_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/MEMBER_INITIALIZER_LIST_STYLE/@EntryValue" value="DO_NOT_CHANGE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/NAMESPACE_DECLARATION_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/NAMESPACE_INDENTATION/@EntryValue" value="All" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/OTHER_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/PLACE_CATCH_ON_NEW_LINE/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/PLACE_ELSE_ON_NEW_LINE/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/PLACE_NAMESPACE_DEFINITIONS_ON_SAME_LINE/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/PLACE_WHILE_ON_NEW_LINE/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SIMPLE_BLOCK_STYLE/@EntryValue" value="DO_NOT_CHANGE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_CAST_EXPRESSION_PARENTHESES/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_COLON_IN_BITFIELD_DECLARATOR/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_COMMA_IN_TEMPLATE_ARGS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_COMMA_IN_TEMPLATE_PARAMS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_EXTENDS_COLON/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_FOR_COLON/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_FOR_SEMICOLON/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_PTR_IN_DATA_MEMBER/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_PTR_IN_DATA_MEMBERS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_PTR_IN_METHOD/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_PTR_IN_NESTED_DECLARATOR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_REF_IN_DATA_MEMBER/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_REF_IN_DATA_MEMBERS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_REF_IN_METHOD/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_AFTER_UNARY_OPERATOR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_COLON_IN_BITFIELD_DECLARATOR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_EXTENDS_COLON/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_FOR_COLON/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_FOR_SEMICOLON/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_PTR_IN_ABSTRACT_DECL/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_PTR_IN_DATA_MEMBER/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_PTR_IN_DATA_MEMBERS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_PTR_IN_METHOD/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_REF_IN_ABSTRACT_DECL/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_REF_IN_DATA_MEMBER/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_REF_IN_DATA_MEMBERS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_REF_IN_METHOD/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_TEMPLATE_ARGS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BEFORE_TEMPLATE_PARAMS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_BETWEEN_CLOSING_ANGLE_BRACKETS_IN_TEMPLATE_ARGS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_ARRAY_ACCESS_BRACKETS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_CAST_EXPRESSION_PARENTHESES/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_DECLARATION_PARENTHESES/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_EMPTY_BLOCKS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_EMPTY_INITIALIZER_BRACES/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_EMPTY_METHOD_PARENTHESES/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_EMPTY_TEMPLATE_PARAMS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_INITIALIZER_BRACES/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_TEMPLATE_ARGS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPACE_WITHIN_TEMPLATE_PARAMS/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/SPECIAL_ELSE_IF_TREATMENT/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/TAB_WIDTH/@EntryValue" value="4" type="int" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/TYPE_DECLARATION_BRACES/@EntryValue" value="END_OF_LINE" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_AFTER_BINARY_OPSIGN/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_AFTER_DECLARATION_LPAR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_AFTER_INVOCATION_LPAR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_ARGUMENTS_STYLE/@EntryValue" value="WRAP_IF_LONG" type="string" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_DECLARATION_LPAR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_DECLARATION_RPAR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_INVOCATION_LPAR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_INVOCATION_RPAR/@EntryValue" value="false" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_BEFORE_TERNARY_OPSIGNS/@EntryValue" value="true" type="bool" />
++    <option name="/Default/CodeStyle/CodeFormatting/CppFormatting/WRAP_PARAMETERS_STYLE/@EntryValue" value="WRAP_IF_LONG" type="string" />
++    <option name="/Default/CodeStyle/EditorConfig/EnableClangFormatSupport/@EntryValue" value="false" type="bool" />
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/misc.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+new file mode 100644
+--- /dev/null	(date 1735657424000)
++++ b/.idea/misc.xml	(date 1735657424000)
+@@ -0,0 +1,27 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="CMakePythonSetting">
++    <option name="pythonIntegrationState" value="YES" />
++  </component>
++  <component name="ExternalStorageConfigurationManager" enabled="true" />
++  <component name="MakefileSettings">
++    <option name="linkedExternalProjectsSettings">
++      <MakefileProjectSettings>
++        <option name="buildTarget" value="macos" />
++        <option name="externalProjectPath" value="$PROJECT_DIR$/src" />
++        <option name="modules">
++          <set>
++            <option value="$PROJECT_DIR$/src" />
++          </set>
++        </option>
++        <option name="version" value="2" />
++      </MakefileProjectSettings>
++    </option>
++  </component>
++  <component name="MakefileWorkspace" PROJECT_DIR="$PROJECT_DIR$/src">
++    <contentRoot DIR="$PROJECT_DIR$" />
++  </component>
++  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src">
++    <contentRoot DIR="$PROJECT_DIR$" />
++  </component>
++</project>
+Index: .idea/vcs.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/vcs.xml b/.idea/vcs.xml
+new file mode 100644
+--- /dev/null	(date 1733479515000)
++++ b/.idea/vcs.xml	(date 1733479515000)
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="VcsDirectoryMappings">
++    <mapping directory="" vcs="Git" />
++  </component>
++</project>
+\ No newline at end of file
+Index: .idea/modules.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+new file mode 100644
+--- /dev/null	(date 1775485960866)
++++ b/.idea/modules.xml	(date 1775485960866)
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectModuleManager">
++    <modules>
++      <module fileurl="file://$PROJECT_DIR$/.idea/dds.iml" filepath="$PROJECT_DIR$/.idea/dds.iml" />
++    </modules>
++  </component>
++</project>
+\ No newline at end of file
+Index: doc/DJNotes.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/doc/DJNotes.txt b/doc/DJNotes.txt
+new file mode 100644
+--- /dev/null	(date 1735651921000)
++++ b/doc/DJNotes.txt	(date 1735651921000)
+@@ -0,0 +1,4 @@
++Boost is installed in /usr/local/lib/ (resp. include).
++A previous homebrew install is in /usr/local/libexec/boost/1.76/lib (resp. include) and linked to from /opt/local/lib.
++The Boost libraries are installed using macports as dylibs.
++ls
+\ No newline at end of file
