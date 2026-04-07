@@ -17,10 +17,12 @@
 
 # This is only necessary for the .a static library, actually.
 
-CC_BOOST	= /usr/local/Cellar/boost/1.56.0
-CC_BOOST_LINK	= -L$(CC_BOOST)/lib -lboost_system -lboost_thread-mt
+THR_GCD		= -DDDS_THREADS_GCD
+THR_STL		= -DDDS_THREADS_STL
 
-THREAD_LINK	= $(CC_BOOST_LINK)
+THREADING	= $(THR_GCD) $(THR_STL)
+
+THREAD_LINK	=
 
 # ----------------------- OFTEN OK    ------------------------------
 
@@ -33,7 +35,7 @@ INCL_OWN_SOURCE	= Makefiles/own_sources.txt
 INCL_DEPENDS	= Makefiles/depends_o.txt
 
 # If your compiler name is not given here, change it.
-CC		= g++
+CC		= clang++
 
 # We compile with aggressive warnings, but we have to turn off some
 # of them as they appear in libraries in great numbers...
@@ -62,7 +64,7 @@ WARN_FLAGS	= 		\
 	-Wno-format
 
 COMPILE_FLAGS	= -O3 -flto -mtune=generic \
-		$(WARN_FLAGS) -std=c++11
+		$(WARN_FLAGS) -std=c++11 $(THREADING)
 
 DLLBASE		= dds
 STATIC_LIB	= lib$(DLLBASE).a

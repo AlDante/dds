@@ -14,23 +14,18 @@
 # CC_THREADING.
 
 # GCD and WINAPI don't work on Windows.
-THR_BOOST	= -DDDS_THREADS_BOOST
 THR_GCD		= -DDDS_THREADS_GCD
 THR_OPENMP	= -DDDS_THREADS_OPENMP
 THR_WINAPI	= -DDDS_THREADS_WINAPI
 THR_STL		= -DDDS_THREADS_STL
 
-THREADING	= $(THR_BOOST) $(THR_GCD) $(THR_STL)
+THREADING	= $(THR_GCD) $(THR_STL)
 
 # If you need to add something for a threading system, this is
 # the place.
 
-CC_BOOST	= /usr/local
-CC_BOOST_INCL	= $(CC_BOOST)/include
-CC_BOOST_LINK	= -L$(CC_BOOST)/lib -lboost_system -lboost_thread-mt
-
-THREAD_COMPILE	= 
-THREAD_LINK	= $(CC_BOOST_LINK)
+THREAD_COMPILE	=
+THREAD_LINK	=
 
 # 2. Debugging options.  (There are more granular options in debug.h.)
 
@@ -53,7 +48,7 @@ INCL_SOURCE	= Makefiles/sources.txt
 INCL_DEPENDS	= Makefiles/depends_o.txt
 
 # If your compiler name is not given here, change it.
-CC		= clang
+CC		= clang++
 
 # We compile with aggressive warnings, but we have to turn off some
 # of them as they appear in libraries in great numbers...
