@@ -85,8 +85,17 @@ include $(INCL_OWN_SOURCE)
 
 DTEST_OBJ_FILES	= $(subst .cpp,.obj,$(DTEST_SOURCE_FILES)) $(DTEST).obj
 
+REGAPI_SOURCE_FILES	=	\
+	compare.cpp		\
+	parse.cpp		\
+	print.cpp		\
+	regression_api.cpp
+
+REGAPI_OBJ_FILES	= $(subst .cpp,.obj,$(REGAPI_SOURCE_FILES))
+
 DTEST		= dtest
 ITEST		= itest
+REGAPI		= regression_api
 
 # These are the files that we steal from the src directory.
 
@@ -103,6 +112,10 @@ dtest:	$(DTEST_OBJ_FILES)
 	link $(LINK1_FLAGS) $(DTEST_OBJ_FILES) $(DLIB) \
 	$(LINK2_FLAGS) /out:$(DTEST).exe
 
+regression_api:	$(REGAPI_OBJ_FILES)
+	link $(LINK1_FLAGS) $(REGAPI_OBJ_FILES) $(DLIB) \
+	$(LINK2_FLAGS) /out:$(REGAPI).exe
+
 itest:	$(ITEST_OBJ_FILES)
 	link $(LINK1_FLAGS) $(ITEST_OBJ_FILES) \
 	$(LINK2_FLAGS) /out:$(ITEST).exe
@@ -114,8 +127,8 @@ depend:
 	makedepend -Y -o.obj -- $(ITEST_SOURCE_FILES) $(DTEST).cpp
 
 clean:
-	rm -f $(ITEST_OBJ_FILES) $(DTEST).{obj,exe} \
-	$(ITEST).{exe,exp,lib} $(DLL) $(DLIB)
+	rm -f $(ITEST_OBJ_FILES) $(REGAPI_OBJ_FILES) $(DTEST).{obj,exe} \
+	$(ITEST).{exe,exp,lib} $(REGAPI).{exe,exp,lib} $(DLL) $(DLIB)
 
 # If you don't have a Linux-like setup, use "del" instead of "rm".
 

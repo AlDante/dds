@@ -58,7 +58,7 @@ bool compare_TABLE(
   const ddTableResults& table1, 
   const ddTableResults& table2)
 {
-  for (int suit = 0; suit < DDS_SUITS; suit++)
+  for (int suit = 0; suit < DDS_STRAINS; suit++)
   {
     for (int pl = 0; pl < DDS_HANDS; pl++)
       if (table1.resTable[suit][pl] != table2.resTable[suit][pl])
@@ -90,7 +90,10 @@ bool compare_DEALERPAR(
   const parResultsDealer& par1,
   const parResultsDealer& par2)
 {
-  if (par1.score != par2.score) 
+  if (par1.number != par2.number)
+    return false;
+
+  if (par1.score != par2.score)
     return false;
 
   for (int i = 0; i < par1.number; i++)

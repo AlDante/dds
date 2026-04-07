@@ -81,8 +81,17 @@ include $(INCL_OWN_SOURCE)
 
 DTEST_OBJ_FILES	= $(subst .cpp,.o,$(DTEST_SOURCE_FILES)) $(DTEST).o
 
+REGAPI_SOURCE_FILES	=	\
+	compare.cpp		\
+	parse.cpp		\
+	print.cpp		\
+	regression_api.cpp
+
+REGAPI_OBJ_FILES	= $(subst .cpp,.o,$(REGAPI_SOURCE_FILES))
+
 DTEST		= dtest
 ITEST		= itest
+REGAPI		= regression_api
 
 # These are the files that we steal from the src directory.
 
@@ -99,6 +108,10 @@ dtest:	$(DTEST_OBJ_FILES)
 	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(DTEST_OBJ_FILES) \
 	$(LINK2_FLAGS) -o $(DTEST)
 
+regression_api:	$(REGAPI_OBJ_FILES)
+	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(REGAPI_OBJ_FILES) \
+	$(LINK2_FLAGS) -o $(REGAPI)
+
 itest:	$(ITEST_OBJ_FILES)
 	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(ITEST_OBJ_FILES) \
 	$(LINK3_FLAGS) -o $(ITEST)
@@ -110,8 +123,8 @@ depend:
 	makedepend -Y -- $(ITEST_SOURCE_FILES) $(DTEST).cpp
 
 clean:
-	rm -f $(ITEST_OBJ_FILES) $(DTEST).o \
-	$(DTEST) $(ITEST) $(STATIC_LIB)
+	rm -f $(ITEST_OBJ_FILES) $(REGAPI_OBJ_FILES) $(DTEST).o \
+	$(DTEST) $(ITEST) $(REGAPI) $(STATIC_LIB)
 
 include $(INCL_DEPENDS)
 
