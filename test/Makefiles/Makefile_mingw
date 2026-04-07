@@ -88,9 +88,16 @@ REGAPI_SOURCE_FILES	=	\
 
 REGAPI_OBJ_FILES	= $(subst .cpp,.o,$(REGAPI_SOURCE_FILES))
 
+TIMERREG_SOURCE_FILES	=	\
+	../src/Timer.cpp	\
+	timer_regression.cpp
+
+TIMERREG_OBJ_FILES	= $(subst .cpp,.o,$(TIMERREG_SOURCE_FILES))
+
 DTEST		= dtest
 ITEST		= itest
 REGAPI		= regression_api
+TIMERREG	= timer_regression
 
 # These are the files that we steal from the src directory.
 
@@ -110,6 +117,10 @@ dtest:	$(DTEST_OBJ_FILES)
 regression_api:	$(REGAPI_OBJ_FILES)
 	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(REGAPI_OBJ_FILES) \
 	$(LINK2_FLAGS) -o $(REGAPI)
+
+timer_regression:	$(TIMERREG_OBJ_FILES)
+	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(TIMERREG_OBJ_FILES) \
+	$(LINK2_FLAGS) -o $(TIMERREG)
 
 itest:	$(ITEST_OBJ_FILES)
 	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(ITEST_OBJ_FILES) \

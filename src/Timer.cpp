@@ -105,6 +105,10 @@ string Timer::SumLine(
   const string& bname) const
 {
   stringstream ss;
+  const double clocksPerSecond = static_cast<double>(CLOCKS_PER_SEC);
+  const double countTimesClocks =
+    static_cast<double>(count) * clocksPerSecond;
+
   if (count > 0)
   {
     ss << setw(14) << left << (bname == "" ? name : bname) <<
@@ -115,10 +119,10 @@ string Timer::SumLine(
       setw(5) << setprecision(1) << fixed << 
         100. * userCum / divisor.userCum <<
       setw(11) << setprecision(0) << fixed << 
-        1000000 * systCum / static_cast<double>(CLOCKS_PER_SEC) <<
+        1000000. * systCum / clocksPerSecond <<
       setw(7) << setprecision(2) << fixed <<
-        1000000 * systCum / static_cast<double>(count * CLOCKS_PER_SEC) <<
-      setw(5) << setprecision(1) << fixed << 
+        1000000. * systCum / countTimesClocks <<
+      setw(5) << setprecision(1) << fixed <<
         100. * systCum / divisor.systCum << "\n";
   }
   else
@@ -128,7 +132,7 @@ string Timer::SumLine(
       setw(11) << userCum <<
       setw(7) << "-" <<
       setw(5) << "-" <<
-      setw(11) << 1000000 * systCum / static_cast<double>(CLOCKS_PER_SEC) <<
+      setw(11) << 1000000. * systCum / clocksPerSecond <<
       setw(7) << "-" <<
       setw(5) << "-" << "\n";
   }
@@ -139,16 +143,19 @@ string Timer::SumLine(
 string Timer::DetailLine() const
 {
   stringstream ss;
+  const double clocksPerSecond = static_cast<double>(CLOCKS_PER_SEC);
+  const double countTimesClocks =
+    static_cast<double>(count) * clocksPerSecond;
+
   ss << setw(15) << left << name <<
     setw(10) << right << count <<
     setw(11) << right << userCum <<
     setw(11) << setprecision(2) << fixed << 
       userCum / static_cast<double>(count) <<
     setw(11) << setprecision(0) << fixed <<
-      1000000 * systCum / static_cast<double>(CLOCKS_PER_SEC) <<
+      1000000. * systCum / clocksPerSecond <<
     setw(11) << setprecision(2) << fixed <<
-      1000000 * systCum / 
-        static_cast<double>(count * CLOCKS_PER_SEC) << "\n";
+      1000000. * systCum / countTimesClocks << "\n";
 
   return ss.str();
 }

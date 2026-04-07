@@ -92,5 +92,6 @@ print.o: print.h ../include/dll.h cst.h
 testcommon.o: ../include/dll.h ../include/portab.h testcommon.h TestTimer.h
 testcommon.o: parse.h loop.h compare.h print.h cst.h
 TestTimer.o: TestTimer.h
+timer_regression.o: ../src/Timer.h
 itest.o: ../include/dll.h testcommon.h args.h cst.h
 dtest.o: ../include/dll.h testcommon.h args.h cst.h

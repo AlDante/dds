@@ -54,9 +54,9 @@ int main()
   {
     match = CompareTable(&tableRes.results[handno], handno);
 
-    sprintf(line,
-            "CalcDDtable, hand %d: %s\n",
-            handno + 1, (match ? "OK" : "ERROR"));
+    snprintf(line, sizeof(line),
+             "CalcDDtable, hand %d: %s\n",
+             handno + 1, (match ? "OK" : "ERROR"));
 
     PrintPBNHand(line, DDdealsPBN.deals[handno].cards);
 

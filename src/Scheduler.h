@@ -35,8 +35,8 @@ using namespace std;
 
 struct schedType
 {
-  int number;
-  int repeatOf;
+  int number = -1;
+  int repeatOf = -1;
 };
 
 
@@ -162,7 +162,7 @@ class Scheduler
 
     Scheduler();
 
-    ~Scheduler();
+    ~Scheduler() = default;
 
     void RegisterThreads(
       const int n);

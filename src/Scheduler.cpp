@@ -8,19 +8,26 @@
 */
 
 
-#include <iostream>
+#include <cmath>
+#include <fstream>
 #include <iomanip>
-#include <sstream>
-#include <math.h>
+#include <string>
 
 #include "Scheduler.h"
 
 
-Scheduler::Scheduler()
+Scheduler::Scheduler() :
+  hands(),
+  group(),
+  numGroups(0),
+  extraGroups(0),
+  currGroup(-1),
+  list(),
+  sortList(),
+  sortLen(0),
+  numThreads(0),
+  numHands(0)
 {
-  numThreads = 0;
-  numHands = 0;
-
   Scheduler::InitHighCards();
 
 #ifdef DDS_SCHEDULER
@@ -79,15 +86,11 @@ void Scheduler::InitTimes()
   timeGroupPredStrain.Init("Group predicted suit/NT", 2);
   timeGroupDiffStrain.Init("Group diff suit/NT", 2);
 
+  timeMax = 0;
   blockMax = 0;
   timeBlock = 0;
 }
 #endif
-
-
-Scheduler::~Scheduler()
-{
-}
 
 
 void Scheduler::Reset()
@@ -120,7 +123,7 @@ void Scheduler::RegisterThreads(
     return;
   numThreads = n;
 
-  const unsigned nu = static_cast<unsigned>(n);
+  const auto nu = static_cast<unsigned>(n);
   threadGroup.resize(nu);
   threadCurrGroup.resize(nu);
   threadToHand.resize(nu);
@@ -212,7 +215,7 @@ void Scheduler::MakeGroups(const boards& bds)
     hands[b].first = dl->first;
     hands[b].strain = strain;
     hands[b].fanout = Scheduler::Fanout(* dl);
-    // hands[b].strength = Scheduler::Strength(* dl);
+    hands[b].strength = Scheduler::Strength(* dl);
 
     lp = &list[strain][key];
 
@@ -301,7 +304,7 @@ void Scheduler::FinetuneGroups()
       // as thorough here, but it's better than above and it uses
       // a different hand.
 
-      sortType st;
+      sortType st = {0, 0};
       sortLen = lp->length;
       int index = lp->first;
 
@@ -476,14 +479,15 @@ void Scheduler::SortSolve()
     else if (fanout < slist[1])
       fanoutFactor = slist[2] * (fanout - slist[0]);
     else
-      fanoutFactor = slist[3] * exp( (fanout - slist[1]) / slist[4] );
+      fanoutFactor = slist[3] * std::exp(
+        (fanout - slist[1]) / slist[4] );
 
     group[g].pred = static_cast<int>(
       (fanoutFactor * static_cast<double>(group[g].pred)));
   }
 
   // Sort groups using merge sort.
-  groupType gp;
+  groupType gp = {0, 0, 0, 0, 0, 0};
   for (int g = 0; g < numGroups; g++)
   {
     gp = group[g];
@@ -535,14 +539,15 @@ void Scheduler::SortCalc()
     else if (fanout < slist[1])
       fanoutFactor = slist[2] * (fanout - slist[0]);
     else
-      fanoutFactor = slist[3] * exp( (fanout - slist[1]) / slist[4] );
+      fanoutFactor = slist[3] * std::exp(
+        (fanout - slist[1]) / slist[4] );
 
     group[g].pred = static_cast<int>(
       (fanoutFactor * static_cast<double>(group[g].pred)));
   }
 
   // Sort groups using merge sort.
-  groupType gp;
+  groupType gp = {0, 0, 0, 0, 0, 0};
   for (int g = 0; g < numGroups; g++)
   {
     gp = group[g];
@@ -644,14 +649,15 @@ void Scheduler::SortTrace()
     else if (fanout < slist[1])
       fanoutFactor = slist[2] * (fanout - slist[0]);
     else
-      fanoutFactor = slist[3] * exp( (fanout - slist[1]) / slist[4] );
+      fanoutFactor = slist[3] * std::exp(
+        (fanout - slist[1]) / slist[4] );
 
     group[g].pred = static_cast<int>(
       (fanoutFactor * static_cast<double>(group[g].pred)));
   }
 
   // Sort groups using merge sort.
-  groupType gp;
+  groupType gp = {0, 0, 0, 0, 0, 0};
   for (int g = 0; g < numGroups; g++)
   {
     gp = group[g];
@@ -720,7 +726,7 @@ int Scheduler::Fanout(const deal& dl) const
 
 schedType Scheduler::GetNumber(const int thrId)
 {
-  const unsigned tu = static_cast<unsigned>(thrId);
+  const auto tu = static_cast<unsigned>(thrId);
   int g = threadGroup[tu];
   listType * lp;
   schedType st;
@@ -733,7 +739,6 @@ schedType Scheduler::GetNumber(const int thrId)
     {
       // Out of groups. Just an optimization not to touch the
       // shared variable unnecessarily.
-      st.number = -1;
       return st;
     }
 
@@ -745,7 +750,6 @@ schedType Scheduler::GetNumber(const int thrId)
       // Out of groups. currGroup could have changed in the
       // meantime in another thread, so test again.
 
-      st.number = -1;
       return st;
     }
 
@@ -781,12 +785,9 @@ schedType Scheduler::GetNumber(const int thrId)
     st.repeatOf = group[g].head;
     //hands[st.number].selectFlag = 0;
 
-    if (hands[st.number].first == hands[st.repeatOf].first)
-      hands[st.number].selectFlag = 0;
-    else if (hands[st.number].strain == 4)
-      hands[st.number].selectFlag = 1;
-    else
-      hands[st.number].selectFlag = 0;
+    hands[st.number].selectFlag =
+      (hands[st.number].first != hands[st.repeatOf].first &&
+       hands[st.number].strain == 4 ? 1 : 0);
   }
 
   hands[st.number].repeatNo = group[g].repeatNo++;
@@ -843,7 +844,8 @@ void Scheduler::EndBlockTimer()
   {
     hp = &hands[b];
     int timeUser = hp->time;
-    double timesq = (double) timeUser * (double) timeUser;
+    double timesq =
+      static_cast<double>(timeUser) * static_cast<double>(timeUser);
 
     if (hp->selectFlag)
     {
@@ -933,7 +935,8 @@ void Scheduler::PrintTiming() const
   if (timeBlock == 0)
     return;
 
-  const double avg = 100. * (double) timeMax / (double) timeBlock;
+  const double avg =
+    100. * static_cast<double>(timeMax) / static_cast<double>(timeBlock);
   fout << "Largest hand" <<
     setw(13) << timeMax << 
     setw(13) << timeBlock <<
@@ -968,7 +971,7 @@ int Scheduler::PredictedTime(
 
     if (number >= 2)
       pred = static_cast<int> (pred *
-        (1.185 - 0.185 * exp( -(number - 1) / 6.0)));
+        (1.185 - 0.185 * std::exp( -(number - 1) / 6.0)));
   }
   else
   {
@@ -978,7 +981,7 @@ int Scheduler::PredictedTime(
 
     if (number >= 2)
       pred = static_cast<int>(pred *
-        (1.185 - 0.185 * exp( -(number - 1) / 5.5)));
+        (1.185 - 0.185 * std::exp( -(number - 1) / 5.5)));
   }
 
   return pred;

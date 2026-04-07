@@ -98,5 +98,6 @@ print.obj: print.h ../include/dll.h cst.h
 testcommon.obj: ../include/dll.h ../include/portab.h testcommon.h TestTimer.h
 testcommon.obj: parse.h loop.h compare.h print.h cst.h
 TestTimer.obj: TestTimer.h
+timer_regression.obj: ../src/Timer.h
 itest.obj: ../include/dll.h testcommon.h args.h cst.h
 dtest.obj: ../include/dll.h testcommon.h args.h cst.h

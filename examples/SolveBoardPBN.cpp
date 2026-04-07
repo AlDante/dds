@@ -75,17 +75,17 @@ int main()
 
     match2 = CompareFut(&fut2, handno, solutions);
 
-    sprintf(line,
-            "SolveBoardPBN, hand %d: solutions 3 %s, solutions 2 %s\n",
-            handno + 1,
-            (match3 ? "OK" : "ERROR"),
-            (match2 ? "OK" : "ERROR"));
+    snprintf(line, sizeof(line),
+             "SolveBoardPBN, hand %d: solutions 3 %s, solutions 2 %s\n",
+             handno + 1,
+             (match3 ? "OK" : "ERROR"),
+             (match2 ? "OK" : "ERROR"));
 
     PrintPBNHand(line, dlPBN.remainCards);
 
-    sprintf(line, "solutions == 3\n");
+    snprintf(line, sizeof(line), "solutions == 3\n");
     PrintFut(line, &fut3);
-    sprintf(line, "solutions == 2\n");
+    snprintf(line, sizeof(line), "solutions == 2\n");
     PrintFut(line, &fut2);
   }
 }
