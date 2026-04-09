@@ -67,6 +67,60 @@ void (* Make_ptr_list[3])(
   moveType const * mply)
   = { Make0, Make1, Make2 };
 
+typedef bool (* RootSearchFn)(
+  pos * posPoint,
+  const int target,
+  const int depth,
+  ThreadData * thrp);
+
+
+static int SearchExactScoreRoot(
+  ThreadData * thrp,
+  RootSearchFn searchFn,
+  pos * rootPos,
+  const int iniDepth,
+  int guess,
+  int lowerbound,
+  int upperbound,
+  moveType * bestMoveP)
+{
+  moveType mv = {0, 0, 0, 0};
+
+  do
+  {
+    ResetBestMoves(thrp);
+
+    TIMER_START(TIMER_NO_AB, iniDepth);
+    thrp->val = (* searchFn)(
+                  rootPos,
+                  guess,
+                  iniDepth,
+                  thrp);
+    TIMER_END(TIMER_NO_AB, iniDepth);
+
+#ifdef DDS_TOP_LEVEL
+    DumpTopLevel(thrp->fileTopLevel.GetStream(),
+      * thrp, guess, lowerbound, upperbound, 1);
+#endif
+
+    if (thrp->val)
+    {
+      if (bestMoveP != NULL)
+        mv = thrp->bestMove[iniDepth];
+
+      lowerbound = guess++;
+    }
+    else
+      upperbound = --guess;
+  }
+  while (lowerbound < upperbound);
+
+  if (bestMoveP != NULL)
+    *bestMoveP = mv;
+
+  return lowerbound;
+}
+
 
 int STDCALL SolveBoard(
   deal dl,
@@ -443,32 +497,15 @@ int SolveBoardInternal(
     int guess = 7 - (handToPlay & 0x1);
     int upperbound = 13;
     int lowerbound = 0;
-    do
-    {
-      ResetBestMoves(thrp);
-
-      TIMER_START(TIMER_NO_AB, iniDepth);
-      thrp->val = (* AB_ptr_list[handRelFirst])(&thrp->lookAheadPos,
-                  guess,
-                  iniDepth,
-                  thrp);
-      TIMER_END(TIMER_NO_AB, iniDepth);
-
-#ifdef DDS_TOP_LEVEL
-      DumpTopLevel(thrp->fileTopLevel.GetStream(),
-        * thrp, guess, lowerbound, upperbound, 1);
-#endif
-
-      if (thrp->val)
-      {
-        mv = thrp->bestMove[iniDepth];
-        lowerbound = guess++;
-      }
-      else
-        upperbound = --guess;
-
-    }
-    while (lowerbound < upperbound);
+    lowerbound = SearchExactScoreRoot(
+                   thrp,
+                   AB_ptr_list[handRelFirst],
+                   &thrp->lookAheadPos,
+                   iniDepth,
+                   guess,
+                   lowerbound,
+                   upperbound,
+                   &mv);
 
     thrp->bestMove[iniDepth] = mv;
     if (lowerbound == 0)
@@ -701,29 +738,15 @@ int SolveSameBoard(
   int lowerbound = 0;
   int upperbound = 13;
 
-  do
-  {
-    ResetBestMoves(thrp);
-
-    TIMER_START(TIMER_NO_AB, iniDepth);
-    thrp->val = ABsearch(
-                  &thrp->lookAheadPos,
-                  guess,
-                  iniDepth,
-                  thrp);
-    TIMER_END(TIMER_NO_AB, iniDepth);
-
-#ifdef DDS_TOP_LEVEL
-    DumpTopLevel(thrp->fileTopLevel.GetStream(),
-      * thrp, guess, lowerbound, upperbound, 1);
-#endif
-
-    if (thrp->val)
-      lowerbound = guess++;
-    else
-      upperbound = --guess;
-  }
-  while (lowerbound < upperbound);
+  lowerbound = SearchExactScoreRoot(
+                 thrp,
+                 ABsearch,
+                 &thrp->lookAheadPos,
+                 iniDepth,
+                 guess,
+                 lowerbound,
+                 upperbound,
+                 NULL);
 
   futp->cards = 1;
   futp->score[0] = lowerbound;
@@ -862,30 +885,15 @@ int AnalyseLaterBoard(
     upperbound = hint;
   }
 
-  do
-  {
-    ResetBestMoves(thrp);
-
-    TIMER_START(TIMER_NO_AB, iniDepth);
-    thrp->val = (* AB_ptr_trace_list[handRelFirst])(
-                  &thrp->lookAheadPos,
-                  guess,
-                  iniDepth,
-                  thrp);
-    TIMER_END(TIMER_NO_AB, iniDepth);
-
-#ifdef DDS_TOP_LEVEL
-    DumpTopLevel(thrp->fileTopLevel.GetStream(),
-      * thrp, guess, lowerbound, upperbound, 1);
-#endif
-
-    if (thrp->val)
-      lowerbound = guess++;
-    else
-      upperbound = --guess;
-
-  }
-  while (lowerbound < upperbound);
+  lowerbound = SearchExactScoreRoot(
+                 thrp,
+                 AB_ptr_trace_list[handRelFirst],
+                 &thrp->lookAheadPos,
+                 iniDepth,
+                 guess,
+                 lowerbound,
+                 upperbound,
+                 NULL);
 
   futp->score[0] = lowerbound;
   futp->nodes = thrp->trickNodes;
