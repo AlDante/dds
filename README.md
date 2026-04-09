@@ -38,7 +38,8 @@ The distribution consists of the following directories.
 * **src**, the source code for the library.
 * **include**, where the public interface of the library is specified.
 * **lib**, the place where the library file is "installed" for test purposes.
-* **doc**, where the library interface is documented and the algorithms behind DDS are explained at a high level.
+* **doc**, where the historical library/interface documentation and algorithm notes live.
+* **docs**, where the maintained Doxygen/Markdown documentation set and build files live.
 * **hands**, a repository for input files to the test programs.
 * **test**, a test program.
 * **examples**, some minimal programs showing how to interface in practice with a number of library functions.
@@ -84,7 +85,7 @@ DDS on Windows calls SetMaxThreads itself when it is attached to a process, so y
 
 Docs
 ====
-The DDS library interface is documented. You find the docs, including a Markdown version which you can read online, in the /doc folder.  The Markdown version has not been updated since v2.8.4.
+The maintained documentation entry point is the `docs/` directory, which combines curated Markdown pages with a Doxygen build. Historical interface and algorithm documentation remains in `doc/`.
 
 Bugs
 ====

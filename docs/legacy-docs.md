@@ -1,0 +1,50 @@
+# Legacy and Existing Documentation
+
+DDS already ships with a substantial body of documentation under `doc/` and in the repository root.
+
+## Primary existing documents
+
+The most important existing text sources are:
+
+- [`../README.md`](../README.md)
+- [`../INSTALL`](../INSTALL)
+- [`../doc/dll-description.md`](../doc/dll-description.md)
+- [`../doc/alpha-mu-integration.md`](../doc/alpha-mu-integration.md)
+- [`../examples/README`](../examples/README)
+
+These files remain authoritative historical sources and are included in the Doxygen input set for this documentation build.
+
+## Historical archive under `doc/`
+
+The `doc/` directory also contains older material in PDF, RTF, HTML, and office-document formats. In particular, it preserves:
+
+- historical DLL/API descriptions,
+- algorithm notes,
+- performance and benchmarking reports,
+- older export-format documentation.
+
+Those files are useful as archival references even when they are not part of the generated HTML output.
+
+## Recommended reading order
+
+For current work on DDS and alpha-mu, the recommended order is:
+
+1. `mainpage.md`
+2. `architecture.md`
+3. `data-structures.md`
+4. `api-overview.md`
+5. `alpha-mu.md`
+6. `implementation-plan.md`
+7. `../doc/dll-description.md` for historical API detail
+
+## Relationship to the new docs folder
+
+The `docs/` folder is intended to be the maintained entry point for:
+
+- current architecture guidance,
+- current implementation planning,
+- generated API browsing,
+- navigation to the older documentation corpus.
+
+It does not replace the historical `doc/` folder; it organizes and contextualizes it.
+

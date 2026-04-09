@@ -18,3 +18,14 @@ endif()
 
 include_directories(../dds/include ../dds/examples /opt/homebrew/opt/libomp/include  . ${DDS_THREAD_INCLUDE_DIRS} )
 #target_link_libraries(dds ${Boost_LIBRARIES})
+
+find_package(Doxygen QUIET)
+
+if(DOXYGEN_FOUND)
+  add_custom_target(dds_docs
+    COMMAND ${DOXYGEN_EXECUTABLE} Doxyfile
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../docs
+    COMMENT "Generating DDS documentation with Doxygen"
+    VERBATIM)
+endif()
+
