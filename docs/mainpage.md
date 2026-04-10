@@ -11,6 +11,7 @@ This documentation set combines curated Markdown guides with generated API pages
 - [API overview](api-overview.md)
 - [Alpha-mu and DDS](alpha-mu.md)
 - [Implementation plan](implementation-plan.md)
+- [Concrete action plan](action-plan.md)
 - [Legacy and existing documentation](legacy-docs.md)
 
 ## Source map

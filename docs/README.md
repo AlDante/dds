@@ -48,6 +48,7 @@ The generated site includes:
 - `data-structures.md` — important internal and public data structures
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
 - `implementation-plan.md` — staged implementation roadmap
+- `action-plan.md` — concrete next-cycle execution checklist
 - `legacy-docs.md` — guide to the historical documentation in `../doc/`
 
 Selected existing Markdown documentation from the repository is also included in the Doxygen input set.
