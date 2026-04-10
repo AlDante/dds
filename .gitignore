@@ -20,6 +20,7 @@ test/itest
 *.res
 /src/build/
 /test/build/
+/examples/build/
 /src/cmake-build-debug/
 /test/libdds.so
 /examples/libdds.so

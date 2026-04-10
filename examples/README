@@ -1,12 +1,22 @@
 There are a number of simple examples for individual DDS functions.
 
-Copy the Makefile for your system from the Makefiles folder.
+Copy the Makefile for your system from the `Makefiles` folder.
 
-Then make the example you want,
+Then make the example you want, for example:
 
-make CalcDDtable
-./CalcDDtable
+```sh
+make -f Makefiles/Makefile_Mac_clang CalcDDtable
+./build/bin/CalcDDtable
+```
 
-This requires the DLL to be in the directory.  It will get there
-when you do a "make install" in the src directory after compiling
-the DLL there.
+The example build now writes:
+
+- object files to `build/obj/`
+- example executables to `build/bin/`
+
+The examples link against the DDS shared library built in `../src/build/`.
+Build that first from the `src` directory, for example:
+
+```sh
+make macos
+```

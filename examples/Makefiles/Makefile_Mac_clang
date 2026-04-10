@@ -42,6 +42,14 @@ CC_FULL_FLAGS	= $(CC_FLAGS) $(WARN_FLAGS)
 DLLBASE		= dds
 STATIC_LIB	= lib$(DLLBASE).a
 
+BUILD_DIR	= build
+OBJ_DIR		= $(BUILD_DIR)/obj
+BIN_DIR		= $(BUILD_DIR)/bin
+
+.PHONY:	AnalysePlayBin AnalysePlayPBN AnalyseAllPlaysBin AnalyseAllPlaysPBN \
+	CalcDDtable CalcDDtablePBN CalcAllTables CalcAllTablesPBN DealerPar \
+	Par SolveBoard SolveBoardPBN SolveAllBoards depend clean
+
 COMMON_SOURCE_FILES 	=	\
 	hands.cpp
 
@@ -60,57 +68,101 @@ ALL_EXAMPLE_FILES	=	\
 	SolveBoardPBN.cpp	\
 	SolveAllBoards.cpp
 
-LIB_FLAGS	= -L. -l$(DLLBASE)
+LIB_FLAGS	= -L../src/build -l$(DLLBASE) \
+		-Wl,-rpath,@loader_path/../../../src/build
 
-OBJ_FILES	= $(subst .cpp,.o,$(COMMON_SOURCE_FILES))
-EX_OBJ_FILES	= $(subst .cpp,.o,$(ALL_EXAMPLE_FILES))
-EX_EXE_FILES	= $(subst .cpp,,$(ALL_EXAMPLE_FILES))
+OBJ_FILES	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(COMMON_SOURCE_FILES)))
+EX_OBJ_FILES	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(ALL_EXAMPLE_FILES)))
+EX_EXE_FILES	= $(addprefix $(BIN_DIR)/,$(subst .cpp,,$(ALL_EXAMPLE_FILES)))
 
-AnalysePlayBin:	$(OBJ_FILES) AnalysePlayBin.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) AnalysePlayBin.o -o AnalysePlayBin
+AnalysePlayBin:	$(BIN_DIR)/AnalysePlayBin
 
-AnalysePlayPBN:	$(OBJ_FILES) AnalysePlayPBN.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) AnalysePlayPBN.o -o AnalysePlayPBN
+AnalysePlayPBN:	$(BIN_DIR)/AnalysePlayPBN
 
-AnalyseAllPlaysBin:	$(OBJ_FILES) AnalyseAllPlaysBin.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) AnalyseAllPlaysBin.o -o AnalyseAllPlaysBin
+AnalyseAllPlaysBin:	$(BIN_DIR)/AnalyseAllPlaysBin
 
-AnalyseAllPlaysPBN:	$(OBJ_FILES) AnalyseAllPlaysPBN.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) AnalyseAllPlaysPBN.o -o AnalyseAllPlaysPBN
+AnalyseAllPlaysPBN:	$(BIN_DIR)/AnalyseAllPlaysPBN
 
-CalcDDtable:	$(OBJ_FILES) CalcDDtable.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) CalcDDtable.o -o CalcDDtable
+CalcDDtable:	$(BIN_DIR)/CalcDDtable
 
-CalcDDtablePBN:	$(OBJ_FILES) CalcDDtablePBN.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) CalcDDtablePBN.o -o CalcDDtablePBN
+CalcDDtablePBN:	$(BIN_DIR)/CalcDDtablePBN
 
-CalcAllTables:	$(OBJ_FILES) CalcAllTables.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) CalcAllTables.o -o CalcAllTables
+CalcAllTables:	$(BIN_DIR)/CalcAllTables
 
-CalcAllTablesPBN:	$(OBJ_FILES) CalcAllTablesPBN.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) CalcAllTablesPBN.o -o CalcAllTablesPBN
+CalcAllTablesPBN:	$(BIN_DIR)/CalcAllTablesPBN
 
-DealerPar:	$(OBJ_FILES) DealerPar.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) DealerPar.o -o DealerPar
+DealerPar:	$(BIN_DIR)/DealerPar
 
-Par:	$(OBJ_FILES) Par.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) Par.o -o Par
+Par:	$(BIN_DIR)/Par
 
-SolveBoard:	$(OBJ_FILES) SolveBoard.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) SolveBoard.o -o SolveBoard
+SolveBoard:	$(BIN_DIR)/SolveBoard
 
-SolveBoardPBN:	$(OBJ_FILES) SolveBoardPBN.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) SolveBoardPBN.o -o SolveBoardPBN
+SolveBoardPBN:	$(BIN_DIR)/SolveBoardPBN
 
-SolveAllBoards:	$(OBJ_FILES) SolveAllBoards.o
-	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) SolveAllBoards.o -o SolveAllBoards
+SolveAllBoards:	$(BIN_DIR)/SolveAllBoards
 
-%.o:	%.cpp
-	$(CC) $(CC_FULL_FLAGS) -c $< -o $*.o
+$(BIN_DIR)/AnalysePlayBin:	$(OBJ_FILES) $(OBJ_DIR)/AnalysePlayBin.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/AnalysePlayBin.o -o $@
+
+$(BIN_DIR)/AnalysePlayPBN:	$(OBJ_FILES) $(OBJ_DIR)/AnalysePlayPBN.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/AnalysePlayPBN.o -o $@
+
+$(BIN_DIR)/AnalyseAllPlaysBin:	$(OBJ_FILES) $(OBJ_DIR)/AnalyseAllPlaysBin.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/AnalyseAllPlaysBin.o -o $@
+
+$(BIN_DIR)/AnalyseAllPlaysPBN:	$(OBJ_FILES) $(OBJ_DIR)/AnalyseAllPlaysPBN.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/AnalyseAllPlaysPBN.o -o $@
+
+$(BIN_DIR)/CalcDDtable:	$(OBJ_FILES) $(OBJ_DIR)/CalcDDtable.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/CalcDDtable.o -o $@
+
+$(BIN_DIR)/CalcDDtablePBN:	$(OBJ_FILES) $(OBJ_DIR)/CalcDDtablePBN.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/CalcDDtablePBN.o -o $@
+
+$(BIN_DIR)/CalcAllTables:	$(OBJ_FILES) $(OBJ_DIR)/CalcAllTables.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/CalcAllTables.o -o $@
+
+$(BIN_DIR)/CalcAllTablesPBN:	$(OBJ_FILES) $(OBJ_DIR)/CalcAllTablesPBN.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/CalcAllTablesPBN.o -o $@
+
+$(BIN_DIR)/DealerPar:	$(OBJ_FILES) $(OBJ_DIR)/DealerPar.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/DealerPar.o -o $@
+
+$(BIN_DIR)/Par:	$(OBJ_FILES) $(OBJ_DIR)/Par.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/Par.o -o $@
+
+$(BIN_DIR)/SolveBoard:	$(OBJ_FILES) $(OBJ_DIR)/SolveBoard.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/SolveBoard.o -o $@
+
+$(BIN_DIR)/SolveBoardPBN:	$(OBJ_FILES) $(OBJ_DIR)/SolveBoardPBN.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/SolveBoardPBN.o -o $@
+
+$(BIN_DIR)/SolveAllBoards:	$(OBJ_FILES) $(OBJ_DIR)/SolveAllBoards.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) $(LD_FLAGS) $(LIB_FLAGS) $(OBJ_FILES) $(OBJ_DIR)/SolveAllBoards.o -o $@
+
+$(OBJ_DIR)/%.o:	%.cpp
+	@mkdir -p $(dir $@)
+	$(CC) $(CC_FULL_FLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
 depend:
-	makedepend -Y -- $(cOMMON_SOURCE_FILES) $(ALL_EXAMPLE_FILES)
+	@echo "Dependencies are generated automatically in $(OBJ_DIR)/*.d"
 
 clean:
-	rm -f *.o $(EX_EXE_FILES) $(STATIC_LIB)
+	rm -rf $(BUILD_DIR) *.o $(STATIC_LIB) $(subst .cpp,,$(ALL_EXAMPLE_FILES))
+
+-include $(subst .o,.d,$(OBJ_FILES))
+-include $(subst .o,.d,$(EX_OBJ_FILES))
 
