@@ -45,7 +45,6 @@ DDS_BEHAVIOR	=
 # get it to compile.
 
 INCL_SOURCE	= Makefiles/sources.txt
-INCL_DEPENDS	= Makefiles/depends_o.txt
 
 # If your compiler name is not given here, change it.
 CC		= clang++
@@ -81,7 +80,6 @@ COMPILE_FLAGS	= -fPIC -O3 -flto -mtune=generic -std=c++11 \
 		$(DDS_BEHAVIOR) $(THREAD_COMPILE) $(THREADING)
 
 DLLBASE		= dds
-SHARED_LIB	= lib$(DLLBASE).so
 
 LINK_FLAGS	=		\
 	-shared			\
@@ -90,20 +88,32 @@ LINK_FLAGS	=		\
 
 include $(INCL_SOURCE)
 
-O_FILES 	= $(subst .cpp,.o,$(SOURCE_FILES))
+BUILD_DIR	= build
+OBJ_DIR		= $(BUILD_DIR)/obj
+SHARED_LIB	= $(BUILD_DIR)/lib$(DLLBASE).so
+LEGACY_SHARED_LIB = lib$(DLLBASE).so
+
+O_FILES 	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(SOURCE_FILES)))
+DEP_FILES	= $(subst .o,.d,$(O_FILES))
 
 
 macos:	$(O_FILES)
 	$(CC) -o $(SHARED_LIB) $(O_FILES) $(LINK_FLAGS)
 
-%.o:	%.cpp
-	$(CC) $(COMPILE_FLAGS) -c $<
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+$(OBJ_DIR)/%.o:	%.cpp | $(OBJ_DIR)
+	$(CC) $(COMPILE_FLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
+
+%.o:	$(OBJ_DIR)/%.o
+	@:
 
 depend:
-	makedepend -Y -- $(SOURCE_FILES)
+	@echo "Dependencies are generated automatically in $(OBJ_DIR)/*.d"
 
 clean:
-	rm -f $(O_FILES) $(SHARED_LIB)
+	rm -rf $(BUILD_DIR) *.o *.d $(LEGACY_SHARED_LIB)
 
 install:
 	test -d ../test || mkdir ../test
@@ -111,5 +121,5 @@ install:
 	cp $(SHARED_LIB) ../test
 	cp $(SHARED_LIB) ../examples
 
-include $(INCL_DEPENDS)
+-include $(DEP_FILES)
 
