@@ -18,4 +18,9 @@ test/itest
 *.exp
 *.lib
 *.res
+/src/build/
+/test/build/
+/src/cmake-build-debug/
+/test/libdds.so
+/examples/libdds.so
 /src/cmake-build-debug/build.ninja
