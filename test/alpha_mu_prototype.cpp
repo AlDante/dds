@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -451,6 +452,8 @@ namespace
     int earlyCuts;
     int deepAlphaCuts;
     int optimisticCompletions;
+    int ttHits;
+    int ttStores;
     int rootCuts;
     int cutOnWinCuts;
     int usefulWorldUpdates;
@@ -464,6 +467,8 @@ namespace
       earlyCuts(0),
       deepAlphaCuts(0),
       optimisticCompletions(0),
+      ttHits(0),
+      ttStores(0),
       rootCuts(0),
       cutOnWinCuts(0),
       usefulWorldUpdates(0),
@@ -472,6 +477,43 @@ namespace
       worldCutsSingle(0),
       visitOrder()
     {
+    }
+  };
+
+
+  struct TTEntry
+  {
+    ParetoFront front;
+
+    explicit TTEntry(const unsigned worldCount = 0) :
+      front(worldCount)
+    {
+    }
+
+    explicit TTEntry(const ParetoFront& frontArg) :
+      front(frontArg)
+    {
+    }
+  };
+
+
+  struct TranspositionTable
+  {
+    map<string, TTEntry> entries;
+
+    bool Lookup(const string& key, ParetoFront& front) const
+    {
+      map<string, TTEntry>::const_iterator it = entries.find(key);
+      if (it == entries.end())
+        return false;
+
+      front = it->second.front;
+      return true;
+    }
+
+    void Store(const string& key, const ParetoFront& front)
+    {
+      entries[key] = TTEntry(front);
     }
   };
 
@@ -1073,6 +1115,18 @@ namespace
   }
 
 
+  static string MakeTTKey(
+    const ToyNode& node,
+    const int maxMoves,
+    const WorldMask& usefulWorlds)
+  {
+    ostringstream oss;
+    oss << node.name << "|" << maxMoves << "|" << usefulWorlds.count << "|"
+        << usefulWorlds.bits;
+    return oss.str();
+  }
+
+
   static ParetoFront MakeFront(
     const unsigned worldCount,
     const vector<string>& outcomes)
@@ -1212,17 +1266,29 @@ namespace
     const WorldMask& usefulWorlds,
     const vector<const ParetoFront *>& upperMaxFronts,
     const OutcomeVector& optimisticValues,
+    TranspositionTable& tt,
     const bool isRoot,
     const double previousRootMu,
     SearchStats& stats,
-    bool& rootCutTriggered)
+    bool& rootCutTriggered,
+    bool& exactComplete)
   {
     stats.nodesVisited++;
     stats.visitOrder.push_back(node.name);
 
+    const string ttKey = MakeTTKey(node, maxMoves, usefulWorlds);
+    ParetoFront ttFront(node.leafFront.worldCount);
+    if (tt.Lookup(ttKey, ttFront))
+    {
+      stats.ttHits++;
+      exactComplete = true;
+      return ttFront;
+    }
+
     if (usefulWorlds.Empty())
     {
       stats.worldCutsZero++;
+      exactComplete = true;
       return MakeZeroFront(node.leafFront.worldCount);
     }
 
@@ -1231,6 +1297,7 @@ namespace
       const unsigned world = SoleWorldIndex(usefulWorlds);
       const int value = EvaluateSingleWorld(node, maxMoves, world, stats);
       stats.worldCutsSingle++;
+      exactComplete = true;
       return MakeSingleWorldFront(node.leafFront.worldCount, world, value);
     }
 
@@ -1249,27 +1316,36 @@ namespace
       const WorldMask evaluated = node.leafFront.ValidWorlds().Intersection(
         usefulWorlds);
       stats.leafWorldEvaluations += static_cast<int>(evaluated.PopCount());
-      return node.leafFront.RestrictToUseful(usefulWorlds);
+      const ParetoFront front = node.leafFront.RestrictToUseful(usefulWorlds);
+      tt.Store(ttKey, front);
+      stats.ttStores++;
+      exactComplete = true;
+      return front;
     }
 
     if (node.type == TOY_MIN)
     {
       ParetoFront mini(node.leafFront.worldCount);
       bool initialized = false;
+      bool complete = true;
       WorldMask currentUseful = usefulWorlds;
 
       for (unsigned i = 0; i < node.children.size(); i++)
       {
+        bool childComplete = false;
         const ParetoFront f = SearchToy(
           * node.children[i],
           maxMoves,
           currentUseful.Intersection(node.childWorlds[i]),
           upperMaxFronts,
           nodeOptimistic,
+          tt,
           false,
           previousRootMu,
           stats,
-          rootCutTriggered);
+          rootCutTriggered,
+          childComplete);
+        complete = complete && childComplete;
 
         if (! initialized)
         {
@@ -1295,6 +1371,8 @@ namespace
             upperMaxFronts.back()->DominatesFront(optimisticMini))
         {
           stats.earlyCuts++;
+          complete = false;
+          exactComplete = false;
           break;
         }
 
@@ -1303,36 +1381,51 @@ namespace
           if (upperMaxFronts[j]->DominatesFront(optimisticMini))
           {
             stats.deepAlphaCuts++;
+            complete = false;
+            exactComplete = false;
             return mini;
           }
         }
       }
 
+      exactComplete = complete;
+      if (exactComplete)
+      {
+        tt.Store(ttKey, mini);
+        stats.ttStores++;
+      }
       return mini;
     }
 
     ParetoFront front(node.leafFront.worldCount);
+    bool complete = true;
     vector<const ParetoFront *> childUpperMaxFronts(upperMaxFronts);
     childUpperMaxFronts.push_back(&front);
     for (unsigned i = 0; i < node.children.size(); i++)
     {
       const WorldMask childWorlds = usefulWorlds.Intersection(node.childWorlds[i]);
+      bool childComplete = false;
       const ParetoFront f = SearchToy(
         * node.children[i],
         maxMoves - 1,
         childWorlds,
         childUpperMaxFronts,
         nodeOptimistic,
+        tt,
         false,
         previousRootMu,
         stats,
-        rootCutTriggered);
+        rootCutTriggered,
+        childComplete);
+      complete = complete && childComplete;
 
       front = ParetoFront::MaxMerge(front, f);
 
       if (f.WinsAll(usefulWorlds))
       {
         stats.cutOnWinCuts++;
+        complete = false;
+        exactComplete = false;
         break;
       }
 
@@ -1341,10 +1434,18 @@ namespace
       {
         stats.rootCuts++;
         rootCutTriggered = true;
+        complete = false;
+        exactComplete = false;
         break;
       }
     }
 
+    exactComplete = complete;
+    if (exactComplete)
+    {
+      tt.Store(ttKey, front);
+      stats.ttStores++;
+    }
     return front;
   }
 
@@ -1360,16 +1461,20 @@ namespace
     {
       SearchStats stats;
       bool rootCutTriggered = false;
+      bool exactComplete = false;
+      TranspositionTable tt;
       const ParetoFront front = SearchToy(
         root,
         depth,
         WorldMask::All(root.leafFront.worldCount),
         vector<const ParetoFront *>(),
         OutcomeVector(root.leafFront.worldCount),
+        tt,
         true,
         previousMu,
         stats,
-        rootCutTriggered);
+        rootCutTriggered,
+        exactComplete);
 
       result.front = front;
       result.depthReached = depth;
@@ -1587,9 +1692,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(a, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     Check(front.vectors.size() == 1,
       "non-locality example should collapse to one best root vector");
@@ -1626,9 +1733,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     Check(front.vectors.size() == 2,
       "early-cut example should preserve the first move's Pareto front");
@@ -1656,9 +1765,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(candidateMin, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), false, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, false, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     Check(FrontContains(front, MakeBinaryOutcome("000")),
       "useful-world example should reduce the Min continuation to [0 0 0]");
@@ -1707,16 +1818,20 @@ namespace
 
     SearchStats zeroStats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront zeroFront = SearchToy(
       zeroLeaf,
       1,
       WorldMask::None(3),
       vector<const ParetoFront *>(),
       OutcomeVector(3),
+      tt,
       false,
       -1.0,
       zeroStats,
-      rootCutTriggered);
+      rootCutTriggered,
+      exactComplete);
 
     Check(zeroStats.worldCutsZero == 1,
       "empty useful-world mask should trigger a zero-world cut");
@@ -1743,10 +1858,12 @@ namespace
       onlyWorld1,
       vector<const ParetoFront *>(),
       OutcomeVector(3),
+      tt,
       true,
       -1.0,
       singleStats,
-      rootCutTriggered);
+      rootCutTriggered,
+      exactComplete);
 
     Check(singleStats.worldCutsSingle == 1,
       "single useful world should trigger a single-world cut");
@@ -1754,6 +1871,40 @@ namespace
       "single-world cut should evaluate only one world through the collapsed search");
     Check(FrontContains(singleFront, MakeBinaryOutcome("x1x")),
       "single-world cut should return the exact one-world result as a sparse vector");
+  }
+
+
+  static void TestParetoFrontTT()
+  {
+    ToyNode sharedLeaf("sharedLeaf", TOY_LEAF, 3);
+    sharedLeaf.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, sharedLeaf);
+    AddChild(root, sharedLeaf);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 1, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(exactComplete,
+      "transposition-table example should complete the shared subtree exactly");
+    Check(stats.ttHits == 1,
+      "transposition-table example should record exactly one TT hit on the repeated subtree");
+    Check(stats.leafWorldEvaluations == 3,
+      "transposition-table example should evaluate the shared leaf only once");
+    Check(stats.ttStores >= 2,
+      "transposition-table example should store both subtree and root fronts");
+    Check(tt.entries.size() >= 2,
+      "transposition-table example should keep at least the shared leaf and root entries");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "transposition-table example should preserve the repeated leaf outcome");
+    Check(! rootCutTriggered,
+      "transposition-table example should not trigger a root cut");
   }
 
 
@@ -1868,9 +2019,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     Check(stats.earlyCuts == 1,
       "empty-entry example should trigger one early cut after the interior front is completed");
@@ -1917,9 +2070,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     const ParetoFront sparseImpossible = impossibleReply.leafFront.RestrictToUseful(
       WorldMask(3, 0x4ULL));
@@ -1976,9 +2131,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(root, 3, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     Check(stats.deepAlphaCuts == 1,
       "deep-alpha example should trigger exactly one deep alpha cut");
@@ -2008,9 +2165,11 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
     const ParetoFront front = SearchToy(root, 1, WorldMask::All(3),
-      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
-      rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
 
     Check(stats.cutOnWinCuts == 1,
       "cut-on-win example should trigger exactly one cut on win");
@@ -2073,6 +2232,9 @@ int main()
 
   TestWorldCuts();
   cout << "alpha_mu_prototype: world cuts OK\n";
+
+  TestParetoFrontTT();
+  cout << "alpha_mu_prototype: Pareto-front TT OK\n";
 
   TestPossibleWorldGeneration();
   cout << "alpha_mu_prototype: possible-world generation OK\n";

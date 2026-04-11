@@ -12,6 +12,7 @@ It is meant to validate the core paper semantics before deeper optimization work
 - a first possible-world generator from simple constraints,
 - outcome vectors,
 - Pareto fronts,
+- a Pareto-front transposition table for exact toy-search reuse,
 - bridge move generation over possible worlds,
 - Max-node union,
 - Min-node product/min combination,
@@ -40,10 +41,11 @@ The runner performs these checks:
 7. bridge move generation over those possible worlds
 8. empty-entry handling for interior fronts
 9. optimistic completion of impossible worlds for cross-state comparison
-10. deep alpha cuts against earlier Max ancestors
-11. cut on win at a Max node
-12. a root-cut toy example with iterative deepening
-13. serial and parallel DDS leaf-evaluation over `hands/alpha_mu_play.txt`
+10. a Pareto-front transposition table hit on a repeated exact subtree
+11. deep alpha cuts against earlier Max ancestors
+12. cut on win at a Max node
+13. a root-cut toy example with iterative deepening
+14. serial and parallel DDS leaf-evaluation over `hands/alpha_mu_play.txt`
 
 ## Build
 
@@ -69,9 +71,9 @@ In particular, it does not yet include:
 
 - full-scale possible-world generation from complete bidding or play histories,
 - full-trick / multi-trick bridge search control beyond the current move-generation prototype,
-- a Pareto-front transposition table.
+- bridge-specific outcome backup over those generated move trees.
 
-Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a first constraint-based possible-world generator, and a first bridge move generator are now present in the prototype.
+Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a first constraint-based possible-world generator, a first bridge move generator, and a Pareto-front transposition table are now present in the prototype.
 
-The next planned non-performance step is a Pareto-front transposition table.
+The next planned non-performance step is fuller bridge search control over those generated move trees.
 

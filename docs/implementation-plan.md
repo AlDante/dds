@@ -211,6 +211,7 @@ It currently provides:
 - world-mask handling,
 - a first possible-world generator from simple bidding/play-style constraints over a candidate pool,
 - a first bridge move generator over those possible worlds,
+- a Pareto-front transposition table for exact prototype-search reuse,
 - outcome vectors,
 - Pareto-front reduction,
 - Max-node union and Min-node product/min operations,
