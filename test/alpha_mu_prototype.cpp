@@ -496,6 +496,21 @@ namespace
   };
 
 
+  struct DDSLeafEvalResult
+  {
+    OutcomeVector leaf;
+    vector<int> bestScores;
+    int workerCount;
+
+    explicit DDSLeafEvalResult(const unsigned worldCount = 0) :
+      leaf(worldCount),
+      bestScores(worldCount, 0),
+      workerCount(0)
+    {
+    }
+  };
+
+
   static void Fail(const string& msg)
   {
     cerr << "alpha_mu_prototype: " << msg << "\n";
@@ -910,6 +925,106 @@ namespace
   }
 
 
+  static int SolveDDSLeafWorld(
+    const HandFileData& data,
+    const int index,
+    const int thrId)
+  {
+    futureTricks fut;
+    memset(&fut, 0, sizeof(fut));
+
+    const int ret = SolveBoardPBN(data.dealList[index], -1, 1, 1, &fut, thrId);
+    CheckDDS(ret, "SolveBoardPBN DDS leaf demo");
+
+    return BestScore(fut);
+  }
+
+
+  static void CheckDDSLeafBestScores(
+    const HandFileData& data,
+    const vector<int>& bestScores)
+  {
+    Check(static_cast<int>(bestScores.size()) == data.number,
+      "DDS leaf evaluation should return one score per world");
+
+    for (int i = 0; i < data.number; i++)
+    {
+      const int goldenBest = BestScore(data.futList[i]);
+      Check(bestScores[static_cast<unsigned>(i)] == goldenBest,
+        "DDS leaf demo optimum should match the golden FUT optimum");
+    }
+  }
+
+
+  static DDSLeafEvalResult EvaluateDDSLeafThresholdSerial(
+    const HandFileData& data,
+    const int target)
+  {
+    DDSLeafEvalResult result(static_cast<unsigned>(data.number));
+    result.leaf.valid = WorldMask::All(static_cast<unsigned>(data.number));
+    result.workerCount = 1;
+
+    for (int i = 0; i < data.number; i++)
+    {
+      const int best = SolveDDSLeafWorld(data, i, 0);
+      result.bestScores[static_cast<unsigned>(i)] = best;
+      result.leaf.values[static_cast<unsigned>(i)] = (best >= target ? 1 : 0);
+    }
+
+    CheckDDSLeafBestScores(data, result.bestScores);
+    return result;
+  }
+
+
+  static DDSLeafEvalResult EvaluateDDSLeafThresholdParallel(
+    const HandFileData& data,
+    const int target,
+    const int requestedThreads)
+  {
+    DDSLeafEvalResult result(static_cast<unsigned>(data.number));
+    result.leaf.valid = WorldMask::All(static_cast<unsigned>(data.number));
+
+    DDSInfo info;
+    memset(&info, 0, sizeof(info));
+    GetDDSInfo(&info);
+
+    (void) requestedThreads;
+    Check(info.noOfThreads >= 1,
+      "DDS should expose at least one configured thread for leaf parallelization");
+    result.workerCount = max(1, min(data.number, info.noOfThreads));
+
+    boardsPBN boards;
+    memset(&boards, 0, sizeof(boards));
+    boards.noOfBoards = data.number;
+
+    for (int i = 0; i < data.number; i++)
+    {
+      boards.deals[i] = data.dealList[i];
+      boards.target[i] = -1;
+      boards.solutions[i] = 1;
+      boards.mode[i] = 1;
+    }
+
+    solvedBoards solved;
+    memset(&solved, 0, sizeof(solved));
+
+    const int ret = SolveAllBoards(&boards, &solved);
+    CheckDDS(ret, "SolveAllBoards DDS leaf demo");
+    Check(solved.noOfBoards == data.number,
+      "parallel DDS leaf evaluation should solve every requested world");
+
+    for (int i = 0; i < data.number; i++)
+    {
+      const int best = BestScore(solved.solvedBoard[i]);
+      result.bestScores[static_cast<unsigned>(i)] = best;
+      result.leaf.values[static_cast<unsigned>(i)] = (best >= target ? 1 : 0);
+    }
+
+    CheckDDSLeafBestScores(data, result.bestScores);
+    return result;
+  }
+
+
   static void TestParetoInsert()
   {
     ParetoFront front(3);
@@ -1261,6 +1376,8 @@ namespace
 
   static void TestDDSLeafDemo()
   {
+    SetMaxThreads(0);
+
     HandFileData data;
     LoadHandFile("hands/alpha_mu_play.txt", data);
 
@@ -1268,30 +1385,24 @@ namespace
       "alpha_mu_play.txt should provide three DDS worlds for the leaf demo");
 
     const int target = 4;
-    OutcomeVector leaf(static_cast<unsigned>(data.number));
-    leaf.valid = WorldMask::All(static_cast<unsigned>(data.number));
+    const DDSLeafEvalResult serial = EvaluateDDSLeafThresholdSerial(data, target);
+    const DDSLeafEvalResult parallel = EvaluateDDSLeafThresholdParallel(
+      data,
+      target,
+      data.number);
 
-    SetResources(0, 1);
-
-    for (int i = 0; i < data.number; i++)
-    {
-      futureTricks fut;
-      memset(&fut, 0, sizeof(fut));
-
-      const int ret = SolveBoardPBN(data.dealList[i], -1, 1, 1, &fut, 0);
-      CheckDDS(ret, "SolveBoardPBN DDS leaf demo");
-
-      const int best = BestScore(fut);
-      const int goldenBest = BestScore(data.futList[i]);
-
-      Check(best == goldenBest,
-        "DDS leaf demo optimum should match the golden FUT optimum");
-
-      leaf.values[static_cast<unsigned>(i)] = (best >= target ? 1 : 0);
-    }
-
-    Check(leaf.ToString() == "[1 1 0]",
+    Check(serial.leaf.ToString() == "[1 1 0]",
       "DDS leaf demo should yield the expected threshold vector [1 1 0]");
+    Check(parallel.leaf.ToString() == "[1 1 0]",
+      "parallel DDS leaf demo should yield the expected threshold vector [1 1 0]");
+    Check(serial.leaf.ToString() == parallel.leaf.ToString(),
+      "serial and parallel DDS leaf evaluation should return the same threshold vector");
+    Check(serial.bestScores == parallel.bestScores,
+      "serial and parallel DDS leaf evaluation should return the same world scores");
+    Check(parallel.workerCount >= 1,
+      "parallel DDS leaf evaluation should configure at least one worker");
+    Check(parallel.workerCount <= data.number,
+      "parallel DDS leaf evaluation should not configure more worker slots than worlds");
   }
 }
 
@@ -1326,7 +1437,7 @@ int main()
   cout << "alpha_mu_prototype: root cut toy search OK\n";
 
   TestDDSLeafDemo();
-  cout << "alpha_mu_prototype: DDS leaf demo OK\n";
+  cout << "alpha_mu_prototype: DDS leaf demo and leaf parallelization OK\n";
 
   cout << "alpha_mu_prototype: all checks passed\n";
   return 0;

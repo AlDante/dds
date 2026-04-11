@@ -131,6 +131,8 @@ The fourth optimization-paper step is also now present in the prototype: empty-e
 
 The fifth optimization-paper step is also now present in the prototype: deep alpha cuts against earlier Max ancestors.
 
+The sixth optimization-paper step is also now present in the prototype: leaf-parallelized DDS leaf evaluation.
+
 ## Step 7 — keep DDS-only work on a separate branch of the plan
 
 DDS-side follow-up work is still reasonable, but it is now a separate support track.

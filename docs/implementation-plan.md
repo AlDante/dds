@@ -218,6 +218,7 @@ It currently provides:
 - empty-entry handling for sparse interior fronts,
 - deep alpha cuts against earlier Max ancestors,
 - cut on win at Max nodes,
+- a leaf-parallelized DDS leaf-evaluation path,
 - a DDS-backed leaf-evaluation demo over `hands/alpha_mu_play.txt`.
 
 It is intentionally not yet a full bridge alpha-mu engine.
@@ -235,7 +236,9 @@ The recommended order is:
 5. deep alpha cuts,
 6. only then consider leaf parallelization and low-level SIMD work.
 
-The first five optimization steps in that sequence are now present in the prototype.
+The prototype now also includes a first leaf-parallelized DDS leaf-evaluation path.
+
+The first six optimization steps in that sequence are now present in prototype form, with low-level SIMD work still explicitly deferred until Pareto-front costs are measured.
 
 ## Phase 6 — optional DDS-side cleanup that remains worthwhile
 
