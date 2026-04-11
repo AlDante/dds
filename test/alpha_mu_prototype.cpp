@@ -199,6 +199,31 @@ namespace
       return result;
     }
 
+    OutcomeVector CompleteOptimistically(
+      const WorldMask& useful,
+      const OutcomeVector& optimistic) const
+    {
+      OutcomeVector result(*this);
+      for (unsigned i = 0; i < values.size(); i++)
+      {
+        if (result.valid.Has(i))
+          continue;
+
+        if (! useful.Has(i))
+        {
+          result.valid.bits |= (1ULL << i);
+          result.values[i] = 0;
+        }
+        else if (optimistic.valid.Has(i))
+        {
+          result.valid.bits |= (1ULL << i);
+          result.values[i] = optimistic.values[i];
+        }
+      }
+
+      return result;
+    }
+
     string ToString() const
     {
       ostringstream oss;
@@ -338,6 +363,18 @@ namespace
       return result;
     }
 
+    ParetoFront CompleteOptimistically(
+      const WorldMask& useful,
+      const OutcomeVector& optimistic) const
+    {
+      ParetoFront result(worldCount);
+      for (unsigned i = 0; i < vectors.size(); i++)
+      {
+        result.Insert(vectors[i].CompleteOptimistically(useful, optimistic));
+      }
+      return result;
+    }
+
     bool WinsAll(const WorldMask& useful) const
     {
       for (unsigned i = 0; i < vectors.size(); i++)
@@ -389,6 +426,7 @@ namespace
     string name;
     ToyNodeType type;
     ParetoFront leafFront;
+    OutcomeVector optimisticValues;
     vector<const ToyNode *> children;
     vector<WorldMask> childWorlds;
 
@@ -399,6 +437,7 @@ namespace
       name(nameArg),
       type(typeArg),
       leafFront(worldCount),
+      optimisticValues(worldCount),
       children(),
       childWorlds()
     {
@@ -411,6 +450,7 @@ namespace
     int nodesVisited;
     int earlyCuts;
     int deepAlphaCuts;
+    int optimisticCompletions;
     int rootCuts;
     int cutOnWinCuts;
     int usefulWorldUpdates;
@@ -423,6 +463,7 @@ namespace
       nodesVisited(0),
       earlyCuts(0),
       deepAlphaCuts(0),
+      optimisticCompletions(0),
       rootCuts(0),
       cutOnWinCuts(0),
       usefulWorldUpdates(0),
@@ -723,6 +764,7 @@ namespace
     const int maxMoves,
     const WorldMask& usefulWorlds,
     const vector<const ParetoFront *>& upperMaxFronts,
+    const OutcomeVector& optimisticValues,
     const bool isRoot,
     const double previousRootMu,
     SearchStats& stats,
@@ -743,6 +785,16 @@ namespace
       const int value = EvaluateSingleWorld(node, maxMoves, world, stats);
       stats.worldCutsSingle++;
       return MakeSingleWorldFront(node.leafFront.worldCount, world, value);
+    }
+
+    OutcomeVector nodeOptimistic(optimisticValues);
+    for (unsigned i = 0; i < nodeOptimistic.values.size(); i++)
+    {
+      if (node.optimisticValues.valid.Has(i))
+      {
+        nodeOptimistic.valid.bits |= (1ULL << i);
+        nodeOptimistic.values[i] = node.optimisticValues.values[i];
+      }
     }
 
     if (node.type == TOY_LEAF || maxMoves == 0)
@@ -766,6 +818,7 @@ namespace
           maxMoves,
           currentUseful.Intersection(node.childWorlds[i]),
           upperMaxFronts,
+          nodeOptimistic,
           false,
           previousRootMu,
           stats,
@@ -785,8 +838,14 @@ namespace
           stats.usefulWorldUpdates++;
         currentUseful = nextUseful;
 
+        const ParetoFront optimisticMini = mini.CompleteOptimistically(
+          currentUseful,
+          nodeOptimistic);
+        if (optimisticMini.ValidWorlds().PopCount() > mini.ValidWorlds().PopCount())
+          stats.optimisticCompletions++;
+
         if (! upperMaxFronts.empty() &&
-            upperMaxFronts.back()->DominatesFront(mini))
+            upperMaxFronts.back()->DominatesFront(optimisticMini))
         {
           stats.earlyCuts++;
           break;
@@ -794,7 +853,7 @@ namespace
 
         for (unsigned j = 0; j + 1 < upperMaxFronts.size(); j++)
         {
-          if (upperMaxFronts[j]->DominatesFront(mini))
+          if (upperMaxFronts[j]->DominatesFront(optimisticMini))
           {
             stats.deepAlphaCuts++;
             return mini;
@@ -816,6 +875,7 @@ namespace
         maxMoves - 1,
         childWorlds,
         childUpperMaxFronts,
+        nodeOptimistic,
         false,
         previousRootMu,
         stats,
@@ -858,6 +918,7 @@ namespace
         depth,
         WorldMask::All(root.leafFront.worldCount),
         vector<const ParetoFront *>(),
+        OutcomeVector(root.leafFront.worldCount),
         true,
         previousMu,
         stats,
@@ -1080,7 +1141,7 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(a, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), true, -1.0, stats,
+      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
       rootCutTriggered);
 
     Check(front.vectors.size() == 1,
@@ -1119,7 +1180,7 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), true, -1.0, stats,
+      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
       rootCutTriggered);
 
     Check(front.vectors.size() == 2,
@@ -1149,7 +1210,8 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(candidateMin, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), false, -1.0, stats, rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), false, -1.0, stats,
+      rootCutTriggered);
 
     Check(FrontContains(front, MakeBinaryOutcome("000")),
       "useful-world example should reduce the Min continuation to [0 0 0]");
@@ -1203,6 +1265,7 @@ namespace
       1,
       WorldMask::None(3),
       vector<const ParetoFront *>(),
+      OutcomeVector(3),
       false,
       -1.0,
       zeroStats,
@@ -1232,6 +1295,7 @@ namespace
       1,
       onlyWorld1,
       vector<const ParetoFront *>(),
+      OutcomeVector(3),
       true,
       -1.0,
       singleStats,
@@ -1272,7 +1336,8 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
-      vector<const ParetoFront *>(), true, -1.0, stats, rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
+      rootCutTriggered);
 
     Check(stats.earlyCuts == 1,
       "empty-entry example should trigger one early cut after the interior front is completed");
@@ -1294,6 +1359,56 @@ namespace
     Check(FrontContains(partialA.leafFront.RestrictToUseful(WorldMask(3, 0x6ULL)),
       MakeBinaryOutcome("x10")),
       "restricting to child worlds should produce an empty entry in the skipped world");
+  }
+
+
+  static void TestOptimisticImpossibleWorlds()
+  {
+    ToyNode rootBest("rootBest", TOY_LEAF, 3);
+    rootBest.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode impossibleReply("impossibleReply", TOY_LEAF, 3);
+    impossibleReply.leafFront = MakeFront(3, vector<string>(1, "000"));
+
+    ToyNode shouldNotVisit("shouldNotVisit", TOY_LEAF, 3);
+    shouldNotVisit.leafFront = MakeFront(3, vector<string>(1, "111"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    candidateMin.optimisticValues = MakeBinaryOutcome("011");
+    AddChild(candidateMin, impossibleReply, WorldMask(3, 0x4ULL));
+    AddChild(candidateMin, shouldNotVisit);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, rootBest);
+    AddChild(root, candidateMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
+      rootCutTriggered);
+
+    const ParetoFront sparseImpossible = impossibleReply.leafFront.RestrictToUseful(
+      WorldMask(3, 0x4ULL));
+    Check(FrontContains(sparseImpossible, MakeBinaryOutcome("xx0")),
+      "optimistic example should first produce a sparse impossible-world vector [x x 0]");
+
+    const ParetoFront optimisticImpossible = sparseImpossible.CompleteOptimistically(
+      WorldMask::All(3), candidateMin.optimisticValues);
+    Check(FrontContains(optimisticImpossible, MakeBinaryOutcome("010")),
+      "optimistic example should complete [x x 0] to [0 1 0] using the closest known world values");
+
+    Check(stats.optimisticCompletions >= 1,
+      "optimistic example should record at least one optimistic completion");
+    Check(stats.earlyCuts == 1,
+      "optimistic example should trigger an early cut once the impossible world is completed optimistically");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("shouldNotVisit")) == stats.visitOrder.end(),
+      "optimistic example should cut before visiting the remaining Min child");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "optimistic example should preserve the dominating root outcome");
+    Check(! rootCutTriggered,
+      "optimistic example should not be reported as a root cut");
   }
 
 
@@ -1329,7 +1444,8 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(root, 3, WorldMask::All(3),
-      vector<const ParetoFront *>(), true, -1.0, stats, rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
+      rootCutTriggered);
 
     Check(stats.deepAlphaCuts == 1,
       "deep-alpha example should trigger exactly one deep alpha cut");
@@ -1360,7 +1476,8 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(root, 1, WorldMask::All(3),
-      vector<const ParetoFront *>(), true, -1.0, stats, rootCutTriggered);
+      vector<const ParetoFront *>(), OutcomeVector(3), true, -1.0, stats,
+      rootCutTriggered);
 
     Check(stats.cutOnWinCuts == 1,
       "cut-on-win example should trigger exactly one cut on win");
@@ -1426,6 +1543,9 @@ int main()
 
   TestEmptyEntryInteriorFronts();
   cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";
+
+  TestOptimisticImpossibleWorlds();
+  cout << "alpha_mu_prototype: optimistic impossible worlds OK\n";
 
   TestDeepAlphaCut();
   cout << "alpha_mu_prototype: deep alpha cuts OK\n";

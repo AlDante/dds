@@ -216,6 +216,7 @@ It currently provides:
 - useful-world maintenance in the prototype search,
 - world cuts for zero and single useful worlds,
 - empty-entry handling for sparse interior fronts,
+- optimistic completion of impossible and useless worlds for cross-state comparison,
 - deep alpha cuts against earlier Max ancestors,
 - cut on win at Max nodes,
 - a leaf-parallelized DDS leaf-evaluation path,
@@ -236,7 +237,10 @@ The recommended order is:
 5. deep alpha cuts,
 6. only then consider leaf parallelization and low-level SIMD work.
 
-The prototype now also includes a first leaf-parallelized DDS leaf-evaluation path.
+The prototype now also includes:
+
+- optimistic-value completion for impossible worlds during cross-state comparison,
+- a first leaf-parallelized DDS leaf-evaluation path.
 
 The first six optimization steps in that sequence are now present in prototype form, with low-level SIMD work still explicitly deferred until Pareto-front costs are measured.
 

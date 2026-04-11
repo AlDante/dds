@@ -133,6 +133,8 @@ The fifth optimization-paper step is also now present in the prototype: deep alp
 
 The sixth optimization-paper step is also now present in the prototype: leaf-parallelized DDS leaf evaluation.
 
+The prototype also now includes optimistic completion of impossible worlds for cross-state comparison, following the later discussion in the optimization paper.
+
 ## Step 7 — keep DDS-only work on a separate branch of the plan
 
 DDS-side follow-up work is still reasonable, but it is now a separate support track.
