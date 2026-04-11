@@ -7,6 +7,8 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 ## Files
 
 - `test/alpha_mu_benchmark.py`
+- `test/alpha_mu_prototype.cpp`
+- `test/README.alpha-mu-prototype.md`
 
 ## What the runner does
 
@@ -75,4 +77,13 @@ python3 test/alpha_mu_benchmark.py --output-dir /tmp/dds-alpha-mu-run
 - The runner sets `DYLD_LIBRARY_PATH` so the test binaries resolve `../src/build/libdds.so` on macOS.
 - If `AnalyseLaterBoard` does not appear in the summary, the next improvement should be to add a dedicated play-analysis workload.
 - The workflow is measurement-only; it does not alter deep search semantics.
+
+## Prototype
+
+The repository also now contains a separate first alpha-mu prototype runner:
+
+- build target: `alpha_mu_prototype`
+- source: `test/alpha_mu_prototype.cpp`
+
+Unlike the benchmark runner, the prototype is not a DDS root-policy measurement tool. It is a separate semantics-oriented test component for Pareto fronts, toy alpha-mu search, and a DDS-backed leaf-evaluation demo.
 

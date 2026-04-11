@@ -202,6 +202,21 @@ The first prototype should be intentionally narrow:
 
 This is the first phase that actually moves the repository toward the algorithm described in the papers rather than just improving DDS exact-score probing.
 
+### Initial prototype status
+
+The first minimal prototype now exists as a separate test component under `test/`.
+
+It currently provides:
+
+- world-mask handling,
+- outcome vectors,
+- Pareto-front reduction,
+- Max-node union and Min-node product/min operations,
+- toy-search validation of non-locality, early cut, and root cut,
+- a DDS-backed leaf-evaluation demo over `hands/alpha_mu_play.txt`.
+
+It is intentionally not yet a full bridge alpha-mu engine.
+
 ## Phase 5 — alpha-mu optimizations from the second paper
 
 Only after a correct prototype exists should the paper's optimization work begin.

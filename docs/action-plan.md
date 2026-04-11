@@ -83,6 +83,8 @@ The first implementation pieces should be:
 7. root iterative deepening in number of Max moves,
 8. DDS leaf evaluation adapter.
 
+The first minimal version of this now exists in `test/alpha_mu_prototype.cpp` with a dedicated runner target in `test/Makefiles/Makefile_Mac_clang`.
+
 ## Step 4 — add only the first paper-level cuts
 
 The prototype should first support:

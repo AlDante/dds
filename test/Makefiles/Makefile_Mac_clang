@@ -65,7 +65,7 @@ WARN_FLAGS	= 		\
 COMPILE_FLAGS	= -O3 -flto -mtune=generic \
 		$(WARN_FLAGS) -std=c++11 $(THREADING)
 
-.PHONY:	dtest regression_api timer_regression play_analysis_benchmark itest depend clean
+.PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu_prototype itest depend clean
 
 DLLBASE		= dds
 STATIC_LIB	= lib$(DLLBASE).a
@@ -106,17 +106,25 @@ PLAYREG_SOURCE_FILES	=	\
 
 PLAYREG_OBJ_FILES	= $(OBJ_DIR)/$(PLAYREG).o $(OBJ_DIR)/examples/hands.o
 
+ALPHAMU_SOURCE_FILES	=	\
+	parse.cpp		\
+	alpha_mu_prototype.cpp
+
+ALPHAMU_OBJ_FILES	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(ALPHAMU_SOURCE_FILES)))
+
 DTEST		= dtest
 ITEST		= itest
 REGAPI		= regression_api
 TIMERREG	= timer_regression
 PLAYREG		= play_analysis_benchmark
+ALPHAMU		= alpha_mu_prototype
 
 DTEST_BIN	= $(BUILD_DIR)/$(DTEST)
 ITEST_BIN	= $(BUILD_DIR)/$(ITEST)
 REGAPI_BIN	= $(BUILD_DIR)/$(REGAPI)
 TIMERREG_BIN	= $(BUILD_DIR)/$(TIMERREG)
 PLAYREG_BIN	= $(BUILD_DIR)/$(PLAYREG)
+ALPHAMU_BIN	= $(BUILD_DIR)/$(ALPHAMU)
 
 # These are the files that we steal from the src directory.
 
@@ -139,6 +147,8 @@ timer_regression:	$(TIMERREG_BIN)
 
 play_analysis_benchmark:	$(PLAYREG_BIN)
 
+alpha_mu_prototype:	$(ALPHAMU_BIN)
+
 itest:	$(ITEST_BIN)
 
 $(DTEST_BIN):	$(DTEST_OBJ_FILES)
@@ -159,6 +169,11 @@ $(TIMERREG_BIN):	$(TIMERREG_OBJ_FILES)
 $(PLAYREG_BIN):	$(PLAYREG_OBJ_FILES)
 	@mkdir -p $(dir $@)
 	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(PLAYREG_OBJ_FILES) \
+		$(LINK2_FLAGS) -o $@
+
+$(ALPHAMU_BIN):	$(ALPHAMU_OBJ_FILES)
+	@mkdir -p $(dir $@)
+	$(CC) $(COMPILE_FLAGS) $(LINK1_FLAGS) $(ALPHAMU_OBJ_FILES) \
 		$(LINK2_FLAGS) -o $@
 
 $(ITEST_BIN):	$(ITEST_OBJ_FILES)
@@ -188,5 +203,6 @@ clean:
 -include $(subst .o,.d,$(REGAPI_OBJ_FILES))
 -include $(subst .o,.d,$(TIMERREG_OBJ_FILES))
 -include $(subst .o,.d,$(PLAYREG_OBJ_FILES))
+-include $(subst .o,.d,$(ALPHAMU_OBJ_FILES))
 -include $(subst .o,.d,$(ITEST_OBJ_FILES))
 
