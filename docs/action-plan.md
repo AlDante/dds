@@ -39,6 +39,8 @@ This step is not the new algorithmic target. It is the baseline we should keep s
 
 Before writing the prototype, lock down the test material that reflects the two papers.
 
+This repository now includes the first curated version of that material in `docs/alpha-mu-test-set.md` and the corresponding hand files under `hands/alpha_mu_*.txt`.
+
 The first set should include:
 
 1. **paper-motivated hand families**

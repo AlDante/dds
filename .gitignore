@@ -25,3 +25,24 @@ test/itest
 /test/libdds.so
 /examples/libdds.so
 /src/cmake-build-debug/build.ninja
+
+# LaTeX / BibTeX generated files from paper source trees
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+
+# Duplicate plot output directory from the arXiv source tree
+/docs/background/arXiv-2101.12639v1/plot/
+
+# Local environment check artifacts
+/docs/.brew_check.txt
+/docs/.doxygen_check.txt
+

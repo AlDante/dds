@@ -32,6 +32,23 @@ list1.txt
 These are just excerpts from the larger masterDD.txt file.
 
 
+alpha_mu_play.txt
+alpha_mu_showcase.txt
+alpha_mu_controls.txt
+-----------------
+These are curated alpha-mu-oriented test sets derived from existing
+validated repository hands.
+
+- alpha_mu_play.txt:
+  compact play-analysis family based on the three example hands also
+  used in examples/hands.cpp and test/play_analysis_benchmark.cpp.
+- alpha_mu_showcase.txt:
+  a compact mixed showcase set combining play-analysis-style hands,
+  representative list10 hands, and hard controls.
+- alpha_mu_controls.txt:
+  the Thomas control hands grouped as a dedicated hard-case file.
+
+
 largest.txt
 -----------
 These are 21 hands from masterDD.txt that take a particularly

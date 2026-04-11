@@ -34,9 +34,10 @@ For current work on DDS and alpha-mu, the recommended order is:
 3. `data-structures.md`
 4. `api-overview.md`
 5. `alpha-mu.md`
-6. `implementation-plan.md`
-7. `action-plan.md`
-8. `../doc/dll-description.md` for historical API detail
+6. `alpha-mu-test-set.md`
+7. `implementation-plan.md`
+8. `action-plan.md`
+9. `../doc/dll-description.md` for historical API detail
 
 ## Relationship to the new docs folder
 
