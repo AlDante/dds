@@ -190,6 +190,7 @@ namespace
     OutcomeVector RestrictToUseful(const WorldMask& useful) const
     {
       OutcomeVector result(*this);
+      result.valid = valid.Intersection(useful);
       for (unsigned i = 0; i < values.size(); i++)
       {
         if (valid.Has(i) && ! useful.Has(i))
@@ -303,13 +304,20 @@ namespace
     WorldMask UsefulWorlds() const
     {
       WorldMask useful = WorldMask::None(worldCount);
-      for (unsigned i = 0; i < vectors.size(); i++)
+      for (unsigned w = 0; w < worldCount; w++)
       {
-        for (unsigned w = 0; w < vectors[i].values.size(); w++)
+        bool keep = false;
+        for (unsigned i = 0; i < vectors.size(); i++)
         {
-          if (vectors[i].valid.Has(w) && vectors[i].values[w] > 0)
-            useful.bits |= (1ULL << w);
+          if (! vectors[i].valid.Has(w) || vectors[i].values[w] > 0)
+          {
+            keep = true;
+            break;
+          }
         }
+
+        if (keep)
+          useful.bits |= (1ULL << w);
       }
       return useful;
     }
@@ -382,6 +390,7 @@ namespace
     ToyNodeType type;
     ParetoFront leafFront;
     vector<const ToyNode *> children;
+    vector<WorldMask> childWorlds;
 
     ToyNode(
       const string& nameArg,
@@ -390,7 +399,8 @@ namespace
       name(nameArg),
       type(typeArg),
       leafFront(worldCount),
-      children()
+      children(),
+      childWorlds()
     {
     }
   };
@@ -524,15 +534,37 @@ namespace
   {
     const unsigned n = static_cast<unsigned>(text.size());
     OutcomeVector vec(n);
-    vec.valid = WorldMask::All(n);
     for (unsigned i = 0; i < n; i++)
     {
       if (text[i] == '0' || text[i] == '1')
+      {
+        vec.valid.bits |= (1ULL << i);
         vec.values[i] = text[i] - '0';
+      }
+      else if (text[i] == 'x' || text[i] == 'X' || text[i] == '?')
+        continue;
       else
-        throw runtime_error("MakeBinaryOutcome expects only 0/1 text");
+        throw runtime_error("MakeBinaryOutcome expects only 0/1/x text");
     }
     return vec;
+  }
+
+
+  static void AddChild(
+    ToyNode& parent,
+    const ToyNode& child,
+    const WorldMask& worlds)
+  {
+    parent.children.push_back(&child);
+    parent.childWorlds.push_back(worlds);
+  }
+
+
+  static void AddChild(
+    ToyNode& parent,
+    const ToyNode& child)
+  {
+    AddChild(parent, child, WorldMask::All(parent.leafFront.worldCount));
   }
 
 
@@ -585,7 +617,7 @@ namespace
   {
     ParetoFront front(worldCount);
     OutcomeVector vec(worldCount);
-    vec.valid = WorldMask::All(worldCount);
+    vec.valid = WorldMask(worldCount, 1ULL << world);
     vec.values[world] = value;
     front.Insert(vec);
     return front;
@@ -633,21 +665,31 @@ namespace
     if (node.type == TOY_MIN)
     {
       int best = 1;
+      bool found = false;
       for (unsigned i = 0; i < node.children.size(); i++)
       {
+        if (! node.childWorlds[i].Has(world))
+          continue;
+
         const int value = EvaluateSingleWorld(
           * node.children[i],
           maxMoves,
           world,
           stats);
+        found = true;
         best = min(best, value);
       }
+      if (! found)
+        return 0;
       return best;
     }
 
     int best = 0;
     for (unsigned i = 0; i < node.children.size(); i++)
     {
+      if (! node.childWorlds[i].Has(world))
+        continue;
+
       const int value = EvaluateSingleWorld(
         * node.children[i],
         maxMoves - 1,
@@ -705,7 +747,7 @@ namespace
         const ParetoFront f = SearchToy(
           * node.children[i],
           maxMoves,
-          currentUseful,
+          currentUseful.Intersection(node.childWorlds[i]),
           NULL,
           false,
           previousRootMu,
@@ -739,10 +781,11 @@ namespace
     ParetoFront front(node.leafFront.worldCount);
     for (unsigned i = 0; i < node.children.size(); i++)
     {
+      const WorldMask childWorlds = usefulWorlds.Intersection(node.childWorlds[i]);
       const ParetoFront f = SearchToy(
         * node.children[i],
         maxMoves - 1,
-        usefulWorlds,
+        childWorlds,
         &front,
         false,
         previousRootMu,
@@ -884,26 +927,26 @@ namespace
     leaf000b.leafFront = MakeFront(3, vector<string>(1, "000"));
 
     ToyNode d("d", TOY_MAX, 3);
-    d.children.push_back(&leaf100);
-    d.children.push_back(&leaf011);
+    AddChild(d, leaf100);
+    AddChild(d, leaf011);
 
     ToyNode e("e", TOY_MAX, 3);
-    e.children.push_back(&leaf000a);
-    e.children.push_back(&leaf100);
+    AddChild(e, leaf000a);
+    AddChild(e, leaf100);
 
     ToyNode b("b", TOY_MIN, 3);
-    b.children.push_back(&d);
-    b.children.push_back(&e);
+    AddChild(b, d);
+    AddChild(b, e);
 
     ToyNode f("f", TOY_MAX, 3);
-    f.children.push_back(&leaf000b);
+    AddChild(f, leaf000b);
 
     ToyNode c("c", TOY_MIN, 3);
-    c.children.push_back(&f);
+    AddChild(c, f);
 
     ToyNode a("a", TOY_MAX, 3);
-    a.children.push_back(&b);
-    a.children.push_back(&c);
+    AddChild(a, b);
+    AddChild(a, c);
 
     SearchStats stats;
     bool rootCutTriggered = false;
@@ -937,12 +980,12 @@ namespace
     shouldNotVisit.leafFront = MakeFront(3, vector<string>(1, "001"));
 
     ToyNode candidateMin("candidateMin", TOY_MIN, 3);
-    candidateMin.children.push_back(&cutLeaf1);
-    candidateMin.children.push_back(&shouldNotVisit);
+    AddChild(candidateMin, cutLeaf1);
+    AddChild(candidateMin, shouldNotVisit);
 
     ToyNode root("root", TOY_MAX, 3);
-    root.children.push_back(&bestLeaf);
-    root.children.push_back(&candidateMin);
+    AddChild(root, bestLeaf);
+    AddChild(root, candidateMin);
 
     SearchStats stats;
     bool rootCutTriggered = false;
@@ -971,8 +1014,8 @@ namespace
     minSecond.leafFront = MakeFront(3, vector<string>(1, "010"));
 
     ToyNode candidateMin("candidateMin", TOY_MIN, 3);
-    candidateMin.children.push_back(&minFirst);
-    candidateMin.children.push_back(&minSecond);
+    AddChild(candidateMin, minFirst);
+    AddChild(candidateMin, minSecond);
 
     SearchStats stats;
     bool rootCutTriggered = false;
@@ -999,8 +1042,8 @@ namespace
     skippedByRootCut.leafFront = MakeFront(3, vector<string>(1, "001"));
 
     ToyNode root("root", TOY_MAX, 3);
-    root.children.push_back(&stableBest);
-    root.children.push_back(&skippedByRootCut);
+    AddChild(root, stableBest);
+    AddChild(root, skippedByRootCut);
 
     const IterativeResult result = RunIterativeDeepening(root, 2);
 
@@ -1050,8 +1093,8 @@ namespace
     right.leafFront = MakeFront(3, vector<string>(1, "001"));
 
     ToyNode root("root", TOY_MAX, 3);
-    root.children.push_back(&left);
-    root.children.push_back(&right);
+    AddChild(root, left);
+    AddChild(root, right);
 
     SearchStats singleStats;
     const WorldMask onlyWorld1(3, 1ULL << 1);
@@ -1069,8 +1112,59 @@ namespace
       "single useful world should trigger a single-world cut");
     Check(singleStats.leafWorldEvaluations == 2,
       "single-world cut should evaluate only one world through the collapsed search");
-    Check(FrontContains(singleFront, MakeBinaryOutcome("010")),
-      "single-world cut should return the exact one-world result embedded in a full vector");
+    Check(FrontContains(singleFront, MakeBinaryOutcome("x1x")),
+      "single-world cut should return the exact one-world result as a sparse vector");
+  }
+
+
+  static void TestEmptyEntryInteriorFronts()
+  {
+    ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
+    bestLeaf.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode partialA("partialA", TOY_LEAF, 3);
+    partialA.leafFront = MakeFront(3, vector<string>(1, "010"));
+
+    ToyNode partialB("partialB", TOY_LEAF, 3);
+    partialB.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode shouldNotVisit("shouldNotVisit", TOY_LEAF, 3);
+    shouldNotVisit.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    AddChild(candidateMin, partialA, WorldMask(3, 0x6ULL));
+    AddChild(candidateMin, partialB, WorldMask(3, 0x3ULL));
+    AddChild(candidateMin, shouldNotVisit);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, bestLeaf);
+    AddChild(root, candidateMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3), NULL,
+      true, -1.0, stats, rootCutTriggered);
+
+    Check(stats.earlyCuts == 1,
+      "empty-entry example should trigger one early cut after the interior front is completed");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("shouldNotVisit")) == stats.visitOrder.end(),
+      "empty-entry example should cut before visiting the remaining Min child");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "empty-entry example should preserve the dominating root outcome");
+    Check(MakeBinaryOutcome("x10").ToString() == "[x 1 0]",
+      "empty-entry parsing should support sparse vectors");
+
+    const ParetoFront sparseA = partialA.leafFront.RestrictToUseful(
+      WorldMask(3, 0x6ULL));
+    const ParetoFront sparseB = partialB.leafFront.RestrictToUseful(
+      WorldMask(3, 0x3ULL));
+    const ParetoFront combined = ParetoFront::MinProduct(sparseA, sparseB);
+    Check(FrontContains(combined, MakeBinaryOutcome("110")),
+      "empty-entry example should combine sparse child fronts into [1 1 0]");
+    Check(FrontContains(partialA.leafFront.RestrictToUseful(WorldMask(3, 0x6ULL)),
+      MakeBinaryOutcome("x10")),
+      "restricting to child worlds should produce an empty entry in the skipped world");
   }
 
 
@@ -1083,8 +1177,8 @@ namespace
     skippedSibling.leafFront = MakeFront(3, vector<string>(1, "001"));
 
     ToyNode root("root", TOY_MAX, 3);
-    root.children.push_back(&winningMove);
-    root.children.push_back(&skippedSibling);
+    AddChild(root, winningMove);
+    AddChild(root, skippedSibling);
 
     SearchStats stats;
     bool rootCutTriggered = false;
@@ -1156,6 +1250,9 @@ int main()
 
   TestWorldCuts();
   cout << "alpha_mu_prototype: world cuts OK\n";
+
+  TestEmptyEntryInteriorFronts();
+  cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";
 
   TestCutOnWin();
   cout << "alpha_mu_prototype: cut on win OK\n";

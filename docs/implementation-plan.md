@@ -215,6 +215,7 @@ It currently provides:
 - toy-search validation of non-locality, early cut, and root cut,
 - useful-world maintenance in the prototype search,
 - world cuts for zero and single useful worlds,
+- empty-entry handling for sparse interior fronts,
 - cut on win at Max nodes,
 - a DDS-backed leaf-evaluation demo over `hands/alpha_mu_play.txt`.
 
@@ -232,6 +233,8 @@ The recommended order is:
 4. empty-entry support for interior-node fronts,
 5. deep alpha cuts,
 6. only then consider leaf parallelization and low-level SIMD work.
+
+The first four optimization steps in that sequence are now present in the prototype.
 
 ## Phase 6 — optional DDS-side cleanup that remains worthwhile
 
