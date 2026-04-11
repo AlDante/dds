@@ -410,6 +410,7 @@ namespace
   {
     int nodesVisited;
     int earlyCuts;
+    int deepAlphaCuts;
     int rootCuts;
     int cutOnWinCuts;
     int usefulWorldUpdates;
@@ -421,6 +422,7 @@ namespace
     SearchStats() :
       nodesVisited(0),
       earlyCuts(0),
+      deepAlphaCuts(0),
       rootCuts(0),
       cutOnWinCuts(0),
       usefulWorldUpdates(0),
@@ -705,7 +707,7 @@ namespace
     const ToyNode& node,
     const int maxMoves,
     const WorldMask& usefulWorlds,
-    const ParetoFront * upperFront,
+    const vector<const ParetoFront *>& upperMaxFronts,
     const bool isRoot,
     const double previousRootMu,
     SearchStats& stats,
@@ -748,7 +750,7 @@ namespace
           * node.children[i],
           maxMoves,
           currentUseful.Intersection(node.childWorlds[i]),
-          NULL,
+          upperMaxFronts,
           false,
           previousRootMu,
           stats,
@@ -768,10 +770,20 @@ namespace
           stats.usefulWorldUpdates++;
         currentUseful = nextUseful;
 
-        if (upperFront != NULL && upperFront->DominatesFront(mini))
+        if (! upperMaxFronts.empty() &&
+            upperMaxFronts.back()->DominatesFront(mini))
         {
           stats.earlyCuts++;
           break;
+        }
+
+        for (unsigned j = 0; j + 1 < upperMaxFronts.size(); j++)
+        {
+          if (upperMaxFronts[j]->DominatesFront(mini))
+          {
+            stats.deepAlphaCuts++;
+            return mini;
+          }
         }
       }
 
@@ -779,6 +791,8 @@ namespace
     }
 
     ParetoFront front(node.leafFront.worldCount);
+    vector<const ParetoFront *> childUpperMaxFronts(upperMaxFronts);
+    childUpperMaxFronts.push_back(&front);
     for (unsigned i = 0; i < node.children.size(); i++)
     {
       const WorldMask childWorlds = usefulWorlds.Intersection(node.childWorlds[i]);
@@ -786,7 +800,7 @@ namespace
         * node.children[i],
         maxMoves - 1,
         childWorlds,
-        &front,
+        childUpperMaxFronts,
         false,
         previousRootMu,
         stats,
@@ -828,7 +842,7 @@ namespace
         root,
         depth,
         WorldMask::All(root.leafFront.worldCount),
-        NULL,
+        vector<const ParetoFront *>(),
         true,
         previousMu,
         stats,
@@ -950,8 +964,8 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
-    const ParetoFront front = SearchToy(a, 2, WorldMask::All(3), NULL, true,
-      -1.0, stats,
+    const ParetoFront front = SearchToy(a, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), true, -1.0, stats,
       rootCutTriggered);
 
     Check(front.vectors.size() == 1,
@@ -989,8 +1003,8 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
-    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3), NULL,
-      true, -1.0, stats,
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), true, -1.0, stats,
       rootCutTriggered);
 
     Check(front.vectors.size() == 2,
@@ -1020,7 +1034,7 @@ namespace
     SearchStats stats;
     bool rootCutTriggered = false;
     const ParetoFront front = SearchToy(candidateMin, 2, WorldMask::All(3),
-      NULL, false, -1.0, stats, rootCutTriggered);
+      vector<const ParetoFront *>(), false, -1.0, stats, rootCutTriggered);
 
     Check(FrontContains(front, MakeBinaryOutcome("000")),
       "useful-world example should reduce the Min continuation to [0 0 0]");
@@ -1073,7 +1087,7 @@ namespace
       zeroLeaf,
       1,
       WorldMask::None(3),
-      NULL,
+      vector<const ParetoFront *>(),
       false,
       -1.0,
       zeroStats,
@@ -1102,7 +1116,7 @@ namespace
       root,
       1,
       onlyWorld1,
-      NULL,
+      vector<const ParetoFront *>(),
       true,
       -1.0,
       singleStats,
@@ -1142,8 +1156,8 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
-    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3), NULL,
-      true, -1.0, stats, rootCutTriggered);
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), true, -1.0, stats, rootCutTriggered);
 
     Check(stats.earlyCuts == 1,
       "empty-entry example should trigger one early cut after the interior front is completed");
@@ -1168,6 +1182,54 @@ namespace
   }
 
 
+  static void TestDeepAlphaCut()
+  {
+    ToyNode rootBest("rootBest", TOY_LEAF, 3);
+    rootBest.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode innerBest("innerBest", TOY_LEAF, 3);
+    innerBest.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode candidateFirst("candidateFirst", TOY_LEAF, 3);
+    candidateFirst.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode skippedByDeepAlpha("skippedByDeepAlpha", TOY_LEAF, 3);
+    skippedByDeepAlpha.leafFront = MakeFront(3, vector<string>(1, "111"));
+
+    ToyNode deepMin("deepMin", TOY_MIN, 3);
+    AddChild(deepMin, candidateFirst);
+    AddChild(deepMin, skippedByDeepAlpha);
+
+    ToyNode innerMax("innerMax", TOY_MAX, 3);
+    AddChild(innerMax, innerBest);
+    AddChild(innerMax, deepMin);
+
+    ToyNode outerMin("outerMin", TOY_MIN, 3);
+    AddChild(outerMin, innerMax);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, rootBest);
+    AddChild(root, outerMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    const ParetoFront front = SearchToy(root, 3, WorldMask::All(3),
+      vector<const ParetoFront *>(), true, -1.0, stats, rootCutTriggered);
+
+    Check(stats.deepAlphaCuts == 1,
+      "deep-alpha example should trigger exactly one deep alpha cut");
+    Check(stats.earlyCuts == 0,
+      "deep-alpha example should cut via an ancestor Max front rather than the immediate one");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("skippedByDeepAlpha")) == stats.visitOrder.end(),
+      "deep-alpha cut should stop before searching the remaining deep Min child");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "deep-alpha example should preserve the dominating root outcome");
+    Check(! rootCutTriggered,
+      "deep-alpha example should not be reported as a root cut");
+  }
+
+
   static void TestCutOnWin()
   {
     ToyNode winningMove("winningMove", TOY_LEAF, 3);
@@ -1182,8 +1244,8 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
-    const ParetoFront front = SearchToy(root, 1, WorldMask::All(3), NULL,
-      true, -1.0, stats, rootCutTriggered);
+    const ParetoFront front = SearchToy(root, 1, WorldMask::All(3),
+      vector<const ParetoFront *>(), true, -1.0, stats, rootCutTriggered);
 
     Check(stats.cutOnWinCuts == 1,
       "cut-on-win example should trigger exactly one cut on win");
@@ -1253,6 +1315,9 @@ int main()
 
   TestEmptyEntryInteriorFronts();
   cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";
+
+  TestDeepAlphaCut();
+  cout << "alpha_mu_prototype: deep alpha cuts OK\n";
 
   TestCutOnWin();
   cout << "alpha_mu_prototype: cut on win OK\n";

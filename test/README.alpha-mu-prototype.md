@@ -16,6 +16,7 @@ It is meant to validate the core paper semantics before deeper optimization work
 - early cut,
 - root cut,
 - empty-entry handling for interior fronts,
+- deep alpha cuts,
 - DDS-backed leaf evaluation on a small curated world set.
 
 ## File
@@ -32,9 +33,10 @@ The runner performs these checks:
 4. useful-world maintenance at a Min node
 5. world cuts for zero and single useful worlds
 6. empty-entry handling for interior fronts
-7. cut on win at a Max node
-8. a root-cut toy example with iterative deepening
-9. a DDS leaf-evaluation demo over `hands/alpha_mu_play.txt`
+7. deep alpha cuts against earlier Max ancestors
+8. cut on win at a Max node
+9. a root-cut toy example with iterative deepening
+10. a DDS leaf-evaluation demo over `hands/alpha_mu_play.txt`
 
 ## Build
 
@@ -60,10 +62,9 @@ In particular, it does not yet include:
 
 - possible-world generation from bidding or play constraints,
 - bridge move generation inside the alpha-mu search itself,
-- deep alpha cuts,
 - a Pareto-front transposition table.
 
-Useful-world maintenance, world cuts, empty-entry handling, and cut on win are now present in the prototype.
+Useful-world maintenance, world cuts, empty-entry handling, deep alpha cuts, and cut on win are now present in the prototype.
 
-The next planned optimization step is deep alpha cuts.
+The next planned optimization step is leaf parallelization.
 

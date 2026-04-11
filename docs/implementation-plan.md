@@ -216,6 +216,7 @@ It currently provides:
 - useful-world maintenance in the prototype search,
 - world cuts for zero and single useful worlds,
 - empty-entry handling for sparse interior fronts,
+- deep alpha cuts against earlier Max ancestors,
 - cut on win at Max nodes,
 - a DDS-backed leaf-evaluation demo over `hands/alpha_mu_play.txt`.
 
@@ -234,7 +235,7 @@ The recommended order is:
 5. deep alpha cuts,
 6. only then consider leaf parallelization and low-level SIMD work.
 
-The first four optimization steps in that sequence are now present in the prototype.
+The first five optimization steps in that sequence are now present in the prototype.
 
 ## Phase 6 — optional DDS-side cleanup that remains worthwhile
 
