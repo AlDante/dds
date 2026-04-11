@@ -13,17 +13,42 @@ The groundwork completed before algorithmic changes includes:
 
 That means alpha-mu work now proceeds against a materially better-tested and easier-to-measure baseline.
 
-## Working definition of alpha-mu in DDS
+## Corrected framing after reading the papers
 
-In this codebase, alpha-mu should be treated first as a **root interval / threshold search policy** rather than a wholesale replacement of the recursive proof engine.
+The original alpha-mu paper and the optimization paper make one thing clear:
 
-DDS already knows how to answer questions of the form:
+- **alpha-mu proper** is an imperfect-information search over multiple possible worlds using outcome vectors and Pareto fronts,
+- **our current work** is a DDS-side support track that improves exact-score root probing and benchmarking inside a single perfect-information world.
 
-- can the side to move force at least `target` tricks from this node?
+So the current `src/SolverIF.cpp` work is best understood as:
 
-The alpha-mu opportunity is therefore to improve how the root chooses, tightens, and reuses score intervals when it wants an exact answer.
+- valuable DDS groundwork,
+- relevant to future alpha-mu leaf evaluation and reuse,
+- but **not yet** a direct implementation of the paper's alpha-mu search.
 
-This is not only a raw-speed project. Performance matters, but the point is to get a better real-world evaluation strategy for repeated solves, play analysis, and exact-score discovery while preserving DDS correctness.
+That distinction matters because the next steps should no longer assume that incremental root-policy work inside DDS alone will eventually “turn into” full alpha-mu.
+
+## What DDS can and cannot provide directly
+
+DDS already provides important ingredients:
+
+- threshold-style recursive proof search,
+- exact perfect-information evaluation,
+- lower/upper bound storage in the TT,
+- efficient move generation and pruning,
+- root-level repeated threshold probing.
+
+But the papers require additional machinery that does not yet exist in this codebase:
+
+- a representation of sampled possible worlds,
+- outcome vectors over those worlds,
+- Pareto fronts,
+- Max-node front union and Min-node front product/min combination,
+- useful-world maintenance,
+- world cuts,
+- cut-on-win,
+- deep alpha cuts,
+- a TT keyed to alpha-mu fronts and search depth / Max-move horizon.
 
 ## Phase 0 — completed preparation
 
@@ -91,35 +116,30 @@ Important measures are:
 - behavior for play-analysis paths such as `AnalyseLaterBoard()`,
 - stability of move selection and exact-score discovery in realistic usage, not only synthetic hot loops.
 
-## Phase 2 — measure the current root policy properly
+## Phase 2 — completed DDS-side measurement cycle
 
 ### Goal
 
-Establish a trustworthy before/after baseline for further root-policy work.
+Establish a trustworthy before/after baseline for DDS-side root-policy work.
 
-### Scope
+### Status
 
-Stay at the root layer and add only measurement support or analysis that does not alter solver semantics.
+This phase is effectively complete:
 
-### Likely work items
+- root instrumentation exists in `src/SolverIF.cpp`,
+- `test/alpha_mu_benchmark.py` automates the benchmark cycle,
+- `test/play_analysis_benchmark.cpp` provides dedicated `AnalyseLaterBoard()` coverage,
+- one measured repeat-solve guess-seeding experiment has already been run.
 
-- capture root probe counts per exact-score solve,
-- record starting guess quality versus final exact score,
-- separate first-solve and repeated-solve behavior,
-- benchmark solve, repeat-solve, and play-analysis workloads separately,
-- document representative benchmark sets and how to rerun them.
+### Result
 
-### Out of scope
+We now have enough evidence to say that the DDS-side groundwork is real and useful, but also that it should be treated as a **support track** rather than the core implementation of alpha-mu proper.
 
-- no changes to `ABsearch*()` semantics,
-- no TT redesign,
-- no pruning rewrites.
-
-## Phase 3 — root-policy experiments
+## Phase 3 — small DDS-side root-policy experiments
 
 ### Goal
 
-Try small alpha-mu-inspired improvements at the root while preserving the current recursive proof engine.
+Continue only the DDS-local experiments that clearly improve exact-score probing and are cheap to maintain.
 
 ### Candidate directions
 
@@ -128,35 +148,108 @@ Try small alpha-mu-inspired improvements at the root while preserving the curren
 - clearer handling of directional hints in analysis paths,
 - reuse of information already available from similar-deal or repeat-solve contexts.
 
-### Success condition
+### Status
 
-At least one root-only experiment should show value on representative workloads without harming correctness or maintainability.
+The first such experiment already exists:
 
-## Phase 4 — optional cleanup of remaining root duplication
+- `SolveSameBoard()` now biases the initial guess up by one trick,
+- the benchmarked average probe count improved on the current repeat-solve workload.
 
-If Phase 3 produces a useful root-policy abstraction, the next cleanup candidate is the `solutions == 3` exact-card enumeration path in `src/SolverIF.cpp`.
+### Guidance
 
-That work is still root-local and can remain compatible with the current deep search behavior.
+Further work in this phase is optional and should be limited to obvious local wins such as:
 
-## Phase 5 — deeper search work only if justified
+- conditional repeat-solve biasing,
+- an exact-hint fast path for `AnalyseLaterBoard()`,
+- cleanup of remaining root duplication.
 
-Only after the root-policy path has been measured and exploited should the project consider deeper changes.
+## Phase 4 — first real alpha-mu prototype
+
+### Goal
+
+Implement a paper-faithful alpha-mu search prototype as a **new layer around DDS**, not as a mutation of the existing `ABsearch*()` recursion.
+
+### Scope
+
+The first prototype should be intentionally narrow:
+
+- fixed contract family,
+- small number of worlds,
+- limited Max-move horizon,
+- DDS used as the leaf evaluator,
+- correctness and semantics prioritized over speed.
+
+### Required pieces
+
+1. A representation of:
+   - sampled worlds,
+   - valid/useful-world masks,
+   - outcome vectors,
+   - Pareto fronts.
+2. Core front operations:
+   - dominance,
+   - Max-node union + front reduction,
+   - Min-node product/min + front reduction.
+3. Search control:
+   - horizon measured in Max moves,
+   - root iterative deepening,
+   - early cut,
+   - root cut.
+4. A simple DDS leaf adapter for evaluating a world.
+5. A paper-derived benchmark and example set.
+
+### Why this is now the recommended next implementation step
+
+This is the first phase that actually moves the repository toward the algorithm described in the papers rather than just improving DDS exact-score probing.
+
+## Phase 5 — alpha-mu optimizations from the second paper
+
+Only after a correct prototype exists should the paper's optimization work begin.
+
+The recommended order is:
+
+1. maintain useful worlds,
+2. world cuts,
+3. cut on win,
+4. empty-entry support for interior-node fronts,
+5. deep alpha cuts,
+6. only then consider leaf parallelization and low-level SIMD work.
+
+## Phase 6 — optional DDS-side cleanup that remains worthwhile
+
+This phase is now clearly separate from alpha-mu proper.
+
+Possible items:
+
+- `solutions == 3` root-path cleanup in `src/SolverIF.cpp`,
+- better hint handling in play analysis,
+- more precise benchmark reporting for repeat/hinted solves.
+
+These may still be worthwhile, but they are no longer the primary algorithmic roadmap.
+
+## Phase 7 — deeper integration only if justified
+
+Only after the prototype track proves value should the project consider deeper integration with the existing solver core.
 
 Possible later topics include:
 
-- interval-aware behavior deeper in the recursive search,
-- tighter interaction between root policy and stored TT bounds,
-- better proof-order control inside `ABsearch*()`.
+- tighter DDS leaf reuse from alpha-mu,
+- reuse of existing TT information where semantics genuinely align,
+- selective borrowing of DDS move-ordering or pruning knowledge into the alpha-mu prototype,
+- interval-aware behavior deeper in the perfect-information solver if benchmark data still justifies it.
 
-These are explicitly deferred because they combine correctness, pruning, and TT risks.
+These are explicitly deferred because they combine correctness, pruning, TT, and architectural risks.
 
 ## Recommended immediate next move
 
-The next practical step is **not** to redesign `ABsearch*()`.
+The next practical step is still **not** to redesign `ABsearch*()`.
 
-It is to:
+But it is also **no longer** just “another root-only tweak in `src/SolverIF.cpp`”.
 
-1. rerun the current regression baseline,
-2. add lightweight root-policy measurement,
-3. benchmark real workloads,
-4. choose one small root-only alpha-mu experiment from the resulting data.
+The next implementation cycle should be:
+
+1. document a paper-derived test set and success criteria,
+2. build a minimal alpha-mu prototype around DDS leaf evaluation,
+3. implement only the base search semantics plus early/root cut,
+4. verify the prototype on small controlled cases,
+5. then add the second paper's optimizations one by one.

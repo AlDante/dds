@@ -55,13 +55,23 @@ A typical `SolveBoard` / `SolveBoardPBN` request flows as follows:
 5. `Moves`, `QuickTricks`, and `LaterTricks` prune the search and maintain move ordering.
 6. `TransTable` implementations store and retrieve bounds for repeated positions.
 
-## Why DDS is already close to alpha-mu
+## Why DDS is a useful alpha-mu building block
 
 DDS is not structured as a plain score-returning minimax. Instead, much of the deep recursion already answers a boolean-style question:
 
 - can the side to move force at least this many tricks from here?
 
-That is the key reason the current alpha-mu plan starts at the **root-level score-search policy** in `src/SolverIF.cpp` rather than replacing the recursive core wholesale.
+That is the key reason the DDS-side support work started at the **root-level score-search policy** in `src/SolverIF.cpp` rather than replacing the recursive core wholesale.
+
+However, the papers make clear that alpha-mu proper adds major machinery that DDS does not currently have:
+
+- sampled possible worlds,
+- outcome vectors,
+- Pareto fronts,
+- different Max/Min backup operators on those fronts,
+- alpha-mu-specific cuts and TT behavior.
+
+So DDS should currently be viewed as a **strong perfect-information engine that alpha-mu can call**, not as an alpha-mu implementation in disguise.
 
 ## Major subsystems
 

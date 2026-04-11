@@ -4,157 +4,148 @@
 
 This document turns the staged roadmap in `implementation-plan.md` into the next concrete execution cycle.
 
-The first root refactor is already complete, so the next cycle should focus on **measurement first, then one root-only experiment**.
+After reading the papers, the practical conclusion is:
+
+- the DDS root-policy work is useful groundwork,
+- but the next real alpha-mu implementation step is to build a **paper-faithful prototype around DDS**, not just to keep tuning `src/SolverIF.cpp`.
 
 ## Immediate objectives
 
-1. Reconfirm the current correctness baseline.
-2. Measure how the new shared root helper behaves on representative workloads.
-3. Choose one small alpha-mu experiment that stays inside `src/SolverIF.cpp`.
-4. Re-run correctness and benchmark checks after that experiment.
+1. Preserve the current DDS-side benchmarked baseline.
+2. Define a paper-derived alpha-mu test and benchmark set.
+3. Implement a minimal alpha-mu prototype with correct search semantics.
+4. Add only the first paper-level cuts before attempting further optimization.
+5. Keep DDS-only root-policy tweaks as a secondary track.
 
-## Step 1 — re-run the baseline now
+## Step 1 — freeze the DDS support baseline
 
-Re-run the existing checks before making another solver change:
+Keep the current DDS-side support workflow available and reproducible:
 
 - `python3 test/alpha_mu_benchmark.py`
 - `test/build/regression_api`
 - `test/build/dtest -f ../hands/list10.txt -s solve`
-- at least one repeat-solve-oriented workload that exercises `SolveSameBoard()` indirectly
-- at least one play-analysis workload that reaches `AnalyseLaterBoard()` if a practical harness is available
+- `test/build/play_analysis_benchmark`
 
 Record:
 
 - pass/fail status,
 - wall-clock time,
-- any suspicious output drift,
+- probe-count summaries by context,
 - whether repeated solves show stable exact-score behavior.
 
-## Step 2 — add lightweight root instrumentation
+This step is not the new algorithmic target. It is the baseline we should keep so later alpha-mu work can still rely on a measurable DDS oracle.
 
-Add small, easy-to-remove instrumentation around `SearchExactScoreRoot()` in `src/SolverIF.cpp`.
+## Step 2 — define the paper-derived alpha-mu test set
 
-The instrumentation should answer:
+Before writing the prototype, lock down the test material that reflects the two papers.
 
-- how many root probes were needed,
-- what the initial guess was,
-- what the final exact score was,
-- whether the starting hint was above or below the final score,
-- which entry path was used:
-  - `SolveBoardInternal()`,
-  - `SolveSameBoard()`,
-  - `AnalyseLaterBoard()`.
+The first set should include:
 
-Prefer one of these styles:
+1. **paper-motivated hand families**
+   - strategy-fusion examples,
+   - non-locality examples,
+   - discovery-play style examples,
+   - “rare bad event” examples.
+2. **repository-controlled workloads**
+   - the 3 play-analysis example hands from `examples/hands.cpp`,
+   - a small repeat-solve family from `hands/list10.txt`,
+   - control boards from `hands/thomas1.txt` and `hands/thomas2.txt`.
+3. **success metrics**
+   - correctness of front operations,
+   - stability of chosen move,
+   - number of worlds,
+   - root depth / Max-move horizon,
+   - elapsed time,
+   - alpha-mu cut activity once cuts are added.
 
-- compile-time-gated counters, or
-- optional timer/stat reporting that does not affect public results.
+## Step 3 — implement the minimum viable alpha-mu prototype
 
-Do not change deep recursive semantics while adding this instrumentation.
+Do this as a **new component**, not as a rewrite of `src/ABsearch.cpp`.
 
-## Step 3 — define a representative benchmark set
+Recommended first scope:
 
-Use a benchmark set that reflects real DDS usage rather than only synthetic tight loops.
+- a fixed small number of worlds,
+- a bounded number of Max moves,
+- DDS used as the leaf evaluator,
+- single-threaded,
+- correctness-first data structures.
 
-Recommended starter set:
+The first implementation pieces should be:
 
-- automated baseline runner:
-  - `python3 test/alpha_mu_benchmark.py`
-- correctness smoke set:
-  - `hands/list10.txt`
-  - `hands/thomas1.txt`
-  - `hands/thomas2.txt`
-- larger throughput set:
-  - `hands/list100.txt`
-  - `hands/list1000.txt`
-- repeated-position behavior:
-  - workloads that naturally reuse the same or similar deals
-- play-analysis behavior:
-  - at least one sequence that exercises analysis after the opening lead
+1. `WorldMask` or equivalent valid-world tracking,
+2. `OutcomeVector`,
+3. `ParetoFront`,
+4. dominance tests,
+5. Max-node front union and reduction,
+6. Min-node front product/min and reduction,
+7. root iterative deepening in number of Max moves,
+8. DDS leaf evaluation adapter.
 
-The automated runner now gives immediate measurement coverage for:
+## Step 4 — add only the first paper-level cuts
 
-- `SolveBoardInternal()`,
-- `SolveSameBoard()`,
-- `AnalyseLaterBoard()` through the dedicated `play_analysis_benchmark` workload.
+The prototype should first support:
 
-For each benchmark, capture:
+- **early cut**,
+- **root cut**.
 
-- elapsed time,
-- node count if available,
-- root probe count,
-- distribution of final exact scores,
-- repeated-solve behavior.
+Do **not** start with the full optimization set from the second paper.
 
-## Step 4 — choose one root-only alpha-mu experiment
+Those later optimizations depend on already having correct:
 
-Only after Step 2 and Step 3 should the next solver change be selected.
+- front semantics,
+- useful-world tracking,
+- recursive control flow.
 
-The best candidates are:
+## Step 5 — verify the prototype before optimizing it
 
-1. **Improved initial guess seeding**
-   - reuse prior exact scores or directional hints more deliberately.
-2. **More disciplined interval management**
-   - make lower/upper-bound updates clearer and easier to analyze.
-3. **Hint-aware play-analysis probing**
-   - improve how `hint` and `hintDir` seed the root interval in `AnalyseLaterBoard()`.
+The prototype should be considered valid only if it can:
 
-Selection rule:
+- pass deterministic front-operation checks,
+- behave correctly on the small paper-derived examples,
+- produce stable results on repeated runs,
+- use DDS only as a leaf evaluator rather than duplicating DDS semantics internally.
 
-- choose the change with the clearest expected benefit,
-- keep it local to root orchestration,
-- avoid mixing multiple experiments in one patch.
+## Step 6 — add the optimization-paper features in order
 
-## Step 5 — keep the next code change small
+After the prototype is correct, the next implementation steps should be:
 
-For the next implementation patch:
+1. maintaining useful worlds,
+2. world cuts,
+3. cut on win,
+4. empty-entry handling for interior fronts,
+5. deep alpha cuts,
+6. leaf parallelization,
+7. only then low-level SIMD experiments if Pareto filtering becomes a measured bottleneck.
 
-- prefer editing only `src/SolverIF.cpp` unless a measurement helper clearly belongs elsewhere,
-- avoid touching `src/ABsearch.cpp`, `src/QuickTricks.cpp`, `src/LaterTricks.cpp`, or TT storage code,
-- preserve public API behavior,
-- preserve `solutions == 3` behavior unless the chosen experiment directly requires root-local cleanup there.
+## Step 7 — keep DDS-only work on a separate branch of the plan
 
-## Step 6 — re-verify after the next change
+DDS-side follow-up work is still reasonable, but it is now a separate support track.
 
-After the next alpha-mu experiment lands, rerun:
+Good candidates there remain:
 
-- the public API regression suite,
-- the solve regression workload,
-- the benchmark set from this document,
-- any targeted repeat-solve / play-analysis checks used during measurement.
+- a conditional refinement of the `SolveSameBoard()` guess bias,
+- an exact-hint fast path in `AnalyseLaterBoard()`,
+- cleanup of the `solutions == 3` root duplication.
 
-The change is only a success if:
-
-- correctness is unchanged,
-- the data is understandable,
-- the root-policy behavior improves on representative workloads,
-- the code remains easier to evolve than before.
-
-## Decision gate after this cycle
-
-If the first measured root-only experiment is promising, the next follow-up should be one of:
-
-- another root-policy refinement, or
-- cleanup of the remaining `solutions == 3` root duplication.
-
-If the results are noisy or neutral, keep measuring and refining at the root instead of moving deeper into `ABsearch*()`.
+These should not displace the actual alpha-mu prototype work.
 
 ## Explicit non-goals for the next cycle
 
 These should stay out of scope for now:
 
-- redesigning the recursive search core,
-- changing TT meaning,
-- rewriting pruning logic,
-- broad performance tuning unrelated to alpha-mu behavior.
+- rewriting `ABsearch*()` to impersonate alpha-mu,
+- mixing paper-level alpha-mu semantics directly into DDS before a prototype exists,
+- low-level SIMD work before Pareto-front costs are measured,
+- broad performance tuning unrelated to a confirmed bottleneck.
 
 ## Practical summary
 
 The next cycle should be:
 
-1. baseline,
-2. instrumentation,
-3. representative benchmarks,
-4. one root-only experiment,
-5. full re-verification.
-
+1. preserve the DDS baseline,
+2. lock the paper-derived test set,
+3. implement the minimal alpha-mu prototype,
+4. add early/root cut,
+5. verify correctness,
+6. add optimization-paper features one at a time,
+7. keep DDS root-policy tuning as a secondary support stream.
