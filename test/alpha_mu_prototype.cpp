@@ -381,6 +381,8 @@ namespace
     int rootCuts;
     int usefulWorldUpdates;
     int leafWorldEvaluations;
+    int worldCutsZero;
+    int worldCutsSingle;
     vector<string> visitOrder;
 
     SearchStats() :
@@ -389,6 +391,8 @@ namespace
       rootCuts(0),
       usefulWorldUpdates(0),
       leafWorldEvaluations(0),
+      worldCutsZero(0),
+      worldCutsSingle(0),
       visitOrder()
     {
     }
@@ -540,6 +544,97 @@ namespace
   }
 
 
+  static ParetoFront MakeZeroFront(const unsigned worldCount)
+  {
+    ParetoFront front(worldCount);
+    OutcomeVector vec(worldCount);
+    vec.valid = WorldMask::All(worldCount);
+    front.Insert(vec);
+    return front;
+  }
+
+
+  static ParetoFront MakeSingleWorldFront(
+    const unsigned worldCount,
+    const unsigned world,
+    const int value)
+  {
+    ParetoFront front(worldCount);
+    OutcomeVector vec(worldCount);
+    vec.valid = WorldMask::All(worldCount);
+    vec.values[world] = value;
+    front.Insert(vec);
+    return front;
+  }
+
+
+  static unsigned SoleWorldIndex(const WorldMask& mask)
+  {
+    for (unsigned i = 0; i < mask.count; i++)
+    {
+      if (mask.Has(i))
+        return i;
+    }
+
+    throw runtime_error("SoleWorldIndex called on empty mask");
+  }
+
+
+  static int EvaluateLeafWorld(
+    const ParetoFront& front,
+    const unsigned world)
+  {
+    int best = 0;
+    for (unsigned i = 0; i < front.vectors.size(); i++)
+    {
+      if (front.vectors[i].valid.Has(world))
+        best = max(best, front.vectors[i].values[world]);
+    }
+    return best;
+  }
+
+
+  static int EvaluateSingleWorld(
+    const ToyNode& node,
+    const int maxMoves,
+    const unsigned world,
+    SearchStats& stats)
+  {
+    if (node.type == TOY_LEAF || maxMoves == 0)
+    {
+      stats.leafWorldEvaluations++;
+      return EvaluateLeafWorld(node.leafFront, world);
+    }
+
+    if (node.type == TOY_MIN)
+    {
+      int best = 1;
+      for (unsigned i = 0; i < node.children.size(); i++)
+      {
+        const int value = EvaluateSingleWorld(
+          * node.children[i],
+          maxMoves,
+          world,
+          stats);
+        best = min(best, value);
+      }
+      return best;
+    }
+
+    int best = 0;
+    for (unsigned i = 0; i < node.children.size(); i++)
+    {
+      const int value = EvaluateSingleWorld(
+        * node.children[i],
+        maxMoves - 1,
+        world,
+        stats);
+      best = max(best, value);
+    }
+    return best;
+  }
+
+
   static ParetoFront SearchToy(
     const ToyNode& node,
     const int maxMoves,
@@ -552,6 +647,20 @@ namespace
   {
     stats.nodesVisited++;
     stats.visitOrder.push_back(node.name);
+
+    if (usefulWorlds.Empty())
+    {
+      stats.worldCutsZero++;
+      return MakeZeroFront(node.leafFront.worldCount);
+    }
+
+    if (usefulWorlds.PopCount() == 1)
+    {
+      const unsigned world = SoleWorldIndex(usefulWorlds);
+      const int value = EvaluateSingleWorld(node, maxMoves, world, stats);
+      stats.worldCutsSingle++;
+      return MakeSingleWorldFront(node.leafFront.worldCount, world, value);
+    }
 
     if (node.type == TOY_LEAF || maxMoves == 0)
     {
@@ -880,6 +989,61 @@ namespace
   }
 
 
+  static void TestWorldCuts()
+  {
+    ToyNode zeroLeaf("zeroLeaf", TOY_LEAF, 3);
+    zeroLeaf.leafFront = MakeFront(3, vector<string>(1, "101"));
+
+    SearchStats zeroStats;
+    bool rootCutTriggered = false;
+    const ParetoFront zeroFront = SearchToy(
+      zeroLeaf,
+      1,
+      WorldMask::None(3),
+      NULL,
+      false,
+      -1.0,
+      zeroStats,
+      rootCutTriggered);
+
+    Check(zeroStats.worldCutsZero == 1,
+      "empty useful-world mask should trigger a zero-world cut");
+    Check(zeroStats.leafWorldEvaluations == 0,
+      "zero-world cut should avoid all leaf evaluations");
+    Check(FrontContains(zeroFront, MakeBinaryOutcome("000")),
+      "zero-world cut should return the all-zero vector");
+
+    ToyNode left("left", TOY_LEAF, 3);
+    left.leafFront = MakeFront(3, vector<string>(1, "010"));
+
+    ToyNode right("right", TOY_LEAF, 3);
+    right.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    root.children.push_back(&left);
+    root.children.push_back(&right);
+
+    SearchStats singleStats;
+    const WorldMask onlyWorld1(3, 1ULL << 1);
+    const ParetoFront singleFront = SearchToy(
+      root,
+      1,
+      onlyWorld1,
+      NULL,
+      true,
+      -1.0,
+      singleStats,
+      rootCutTriggered);
+
+    Check(singleStats.worldCutsSingle == 1,
+      "single useful world should trigger a single-world cut");
+    Check(singleStats.leafWorldEvaluations == 2,
+      "single-world cut should evaluate only one world through the collapsed search");
+    Check(FrontContains(singleFront, MakeBinaryOutcome("010")),
+      "single-world cut should return the exact one-world result embedded in a full vector");
+  }
+
+
   static void TestDDSLeafDemo()
   {
     HandFileData data;
@@ -930,6 +1094,9 @@ int main()
 
   TestUsefulWorldMaintenance();
   cout << "alpha_mu_prototype: useful-world maintenance OK\n";
+
+  TestWorldCuts();
+  cout << "alpha_mu_prototype: world cuts OK\n";
 
   TestRootCutExample();
   cout << "alpha_mu_prototype: root cut toy search OK\n";
