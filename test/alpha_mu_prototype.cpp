@@ -537,6 +537,108 @@ namespace
   };
 
 
+  enum Seat
+  {
+    SEAT_NORTH = 0,
+    SEAT_EAST = 1,
+    SEAT_SOUTH = 2,
+    SEAT_WEST = 3
+  };
+
+
+  enum SuitIndex
+  {
+    SUIT_SPADES = 0,
+    SUIT_HEARTS = 1,
+    SUIT_DIAMONDS = 2,
+    SUIT_CLUBS = 3
+  };
+
+
+  enum ConstraintKind
+  {
+    CONSTRAINT_HAS_CARD = 0,
+    CONSTRAINT_VOID_SUIT = 1,
+    CONSTRAINT_MIN_LENGTH = 2,
+    CONSTRAINT_MAX_LENGTH = 3
+  };
+
+
+  struct ParsedWorld
+  {
+    string suits[4][4];
+  };
+
+
+  struct WorldConstraint
+  {
+    ConstraintKind kind;
+    int player;
+    int suit;
+    char rank;
+    int count;
+
+    WorldConstraint() :
+      kind(CONSTRAINT_HAS_CARD),
+      player(0),
+      suit(0),
+      rank('0'),
+      count(0)
+    {
+    }
+
+    static WorldConstraint HasCard(
+      const int playerArg,
+      const int suitArg,
+      const char rankArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_HAS_CARD;
+      c.player = playerArg;
+      c.suit = suitArg;
+      c.rank = rankArg;
+      return c;
+    }
+
+    static WorldConstraint VoidSuit(
+      const int playerArg,
+      const int suitArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_VOID_SUIT;
+      c.player = playerArg;
+      c.suit = suitArg;
+      return c;
+    }
+
+    static WorldConstraint MinLength(
+      const int playerArg,
+      const int suitArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_MIN_LENGTH;
+      c.player = playerArg;
+      c.suit = suitArg;
+      c.count = countArg;
+      return c;
+    }
+
+    static WorldConstraint MaxLength(
+      const int playerArg,
+      const int suitArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_MAX_LENGTH;
+      c.player = playerArg;
+      c.suit = suitArg;
+      c.count = countArg;
+      return c;
+    }
+  };
+
+
   struct DDSLeafEvalResult
   {
     OutcomeVector leaf;
@@ -584,6 +686,145 @@ namespace
         return true;
     }
     return false;
+  }
+
+
+  static int SeatIndex(const char seat)
+  {
+    switch (seat)
+    {
+      case 'N': return SEAT_NORTH;
+      case 'E': return SEAT_EAST;
+      case 'S': return SEAT_SOUTH;
+      case 'W': return SEAT_WEST;
+      default:
+        throw runtime_error("Unknown seat in PBN world");
+    }
+  }
+
+
+  static vector<string> SplitString(
+    const string& text,
+    const char delimiter,
+    const bool keepEmpty)
+  {
+    vector<string> parts;
+    string current;
+    for (unsigned i = 0; i < text.size(); i++)
+    {
+      if (text[i] == delimiter)
+      {
+        if (keepEmpty || ! current.empty())
+          parts.push_back(current);
+        current.clear();
+      }
+      else
+        current.push_back(text[i]);
+    }
+
+    if (keepEmpty || ! current.empty())
+      parts.push_back(current);
+    return parts;
+  }
+
+
+  static ParsedWorld ParsePBNWorld(const string& pbn)
+  {
+    const size_t colon = pbn.find(':');
+    if (colon == string::npos || colon == 0)
+      throw runtime_error("Bad PBN world string");
+
+    const int startSeat = SeatIndex(pbn[0]);
+    const vector<string> hands = SplitString(pbn.substr(colon + 1), ' ', false);
+    if (hands.size() != 4)
+      throw runtime_error("PBN world should contain four hands");
+
+    ParsedWorld world;
+    for (unsigned h = 0; h < 4; h++)
+    {
+      const vector<string> suits = SplitString(hands[h], '.', true);
+      if (suits.size() != 4)
+        throw runtime_error("PBN hand should contain four suits");
+
+      const int seat = (startSeat + static_cast<int>(h)) % 4;
+      for (unsigned s = 0; s < 4; s++)
+        world.suits[seat][s] = suits[s];
+    }
+
+    return world;
+  }
+
+
+  static bool WorldHasCard(
+    const ParsedWorld& world,
+    const int player,
+    const int suit,
+    const char rank)
+  {
+    return world.suits[player][suit].find(rank) != string::npos;
+  }
+
+
+  static int WorldSuitLength(
+    const ParsedWorld& world,
+    const int player,
+    const int suit)
+  {
+    return static_cast<int>(world.suits[player][suit].size());
+  }
+
+
+  static bool WorldMatchesConstraint(
+    const ParsedWorld& world,
+    const WorldConstraint& constraint)
+  {
+    switch (constraint.kind)
+    {
+      case CONSTRAINT_HAS_CARD:
+        return WorldHasCard(world, constraint.player, constraint.suit,
+          constraint.rank);
+
+      case CONSTRAINT_VOID_SUIT:
+        return WorldSuitLength(world, constraint.player, constraint.suit) == 0;
+
+      case CONSTRAINT_MIN_LENGTH:
+        return WorldSuitLength(world, constraint.player, constraint.suit) >=
+          constraint.count;
+
+      case CONSTRAINT_MAX_LENGTH:
+        return WorldSuitLength(world, constraint.player, constraint.suit) <=
+          constraint.count;
+
+      default:
+        throw runtime_error("Unknown world constraint kind");
+    }
+  }
+
+
+  static WorldMask GeneratePossibleWorlds(
+    const vector<ParsedWorld>& worlds,
+    const vector<WorldConstraint>& constraints)
+  {
+    WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
+    mask.bits = 0ULL;
+
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      bool ok = true;
+      for (unsigned j = 0; j < constraints.size(); j++)
+      {
+        if (! WorldMatchesConstraint(worlds[i], constraints[j]))
+        {
+          ok = false;
+          break;
+        }
+      }
+
+      if (ok)
+        mask.bits |= (1ULL << i);
+    }
+
+    return mask;
   }
 
 
@@ -1310,6 +1551,51 @@ namespace
   }
 
 
+  static void TestPossibleWorldGeneration()
+  {
+    vector<string> pbns;
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 765.8765.JT9.876 JT98.AKQ.432.AKQ 43.432.8765.5432");
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 7654.876.JT9.876 JT98.AKQ.432.AKQ 3.5432.8765.5432");
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 76543.876.JT.876 JT98.AKQ.432.AKQ .5432.98765.5432");
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 76543..JT987.876 JT98.AKQ.432.AKQ .8765432.65.5432");
+
+    vector<ParsedWorld> worlds;
+    for (unsigned i = 0; i < pbns.size(); i++)
+      worlds.push_back(ParsePBNWorld(pbns[i]));
+
+    Check(WorldHasCard(worlds[0], SEAT_NORTH, SUIT_SPADES, 'A'),
+      "possible-world parser should preserve known declarer cards");
+    Check(WorldSuitLength(worlds[3], SEAT_WEST, SUIT_SPADES) == 0,
+      "possible-world parser should preserve empty suits");
+
+    vector<WorldConstraint> biddingLike;
+    biddingLike.push_back(WorldConstraint::MinLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    const WorldMask biddingMask = GeneratePossibleWorlds(worlds, biddingLike);
+    Check(biddingMask == WorldMask(4, 0xCU),
+      "bidding-style spade-length constraint should keep the last two worlds");
+
+    vector<WorldConstraint> playLike;
+    playLike.push_back(WorldConstraint::VoidSuit(SEAT_WEST, SUIT_SPADES));
+    playLike.push_back(WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
+    const WorldMask playMask = GeneratePossibleWorlds(worlds, playLike);
+    Check(playMask == WorldMask(4, 0x8U),
+      "play-style void and card-location constraints should isolate the final world");
+
+    vector<WorldConstraint> combined;
+    combined.push_back(WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 5));
+    combined.push_back(WorldConstraint::MaxLength(SEAT_EAST, SUIT_HEARTS, 0));
+    combined.push_back(WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
+    const WorldMask combinedMask = GeneratePossibleWorlds(worlds, combined);
+    Check(combinedMask == WorldMask(4, 0x8U),
+      "combined bidding/play constraints should identify a single possible world");
+  }
+
+
   static void TestEmptyEntryInteriorFronts()
   {
     ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
@@ -1540,6 +1826,9 @@ int main()
 
   TestWorldCuts();
   cout << "alpha_mu_prototype: world cuts OK\n";
+
+  TestPossibleWorldGeneration();
+  cout << "alpha_mu_prototype: possible-world generation OK\n";
 
   TestEmptyEntryInteriorFronts();
   cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";

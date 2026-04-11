@@ -63,11 +63,11 @@ This is not yet a full bridge alpha-mu engine.
 
 In particular, it does not yet include:
 
-- possible-world generation from bidding or play constraints,
+- full-scale possible-world generation from complete bidding or play histories,
 - bridge move generation inside the alpha-mu search itself,
 - a Pareto-front transposition table.
 
-Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, and DDS leaf parallelization are now present in the prototype.
+Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, and a first constraint-based possible-world generator are now present in the prototype.
 
-The next planned non-performance step is possible-world generation from bidding or play constraints.
+The next planned non-performance step is bridge move generation inside the alpha-mu search itself.
 

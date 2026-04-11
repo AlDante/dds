@@ -209,6 +209,7 @@ The first minimal prototype now exists as a separate test component under `test/
 It currently provides:
 
 - world-mask handling,
+- a first possible-world generator from simple bidding/play-style constraints over a candidate pool,
 - outcome vectors,
 - Pareto-front reduction,
 - Max-node union and Min-node product/min operations,
