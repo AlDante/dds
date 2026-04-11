@@ -213,6 +213,7 @@ It currently provides:
 - Pareto-front reduction,
 - Max-node union and Min-node product/min operations,
 - toy-search validation of non-locality, early cut, and root cut,
+- useful-world maintenance in the prototype search,
 - a DDS-backed leaf-evaluation demo over `hands/alpha_mu_play.txt`.
 
 It is intentionally not yet a full bridge alpha-mu engine.

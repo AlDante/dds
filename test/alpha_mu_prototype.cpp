@@ -86,6 +86,16 @@ namespace
       return WorldMask(count, bits | other.bits);
     }
 
+    WorldMask Intersection(const WorldMask& other) const
+    {
+      return WorldMask(count, bits & other.bits);
+    }
+
+    bool Empty() const
+    {
+      return bits == 0ULL;
+    }
+
     string ToString() const
     {
       ostringstream oss;
@@ -174,6 +184,17 @@ namespace
           result.values[i] = other.values[i];
       }
 
+      return result;
+    }
+
+    OutcomeVector RestrictToUseful(const WorldMask& useful) const
+    {
+      OutcomeVector result(*this);
+      for (unsigned i = 0; i < values.size(); i++)
+      {
+        if (valid.Has(i) && ! useful.Has(i))
+          result.values[i] = 0;
+      }
       return result;
     }
 
@@ -279,6 +300,36 @@ namespace
       return result;
     }
 
+    WorldMask UsefulWorlds() const
+    {
+      WorldMask useful = WorldMask::None(worldCount);
+      for (unsigned i = 0; i < vectors.size(); i++)
+      {
+        for (unsigned w = 0; w < vectors[i].values.size(); w++)
+        {
+          if (vectors[i].valid.Has(w) && vectors[i].values[w] > 0)
+            useful.bits |= (1ULL << w);
+        }
+      }
+      return useful;
+    }
+
+    WorldMask ValidWorlds() const
+    {
+      WorldMask valid = WorldMask::None(worldCount);
+      for (unsigned i = 0; i < vectors.size(); i++)
+        valid = valid.Union(vectors[i].valid);
+      return valid;
+    }
+
+    ParetoFront RestrictToUseful(const WorldMask& useful) const
+    {
+      ParetoFront result(worldCount);
+      for (unsigned i = 0; i < vectors.size(); i++)
+        result.Insert(vectors[i].RestrictToUseful(useful));
+      return result;
+    }
+
     string ToString() const
     {
       ostringstream oss;
@@ -328,12 +379,16 @@ namespace
     int nodesVisited;
     int earlyCuts;
     int rootCuts;
+    int usefulWorldUpdates;
+    int leafWorldEvaluations;
     vector<string> visitOrder;
 
     SearchStats() :
       nodesVisited(0),
       earlyCuts(0),
       rootCuts(0),
+      usefulWorldUpdates(0),
+      leafWorldEvaluations(0),
       visitOrder()
     {
     }
@@ -488,6 +543,7 @@ namespace
   static ParetoFront SearchToy(
     const ToyNode& node,
     const int maxMoves,
+    const WorldMask& usefulWorlds,
     const ParetoFront * upperFront,
     const bool isRoot,
     const double previousRootMu,
@@ -498,18 +554,25 @@ namespace
     stats.visitOrder.push_back(node.name);
 
     if (node.type == TOY_LEAF || maxMoves == 0)
-      return node.leafFront;
+    {
+      const WorldMask evaluated = node.leafFront.ValidWorlds().Intersection(
+        usefulWorlds);
+      stats.leafWorldEvaluations += static_cast<int>(evaluated.PopCount());
+      return node.leafFront.RestrictToUseful(usefulWorlds);
+    }
 
     if (node.type == TOY_MIN)
     {
       ParetoFront mini(node.leafFront.worldCount);
       bool initialized = false;
+      WorldMask currentUseful = usefulWorlds;
 
       for (unsigned i = 0; i < node.children.size(); i++)
       {
         const ParetoFront f = SearchToy(
           * node.children[i],
           maxMoves,
+          currentUseful,
           NULL,
           false,
           previousRootMu,
@@ -523,6 +586,12 @@ namespace
         }
         else
           mini = ParetoFront::MinProduct(mini, f);
+
+        const WorldMask nextUseful = currentUseful.Intersection(
+          mini.UsefulWorlds());
+        if (! (nextUseful == currentUseful))
+          stats.usefulWorldUpdates++;
+        currentUseful = nextUseful;
 
         if (upperFront != NULL && upperFront->DominatesFront(mini))
         {
@@ -540,6 +609,7 @@ namespace
       const ParetoFront f = SearchToy(
         * node.children[i],
         maxMoves - 1,
+        usefulWorlds,
         &front,
         false,
         previousRootMu,
@@ -575,6 +645,7 @@ namespace
       const ParetoFront front = SearchToy(
         root,
         depth,
+        WorldMask::All(root.leafFront.worldCount),
         NULL,
         true,
         previousMu,
@@ -697,7 +768,8 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
-    const ParetoFront front = SearchToy(a, 2, NULL, true, -1.0, stats,
+    const ParetoFront front = SearchToy(a, 2, WorldMask::All(3), NULL, true,
+      -1.0, stats,
       rootCutTriggered);
 
     Check(front.vectors.size() == 1,
@@ -735,7 +807,8 @@ namespace
 
     SearchStats stats;
     bool rootCutTriggered = false;
-    const ParetoFront front = SearchToy(root, 2, NULL, true, -1.0, stats,
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3), NULL,
+      true, -1.0, stats,
       rootCutTriggered);
 
     Check(front.vectors.size() == 2,
@@ -747,6 +820,34 @@ namespace
       "early cut should stop before visiting the dominated continuation");
     Check(! rootCutTriggered,
       "early-cut example should not trigger a root cut");
+  }
+
+
+  static void TestUsefulWorldMaintenance()
+  {
+    ToyNode minFirst("minFirst", TOY_LEAF, 3);
+    minFirst.leafFront = MakeFront(3, vector<string>(1, "101"));
+
+    ToyNode minSecond("minSecond", TOY_LEAF, 3);
+    minSecond.leafFront = MakeFront(3, vector<string>(1, "010"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    candidateMin.children.push_back(&minFirst);
+    candidateMin.children.push_back(&minSecond);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    const ParetoFront front = SearchToy(candidateMin, 2, WorldMask::All(3),
+      NULL, false, -1.0, stats, rootCutTriggered);
+
+    Check(FrontContains(front, MakeBinaryOutcome("000")),
+      "useful-world example should reduce the Min continuation to [0 0 0]");
+    Check(stats.usefulWorldUpdates == 2,
+      "useful-world example should record two useful-world updates at the Min node");
+    Check(stats.leafWorldEvaluations == 5,
+      "useful-world example should evaluate only 5 leaf worlds instead of 6");
+    Check(! rootCutTriggered,
+      "useful-world example should not trigger a root cut");
   }
 
 
@@ -826,6 +927,9 @@ int main()
 
   TestEarlyCutExample();
   cout << "alpha_mu_prototype: early cut toy search OK\n";
+
+  TestUsefulWorldMaintenance();
+  cout << "alpha_mu_prototype: useful-world maintenance OK\n";
 
   TestRootCutExample();
   cout << "alpha_mu_prototype: root cut toy search OK\n";

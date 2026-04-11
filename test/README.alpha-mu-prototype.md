@@ -28,8 +28,9 @@ The runner performs five checks:
 1. Pareto-front insertion and domination reduction
 2. the paper's non-locality-style toy example
 3. an early-cut toy example
-4. a root-cut toy example with iterative deepening
-5. a DDS leaf-evaluation demo over `hands/alpha_mu_play.txt`
+4. useful-world maintenance at a Min node
+5. a root-cut toy example with iterative deepening
+6. a DDS leaf-evaluation demo over `hands/alpha_mu_play.txt`
 
 ## Build
 
@@ -55,11 +56,12 @@ In particular, it does not yet include:
 
 - possible-world generation from bidding or play constraints,
 - bridge move generation inside the alpha-mu search itself,
-- useful-world maintenance,
 - world cuts,
 - cut on win,
 - deep alpha cuts,
 - a Pareto-front transposition table.
 
-Those remain future implementation steps.
+Useful-world maintenance is now present in the prototype.
+
+The next planned optimization step is world cuts.
 
