@@ -17,6 +17,7 @@ The first root refactor is already complete, so the next cycle should focus on *
 
 Re-run the existing checks before making another solver change:
 
+- `python3 test/alpha_mu_benchmark.py`
 - `test/build/regression_api`
 - `test/build/dtest -f ../hands/list10.txt -s solve`
 - at least one repeat-solve-oriented workload that exercises `SolveSameBoard()` indirectly
@@ -57,6 +58,8 @@ Use a benchmark set that reflects real DDS usage rather than only synthetic tigh
 
 Recommended starter set:
 
+- automated baseline runner:
+  - `python3 test/alpha_mu_benchmark.py`
 - correctness smoke set:
   - `hands/list10.txt`
   - `hands/thomas1.txt`
@@ -68,6 +71,8 @@ Recommended starter set:
   - workloads that naturally reuse the same or similar deals
 - play-analysis behavior:
   - at least one sequence that exercises analysis after the opening lead
+
+At the moment, the automated runner gives immediate measurement coverage for `SolveBoardInternal()` and `SolveSameBoard()`. A dedicated play-analysis workload still needs to be added to observe `AnalyseLaterBoard()` regularly.
 
 For each benchmark, capture:
 

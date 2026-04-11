@@ -73,9 +73,68 @@ typedef bool (* RootSearchFn)(
   const int depth,
   ThreadData * thrp);
 
+enum RootSearchContext
+{
+  ROOT_SEARCH_SOLVEBOARD = 0,
+  ROOT_SEARCH_SAMEBOARD = 1,
+  ROOT_SEARCH_ANALYSE_LATER = 2
+};
+
+
+#ifdef DDS_ALPHA_MU_STATS
+static const char * RootSearchContextName(
+  const RootSearchContext context)
+{
+  if (context == ROOT_SEARCH_SOLVEBOARD)
+    return "SolveBoardInternal";
+  else if (context == ROOT_SEARCH_SAMEBOARD)
+    return "SolveSameBoard";
+  else
+    return "AnalyseLaterBoard";
+}
+
+
+static const char * RootGuessRelation(
+  const int initialGuess,
+  const int finalScore)
+{
+  if (initialGuess < finalScore)
+    return "below";
+  else if (initialGuess > finalScore)
+    return "above";
+  else
+    return "exact";
+}
+
+
+static void ReportRootSearchStats(
+  const RootSearchContext context,
+  const int initialGuess,
+  const int initialLowerbound,
+  const int initialUpperbound,
+  const int finalScore,
+  const int probes)
+{
+  ostringstream oss;
+
+  oss << "ALPHA_MU root"
+      << " context=" << RootSearchContextName(context)
+      << " probes=" << probes
+      << " initial_guess=" << initialGuess
+      << " initial_bounds=[" << initialLowerbound << ","
+      << initialUpperbound << "]"
+      << " final_score=" << finalScore
+      << " guess_relation=" << RootGuessRelation(initialGuess, finalScore)
+      << "\n";
+
+  cout << oss.str();
+}
+#endif
+
 
 static int SearchExactScoreRoot(
   ThreadData * thrp,
+  const RootSearchContext context,
   RootSearchFn searchFn,
   pos * rootPos,
   const int iniDepth,
@@ -86,8 +145,21 @@ static int SearchExactScoreRoot(
 {
   moveType mv = {0, 0, 0, 0};
 
+#ifdef DDS_ALPHA_MU_STATS
+  const int initialGuess = guess;
+  const int initialLowerbound = lowerbound;
+  const int initialUpperbound = upperbound;
+  int probes = 0;
+#else
+  (void) context;
+#endif
+
   do
   {
+#ifdef DDS_ALPHA_MU_STATS
+    probes++;
+#endif
+
     ResetBestMoves(thrp);
 
     TIMER_START(TIMER_NO_AB, iniDepth);
@@ -117,6 +189,16 @@ static int SearchExactScoreRoot(
 
   if (bestMoveP != NULL)
     *bestMoveP = mv;
+
+#ifdef DDS_ALPHA_MU_STATS
+  ReportRootSearchStats(
+    context,
+    initialGuess,
+    initialLowerbound,
+    initialUpperbound,
+    lowerbound,
+    probes);
+#endif
 
   return lowerbound;
 }
@@ -499,6 +581,7 @@ int SolveBoardInternal(
     int lowerbound = 0;
     lowerbound = SearchExactScoreRoot(
                    thrp,
+                   ROOT_SEARCH_SOLVEBOARD,
                    AB_ptr_list[handRelFirst],
                    &thrp->lookAheadPos,
                    iniDepth,
@@ -740,6 +823,7 @@ int SolveSameBoard(
 
   lowerbound = SearchExactScoreRoot(
                  thrp,
+                 ROOT_SEARCH_SAMEBOARD,
                  ABsearch,
                  &thrp->lookAheadPos,
                  iniDepth,
@@ -887,6 +971,7 @@ int AnalyseLaterBoard(
 
   lowerbound = SearchExactScoreRoot(
                  thrp,
+                 ROOT_SEARCH_ANALYSE_LATER,
                  AB_ptr_trace_list[handRelFirst],
                  &thrp->lookAheadPos,
                  iniDepth,
