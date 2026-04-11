@@ -23,8 +23,13 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 - `regression_api` on `hands/list10.txt` and `hands/thomas1.txt`
 - `dtest -f ../hands/list10.txt -s solve`
 - `dtest -f ../hands/list100.txt -s solve`
+- `play_analysis_benchmark`
 
-In the current workload mix, the `regression_api` run is the main source of `ALPHA_MU root ...` measurements. The `dtest` runs are still valuable, but they primarily provide throughput timing for representative solve batches.
+In the current workload mix:
+
+- `regression_api` is the main source of `SolveBoardInternal` and `SolveSameBoard` measurements,
+- `play_analysis_benchmark` is the dedicated source of `AnalyseLaterBoard` measurements,
+- the `dtest` runs are still valuable, but they primarily provide throughput timing for representative solve batches.
 
 ## Extra workloads
 

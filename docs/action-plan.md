@@ -72,7 +72,11 @@ Recommended starter set:
 - play-analysis behavior:
   - at least one sequence that exercises analysis after the opening lead
 
-At the moment, the automated runner gives immediate measurement coverage for `SolveBoardInternal()` and `SolveSameBoard()`. A dedicated play-analysis workload still needs to be added to observe `AnalyseLaterBoard()` regularly.
+The automated runner now gives immediate measurement coverage for:
+
+- `SolveBoardInternal()`,
+- `SolveSameBoard()`,
+- `AnalyseLaterBoard()` through the dedicated `play_analysis_benchmark` workload.
 
 For each benchmark, capture:
 

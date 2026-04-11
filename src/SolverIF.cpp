@@ -817,7 +817,10 @@ int SolveSameBoard(
 
   thrp->moves.Reinit(trick, dl.first);
 
-  int guess = hint;
+  // The repeat-solve hint is exact or slightly low more often than high
+  // on the current alpha-mu benchmark set, so bias the starting probe up
+  // by one trick while staying within the legal range.
+  int guess = (hint < 13 ? hint + 1 : 13);
   int lowerbound = 0;
   int upperbound = 13;
 

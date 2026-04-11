@@ -46,6 +46,12 @@ DEFAULT_WORKLOADS = [
         "command": ["./build/dtest", "-f", "../hands/list100.txt", "-s", "solve"],
         "requires_dyld": True,
     },
+    {
+        "name": "play_analysis_benchmark",
+        "cwd": "test",
+        "command": ["./build/play_analysis_benchmark"],
+        "requires_dyld": True,
+    },
 ]
 
 FULL_WORKLOADS = [
@@ -166,7 +172,14 @@ def build_commands(root: Path, restore_normal_build: bool) -> list[tuple[str, li
         ),
         (
             "build_test_binaries",
-            ["make", "-f", "Makefiles/Makefile_Mac_clang", "regression_api", "dtest"],
+            [
+                "make",
+                "-f",
+                "Makefiles/Makefile_Mac_clang",
+                "regression_api",
+                "dtest",
+                "play_analysis_benchmark",
+            ],
             test_dir,
             None,
         ),
@@ -223,8 +236,8 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append("## Notes")
     lines.append("")
     lines.append("- `SolveSameBoard` observations come from repeat-solve paths exercised by the existing harnesses.")
-    lines.append("- In the current default mix, `regression_api` is the main source of `ALPHA_MU root ...` measurements, while `dtest` provides throughput timing.")
-    lines.append("- If `AnalyseLaterBoard` does not appear, add a dedicated play-analysis workload next.")
+    lines.append("- In the current default mix, `regression_api` is the main source of `SolveBoardInternal` and `SolveSameBoard` measurements, while `dtest` provides throughput timing.")
+    lines.append("- `play_analysis_benchmark` is the dedicated source of `AnalyseLaterBoard` measurements.")
     lines.append("- The benchmark runner restores a normal non-instrumented library build by default.")
     lines.append("")
     return "\n".join(lines)
