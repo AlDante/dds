@@ -137,6 +137,8 @@ The prototype also now includes optimistic completion of impossible worlds for c
 
 The prototype also now includes a first possible-world generator from simple bidding-style and play-style constraints over a candidate world pool.
 
+The prototype also now includes a first bridge move generator over those possible worlds, including legal-move union and world elimination after a play.
+
 ## Step 7 — keep DDS-only work on a separate branch of the plan
 
 DDS-side follow-up work is still reasonable, but it is now a separate support track.

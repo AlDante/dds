@@ -570,6 +570,54 @@ namespace
   };
 
 
+  struct BridgeMove
+  {
+    int suit;
+    char rank;
+
+    BridgeMove() : suit(0), rank('0') {}
+
+    BridgeMove(
+      const int suitArg,
+      const char rankArg) :
+      suit(suitArg),
+      rank(rankArg)
+    {
+    }
+
+    bool operator==(const BridgeMove& other) const
+    {
+      return suit == other.suit && rank == other.rank;
+    }
+  };
+
+
+  struct BridgeState
+  {
+    vector<ParsedWorld> worlds;
+    WorldMask possibleWorlds;
+    int playerToMove;
+    int leadSuit;
+    vector<BridgeMove> currentTrick;
+
+    BridgeState() :
+      worlds(),
+      possibleWorlds(),
+      playerToMove(0),
+      leadSuit(-1),
+      currentTrick()
+    {
+    }
+  };
+
+
+  struct BridgeChild
+  {
+    BridgeMove move;
+    BridgeState state;
+  };
+
+
   struct WorldConstraint
   {
     ConstraintKind kind;
@@ -771,6 +819,164 @@ namespace
     const int suit)
   {
     return static_cast<int>(world.suits[player][suit].size());
+  }
+
+
+  static int RankOrder(const char rank)
+  {
+    const string order = "23456789TJQKA";
+    const size_t pos = order.find(rank);
+    if (pos == string::npos)
+      throw runtime_error("Unknown card rank");
+    return static_cast<int>(pos);
+  }
+
+
+  static bool BridgeMoveLess(
+    const BridgeMove& left,
+    const BridgeMove& right)
+  {
+    if (left.suit != right.suit)
+      return left.suit < right.suit;
+    return RankOrder(left.rank) < RankOrder(right.rank);
+  }
+
+
+  static bool WorldHasLegalSuit(
+    const ParsedWorld& world,
+    const int player,
+    const int leadSuit)
+  {
+    return leadSuit >= 0 && WorldSuitLength(world, player, leadSuit) > 0;
+  }
+
+
+  static vector<BridgeMove> LegalMovesInWorld(
+    const ParsedWorld& world,
+    const int player,
+    const int leadSuit)
+  {
+    vector<BridgeMove> moves;
+
+    if (WorldHasLegalSuit(world, player, leadSuit))
+    {
+      const string& cards = world.suits[player][leadSuit];
+      for (unsigned i = 0; i < cards.size(); i++)
+        moves.push_back(BridgeMove(leadSuit, cards[i]));
+      return moves;
+    }
+
+    for (int suit = 0; suit < 4; suit++)
+    {
+      const string& cards = world.suits[player][suit];
+      for (unsigned i = 0; i < cards.size(); i++)
+        moves.push_back(BridgeMove(suit, cards[i]));
+    }
+    return moves;
+  }
+
+
+  static bool ContainsMove(
+    const vector<BridgeMove>& moves,
+    const BridgeMove& move)
+  {
+    for (unsigned i = 0; i < moves.size(); i++)
+    {
+      if (moves[i] == move)
+        return true;
+    }
+    return false;
+  }
+
+
+  static bool WorldCanPlayMove(
+    const ParsedWorld& world,
+    const int player,
+    const int leadSuit,
+    const BridgeMove& move)
+  {
+    return ContainsMove(LegalMovesInWorld(world, player, leadSuit), move);
+  }
+
+
+  static void RemoveCardFromWorld(
+    ParsedWorld& world,
+    const int player,
+    const BridgeMove& move)
+  {
+    string& cards = world.suits[player][move.suit];
+    const size_t pos = cards.find(move.rank);
+    if (pos == string::npos)
+      throw runtime_error("Tried to remove a card not held in world");
+    cards.erase(pos, 1);
+  }
+
+
+  static vector<BridgeMove> GenerateBridgeMoves(const BridgeState& state)
+  {
+    vector<BridgeMove> moves;
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      if (! state.possibleWorlds.Has(i))
+        continue;
+
+      const vector<BridgeMove> localMoves = LegalMovesInWorld(
+        state.worlds[i],
+        state.playerToMove,
+        state.leadSuit);
+      for (unsigned j = 0; j < localMoves.size(); j++)
+      {
+        if (! ContainsMove(moves, localMoves[j]))
+          moves.push_back(localMoves[j]);
+      }
+    }
+
+    sort(moves.begin(), moves.end(), BridgeMoveLess);
+    return moves;
+  }
+
+
+  static BridgeState PlayBridgeMove(
+    const BridgeState& state,
+    const BridgeMove& move)
+  {
+    BridgeState next(state);
+    next.possibleWorlds = WorldMask::None(state.possibleWorlds.count);
+
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      if (! state.possibleWorlds.Has(i))
+        continue;
+
+      if (! WorldCanPlayMove(state.worlds[i], state.playerToMove,
+            state.leadSuit, move))
+        continue;
+
+      next.possibleWorlds.bits |= (1ULL << i);
+      RemoveCardFromWorld(next.worlds[i], state.playerToMove, move);
+    }
+
+    next.currentTrick.push_back(move);
+    if (state.leadSuit < 0)
+      next.leadSuit = move.suit;
+
+    next.playerToMove = (state.playerToMove + 1) % 4;
+    return next;
+  }
+
+
+  static vector<BridgeChild> ExpandBridgeChildren(const BridgeState& state)
+  {
+    vector<BridgeChild> children;
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    for (unsigned i = 0; i < moves.size(); i++)
+    {
+      BridgeChild child;
+      child.move = moves[i];
+      child.state = PlayBridgeMove(state, moves[i]);
+      children.push_back(child);
+    }
+    return children;
   }
 
 
@@ -1596,6 +1802,47 @@ namespace
   }
 
 
+  static void TestBridgeMoveGeneration()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_EAST;
+    state.leadSuit = SUIT_DIAMONDS;
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+
+    state.worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543.876.JT.876 JT98.AKQ.432.AKQ .5432.98765.5432"));
+    state.worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543..JT987.876 JT98.AKQ.432.AKQ .8765432.65.5432"));
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(moves.size() == 5,
+      "bridge move generation should union legal diamond plays across possible worlds");
+    Check(moves[0] == BridgeMove(SUIT_DIAMONDS, '7'),
+      "bridge move generation should include the lowest legal diamond from the union");
+    Check(moves[4] == BridgeMove(SUIT_DIAMONDS, 'J'),
+      "bridge move generation should include the highest legal diamond from the union");
+
+    const BridgeState afterD8 = PlayBridgeMove(state,
+      BridgeMove(SUIT_DIAMONDS, '8'));
+    Check(afterD8.possibleWorlds == WorldMask(2, 0x2ULL),
+      "playing D8 should eliminate the world where East could not legally play that diamond");
+    Check(afterD8.playerToMove == SEAT_SOUTH,
+      "bridge move generation should advance turn order after a play");
+    Check(afterD8.leadSuit == SUIT_DIAMONDS,
+      "bridge move generation should preserve the established lead suit within the trick");
+    Check(! WorldHasCard(afterD8.worlds[1], SEAT_EAST, SUIT_DIAMONDS, '8'),
+      "bridge move application should remove the played card from surviving worlds");
+
+    const vector<BridgeChild> children = ExpandBridgeChildren(state);
+    Check(children.size() == moves.size(),
+      "bridge child expansion should create one child per legal bridge move");
+    Check(children[1].move == BridgeMove(SUIT_DIAMONDS, '8'),
+      "bridge child expansion should preserve move ordering");
+    Check(children[1].state.possibleWorlds == WorldMask(2, 0x2ULL),
+      "bridge child expansion should carry the filtered possible-world mask into the child state");
+  }
+
+
   static void TestEmptyEntryInteriorFronts()
   {
     ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
@@ -1829,6 +2076,9 @@ int main()
 
   TestPossibleWorldGeneration();
   cout << "alpha_mu_prototype: possible-world generation OK\n";
+
+  TestBridgeMoveGeneration();
+  cout << "alpha_mu_prototype: bridge move generation OK\n";
 
   TestEmptyEntryInteriorFronts();
   cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";
