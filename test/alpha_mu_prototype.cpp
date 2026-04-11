@@ -330,6 +330,28 @@ namespace
       return result;
     }
 
+    bool WinsAll(const WorldMask& useful) const
+    {
+      for (unsigned i = 0; i < vectors.size(); i++)
+      {
+        bool wins = true;
+        for (unsigned w = 0; w < useful.count; w++)
+        {
+          if (useful.Has(w) &&
+              (! vectors[i].valid.Has(w) || vectors[i].values[w] <= 0))
+          {
+            wins = false;
+            break;
+          }
+        }
+
+        if (wins)
+          return true;
+      }
+
+      return false;
+    }
+
     string ToString() const
     {
       ostringstream oss;
@@ -379,6 +401,7 @@ namespace
     int nodesVisited;
     int earlyCuts;
     int rootCuts;
+    int cutOnWinCuts;
     int usefulWorldUpdates;
     int leafWorldEvaluations;
     int worldCutsZero;
@@ -389,6 +412,7 @@ namespace
       nodesVisited(0),
       earlyCuts(0),
       rootCuts(0),
+      cutOnWinCuts(0),
       usefulWorldUpdates(0),
       leafWorldEvaluations(0),
       worldCutsZero(0),
@@ -727,6 +751,12 @@ namespace
 
       front = ParetoFront::MaxMerge(front, f);
 
+      if (f.WinsAll(usefulWorlds))
+      {
+        stats.cutOnWinCuts++;
+        break;
+      }
+
       if (isRoot && previousRootMu >= 0.0 &&
           fabs(front.Mu() - previousRootMu) < 1e-9)
       {
@@ -1044,6 +1074,35 @@ namespace
   }
 
 
+  static void TestCutOnWin()
+  {
+    ToyNode winningMove("winningMove", TOY_LEAF, 3);
+    winningMove.leafFront = MakeFront(3, vector<string>(1, "111"));
+
+    ToyNode skippedSibling("skippedSibling", TOY_LEAF, 3);
+    skippedSibling.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    root.children.push_back(&winningMove);
+    root.children.push_back(&skippedSibling);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    const ParetoFront front = SearchToy(root, 1, WorldMask::All(3), NULL,
+      true, -1.0, stats, rootCutTriggered);
+
+    Check(stats.cutOnWinCuts == 1,
+      "cut-on-win example should trigger exactly one cut on win");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("skippedSibling")) == stats.visitOrder.end(),
+      "cut on win should stop before searching the remaining sibling move");
+    Check(FrontContains(front, MakeBinaryOutcome("111")),
+      "cut-on-win example should keep the fully winning move");
+    Check(! rootCutTriggered,
+      "cut-on-win example should not be reported as a root cut");
+  }
+
+
   static void TestDDSLeafDemo()
   {
     HandFileData data;
@@ -1097,6 +1156,9 @@ int main()
 
   TestWorldCuts();
   cout << "alpha_mu_prototype: world cuts OK\n";
+
+  TestCutOnWin();
+  cout << "alpha_mu_prototype: cut on win OK\n";
 
   TestRootCutExample();
   cout << "alpha_mu_prototype: root cut toy search OK\n";

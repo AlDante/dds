@@ -125,6 +125,8 @@ The first of these optimization-paper steps is now present in the prototype: use
 
 The second optimization-paper step is also now present in the prototype: world cuts.
 
+The third optimization-paper step is also now present in the prototype: cut on win.
+
 ## Step 7 — keep DDS-only work on a separate branch of the plan
 
 DDS-side follow-up work is still reasonable, but it is now a separate support track.

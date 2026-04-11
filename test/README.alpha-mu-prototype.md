@@ -23,15 +23,16 @@ It is meant to validate the core paper semantics before deeper optimization work
 
 ## What it checks
 
-The runner performs five checks:
+The runner performs these checks:
 
 1. Pareto-front insertion and domination reduction
 2. the paper's non-locality-style toy example
 3. an early-cut toy example
 4. useful-world maintenance at a Min node
 5. world cuts for zero and single useful worlds
-6. a root-cut toy example with iterative deepening
-7. a DDS leaf-evaluation demo over `hands/alpha_mu_play.txt`
+6. cut on win at a Max node
+7. a root-cut toy example with iterative deepening
+8. a DDS leaf-evaluation demo over `hands/alpha_mu_play.txt`
 
 ## Build
 
@@ -57,11 +58,11 @@ In particular, it does not yet include:
 
 - possible-world generation from bidding or play constraints,
 - bridge move generation inside the alpha-mu search itself,
-- cut on win,
+- empty-entry handling for interior fronts,
 - deep alpha cuts,
 - a Pareto-front transposition table.
 
-Useful-world maintenance and world cuts are now present in the prototype.
+Useful-world maintenance, world cuts, and cut on win are now present in the prototype.
 
-The next planned optimization step is cut on win.
+The next planned optimization step is empty-entry handling for interior fronts.
 
