@@ -1238,8 +1238,14 @@ namespace
       memset(&fut, 0, sizeof(fut));
 
       const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
-      const int ret = SolveBoardPBN(deal, -1, 1, 0, &fut, 0);
-      CheckDDS(ret, "SolveBoardPBN bridge DDS leaf");
+      const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut, 0);
+      ostringstream ddsTag;
+      ddsTag << "SolveBoardPBN bridge DDS leaf"
+             << " world=" << worldIndex
+             << " first=" << deal.first
+             << " trickSize=" << state.currentTrick.size()
+             << " remain=\"" << deal.remainCards << "\"";
+      CheckDDS(ret, ddsTag.str());
 
       const int best = BestScore(fut);
       const int tricksRemaining = RemainingTricksInWorld(state,
@@ -1812,7 +1818,7 @@ namespace
     memset(&fut, 0, sizeof(fut));
 
     const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
-    const int ret = SolveBoardPBN(deal, -1, 1, 0, &fut, 0);
+    const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut, 0);
     CheckDDS(ret, "SolveBoardPBN exact bridge DDS score");
 
     const int best = BestScore(fut);
@@ -2432,6 +2438,16 @@ namespace
       "multi-world bridge DDS continuation should include the world-1 heart completion");
     Check(splitMoves[1] == BridgeMove(SUIT_HEARTS, 'A'),
       "multi-world bridge DDS continuation should include the world-0 heart completion");
+
+    const ParetoFront splitDirectLeaf = SearchBridgeState(splitState, 0);
+    OutcomeVector splitLeaf(2);
+    splitLeaf.valid = WorldMask(2, 0x3ULL);
+    splitLeaf.values[0] = 3;
+    splitLeaf.values[1] = 2;
+    Check(splitDirectLeaf.vectors.size() == 1,
+      "partial-trick bridge DDS leaf evaluation should collapse to one exact vector before any searched continuation");
+    Check(FrontContains(splitDirectLeaf, splitLeaf),
+      "partial-trick bridge DDS leaf evaluation should match the exact multi-world continuation trick counts across surviving worlds");
 
     const ParetoFront splitContinuation = SearchBridgeState(splitState, 2);
     OutcomeVector world0Only(2);

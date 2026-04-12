@@ -88,6 +88,7 @@ The targeted `bridge_dds` mode now checks:
 
 - direct DDS bridge-leaf evaluation on a real hand-file world,
 - one searched trick followed by DDS leaf handoff on that real world,
+- direct DDS bridge-leaf evaluation on a controlled multi-world partial-trick state,
 - and a controlled two-world continuation that preserves sparse exact-score fronts after a deeper searched bridge continuation.
 
 The next planned non-performance step is extending this bridge-search control from the current small multi-trick continuation model to larger bridge continuations and richer possible-world generation.
