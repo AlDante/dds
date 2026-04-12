@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from performance_log_graph import render_performance_log_graph
+
 
 DEFAULT_WORKLOADS = [
     {
@@ -296,7 +298,9 @@ def main() -> int:
     write_text(output_dir / "summary.md", markdown_summary(summary))
 
     if not args.no_log_update:
-        append_log_entry(root / "docs" / "performance-log.md", summary)
+        log_path = root / "docs" / "performance-log.md"
+        append_log_entry(log_path, summary)
+        render_performance_log_graph(log_path, root / "docs" / "performance-log.svg")
 
     print(f"Output directory: {output_dir}")
     for workload in workload_summaries:

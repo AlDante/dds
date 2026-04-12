@@ -4,6 +4,10 @@ This file records standardized post-change performance runs from `test/standard_
 
 Each entry links to a timestamped result bundle under `test/build/performance_runs/`.
 
+![Standardized performance trend graph](performance-log.svg)
+
+_The graph plots median elapsed seconds per workload on a logarithmic Y-axis so both long DDS regression runs and fast benchmark checks remain visible._
+
 ## 2026-04-12 10:10:11 — commit `2bec9d9` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-095932`
@@ -63,3 +67,18 @@ Each entry links to a timestamped result bundle under `test/build/performance_ru
 | `play_analysis_benchmark` | 0.106 | 0.106 | 0.106 | 0.106 |
 | `alpha_mu_prototype_default` | 0.249 | 0.249 | 0.249 | 0.249 |
 | `alpha_mu_prototype_bridge_dds` | 0.472 | 0.472 | 0.472 | 0.472 |
+
+## 2026-04-12 17:12:16 — commit `04290a6` (dirty)
+
+- Output bundle: `test/build/performance_runs/20260412-170734`
+- Platform: `macOS-26.4-arm64-arm-64bit`
+- Repeats per workload: `1`
+
+| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_smoke` | 227.501 | 227.501 | 227.501 | 227.501 |
+| `dtest_solve_list10` | 7.579 | 7.579 | 7.579 | 7.579 |
+| `dtest_solve_list100` | 2.874 | 2.874 | 2.874 | 2.874 |
+| `play_analysis_benchmark` | 0.208 | 0.208 | 0.208 | 0.208 |
+| `alpha_mu_prototype_default` | 0.341 | 0.341 | 0.341 | 0.341 |
+| `alpha_mu_prototype_bridge_dds` | 0.571 | 0.571 | 0.571 | 0.571 |
