@@ -639,15 +639,25 @@ namespace
     vector<ParsedWorld> worlds;
     WorldMask possibleWorlds;
     int playerToMove;
+    int maxSide;
+    int maxTricksWon;
+    int trumpSuit;
+    int trickLeader;
     int leadSuit;
     vector<BridgeMove> currentTrick;
+    vector<int> currentTrickPlayers;
 
     BridgeState() :
       worlds(),
       possibleWorlds(),
       playerToMove(0),
+      maxSide(0),
+      maxTricksWon(0),
+      trumpSuit(-1),
+      trickLeader(0),
       leadSuit(-1),
-      currentTrick()
+      currentTrick(),
+      currentTrickPlayers()
     {
     }
   };
@@ -884,6 +894,67 @@ namespace
   }
 
 
+  static int SeatSide(const int seat)
+  {
+    return (seat == SEAT_NORTH || seat == SEAT_SOUTH ? 0 : 1);
+  }
+
+
+  static unsigned WinningCardIndex(
+    const vector<BridgeMove>& trick,
+    const int leadSuit,
+    const int trumpSuit)
+  {
+    if (trick.empty())
+      throw runtime_error("WinningCardIndex called on empty trick");
+
+    unsigned best = 0;
+    for (unsigned i = 1; i < trick.size(); i++)
+    {
+      const bool bestTrump = (trumpSuit >= 0 && trick[best].suit == trumpSuit);
+      const bool candTrump = (trumpSuit >= 0 && trick[i].suit == trumpSuit);
+
+      if (candTrump && ! bestTrump)
+      {
+        best = i;
+        continue;
+      }
+      if (bestTrump && ! candTrump)
+        continue;
+
+      const int winningSuit = (bestTrump || candTrump ? trumpSuit : leadSuit);
+      if (trick[i].suit == winningSuit && trick[best].suit != winningSuit)
+      {
+        best = i;
+        continue;
+      }
+
+      if (trick[i].suit == trick[best].suit &&
+          RankOrder(trick[i].rank) > RankOrder(trick[best].rank))
+      {
+        best = i;
+      }
+    }
+
+    return best;
+  }
+
+
+  static int TrickWinner(
+    const BridgeState& state)
+  {
+    if (state.currentTrick.size() != 4 ||
+        state.currentTrickPlayers.size() != 4)
+    {
+      throw runtime_error("TrickWinner requires a complete 4-card trick");
+    }
+
+    const unsigned best = WinningCardIndex(state.currentTrick, state.leadSuit,
+      state.trumpSuit);
+    return state.currentTrickPlayers[best];
+  }
+
+
   static bool WorldHasLegalSuit(
     const ParsedWorld& world,
     const int player,
@@ -998,11 +1069,28 @@ namespace
       RemoveCardFromWorld(next.worlds[i], state.playerToMove, move);
     }
 
+    if (state.currentTrick.empty())
+      next.trickLeader = state.playerToMove;
+
     next.currentTrick.push_back(move);
+    next.currentTrickPlayers.push_back(state.playerToMove);
     if (state.leadSuit < 0)
       next.leadSuit = move.suit;
 
-    next.playerToMove = (state.playerToMove + 1) % 4;
+    if (next.currentTrick.size() == 4)
+    {
+      const int winner = TrickWinner(next);
+      if (SeatSide(winner) == next.maxSide)
+        next.maxTricksWon++;
+      next.currentTrick.clear();
+      next.currentTrickPlayers.clear();
+      next.leadSuit = -1;
+      next.playerToMove = winner;
+      next.trickLeader = winner;
+    }
+    else
+      next.playerToMove = (state.playerToMove + 1) % 4;
+
     return next;
   }
 
@@ -1019,6 +1107,65 @@ namespace
       children.push_back(child);
     }
     return children;
+  }
+
+
+  static ParetoFront MakeZeroFront(const unsigned worldCount);
+
+
+  static ParetoFront MakeBridgeLeafFront(const BridgeState& state)
+  {
+    ParetoFront front(state.possibleWorlds.count);
+    OutcomeVector vec(state.possibleWorlds.count);
+    vec.valid = state.possibleWorlds;
+    for (unsigned i = 0; i < vec.values.size(); i++)
+    {
+      if (vec.valid.Has(i))
+        vec.values[i] = (state.maxTricksWon > 0 ? 1 : 0);
+    }
+    front.Insert(vec);
+    return front;
+  }
+
+
+  static ParetoFront SearchBridgeState(
+    const BridgeState& state,
+    const int pliesRemaining)
+  {
+    if (state.possibleWorlds.Empty())
+      return MakeZeroFront(state.possibleWorlds.count);
+
+    if (pliesRemaining <= 0 || GenerateBridgeMoves(state).empty())
+      return MakeBridgeLeafFront(state);
+
+    const vector<BridgeChild> children = ExpandBridgeChildren(state);
+    if (SeatSide(state.playerToMove) == state.maxSide)
+    {
+      ParetoFront front(state.possibleWorlds.count);
+      for (unsigned i = 0; i < children.size(); i++)
+      {
+        front = ParetoFront::MaxMerge(front,
+          SearchBridgeState(children[i].state, pliesRemaining - 1));
+      }
+      return front;
+    }
+
+    ParetoFront front(state.possibleWorlds.count);
+    bool initialized = false;
+    for (unsigned i = 0; i < children.size(); i++)
+    {
+      const ParetoFront childFront = SearchBridgeState(
+        children[i].state,
+        pliesRemaining - 1);
+      if (! initialized)
+      {
+        front = childFront;
+        initialized = true;
+      }
+      else
+        front = ParetoFront::MinProduct(front, childFront);
+    }
+    return front;
   }
 
 
@@ -1994,6 +2141,47 @@ namespace
   }
 
 
+  static void TestBridgeSearchControl()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_NORTH;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+
+    state.worlds.push_back(ParsePBNWorld("N:A... K... 2... 3..."));
+    state.worlds.push_back(ParsePBNWorld("N:Q... K... A... 3..."));
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(moves.size() == 2,
+      "bridge search control should offer the union of North's possible opening leads");
+    Check(moves[0] == BridgeMove(SUIT_SPADES, 'Q'),
+      "bridge search control should order opening leads by rank");
+    Check(moves[1] == BridgeMove(SUIT_SPADES, 'A'),
+      "bridge search control should include the alternative opening lead");
+
+    BridgeState manual = PlayBridgeMove(state, BridgeMove(SUIT_SPADES, 'Q'));
+    manual = PlayBridgeMove(manual, BridgeMove(SUIT_SPADES, 'K'));
+    manual = PlayBridgeMove(manual, BridgeMove(SUIT_SPADES, 'A'));
+    manual = PlayBridgeMove(manual, BridgeMove(SUIT_SPADES, '3'));
+
+    Check(manual.currentTrick.empty(),
+      "bridge search control should clear the trick after the fourth card");
+    Check(manual.playerToMove == SEAT_SOUTH,
+      "bridge search control should advance to the trick winner after completion");
+    Check(manual.maxTricksWon == 1,
+      "bridge search control should count a won trick for the Max side");
+
+    const ParetoFront front = SearchBridgeState(state, 4);
+    Check(front.vectors.size() == 2,
+      "bridge search control should keep one sparse winning vector per viable opening lead");
+    Check(FrontContains(front, MakeBinaryOutcome("1x")),
+      "bridge search control should keep the lead that wins only in the first world");
+    Check(FrontContains(front, MakeBinaryOutcome("x1")),
+      "bridge search control should keep the lead that wins only in the second world");
+  }
+
+
   static void TestEmptyEntryInteriorFronts()
   {
     ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
@@ -2241,6 +2429,9 @@ int main()
 
   TestBridgeMoveGeneration();
   cout << "alpha_mu_prototype: bridge move generation OK\n";
+
+  TestBridgeSearchControl();
+  cout << "alpha_mu_prototype: bridge search control OK\n";
 
   TestEmptyEntryInteriorFronts();
   cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";

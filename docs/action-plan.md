@@ -139,6 +139,8 @@ The prototype also now includes a first possible-world generator from simple bid
 
 The prototype also now includes a first bridge move generator over those possible worlds, including legal-move union and world elimination after a play.
 
+The prototype also now includes a first one-trick bridge search controller over those generated move trees, including trick completion, winner advancement, and bridge-specific backup of sparse outcome vectors.
+
 The prototype also now includes a first Pareto-front transposition table for exact repeated-subtree reuse in the toy alpha-mu search.
 
 ## Step 7 — keep DDS-only work on a separate branch of the plan
