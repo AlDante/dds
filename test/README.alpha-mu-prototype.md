@@ -42,7 +42,7 @@ The runner performs these checks:
 6. possible-world generation from simple bidding-style and play-style constraints
 7. bridge move generation over those possible worlds
 8. bridge search control with trick completion, winner advancement, and multi-trick continuation
-9. DDS-backed bridge leaf evaluation after a searched bridge continuation
+9. DDS-backed bridge leaf evaluation after searched bridge continuations, including a targeted multi-world sparse-front continuation case
 10. empty-entry handling for interior fronts
 11. optimistic completion of impossible worlds for cross-state comparison
 12. a Pareto-front transposition table hit on a repeated exact subtree
@@ -67,7 +67,7 @@ From `test/`:
 DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu_prototype
 ```
 
-Target just the new multi-trick bridge DDS leaf regression:
+Target just the bridge DDS continuation regression bundle:
 
 ```zsh
 DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu_prototype bridge_dds
@@ -83,6 +83,12 @@ In particular, it does not yet include:
 - broad bridge-search horizons beyond the current small multi-trick prototype.
 
 Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a first constraint-based possible-world generator, a first bridge move generator, multi-trick bridge search control with bridge-specific trick backup, DDS-backed bridge leaf evaluation, and a Pareto-front transposition table are now present in the prototype.
+
+The targeted `bridge_dds` mode now checks:
+
+- direct DDS bridge-leaf evaluation on a real hand-file world,
+- one searched trick followed by DDS leaf handoff on that real world,
+- and a controlled two-world continuation that preserves sparse exact-score fronts after a deeper searched bridge continuation.
 
 The next planned non-performance step is extending this bridge-search control from the current small multi-trick continuation model to larger bridge continuations and richer possible-world generation.
 

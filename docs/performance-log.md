@@ -33,3 +33,33 @@ Each entry links to a timestamped result bundle under `test/build/performance_ru
 | `play_analysis_benchmark` | 0.177 | 0.177 | 0.177 | 0.177 |
 | `alpha_mu_prototype_default` | 0.193 | 0.193 | 0.193 | 0.193 |
 | `alpha_mu_prototype_bridge_dds` | 0.581 | 0.581 | 0.581 | 0.581 |
+
+## 2026-04-12 12:45:42 — commit `e537788` (dirty)
+
+- Output bundle: `test/build/performance_runs/20260412-124110`
+- Platform: `macOS-26.4-arm64-arm-64bit`
+- Repeats per workload: `1`
+
+| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_smoke` | 222.035 | 222.035 | 222.035 | 222.035 |
+| `dtest_solve_list10` | 0.253 | 0.253 | 0.253 | 0.253 |
+| `dtest_solve_list100` | 1.243 | 1.243 | 1.243 | 1.243 |
+| `play_analysis_benchmark` | 0.178 | 0.178 | 0.178 | 0.178 |
+| `alpha_mu_prototype_default` | 0.422 | 0.422 | 0.422 | 0.422 |
+| `alpha_mu_prototype_bridge_dds` | 44.806 | 44.806 | 44.806 | 44.806 |
+
+## 2026-04-12 12:50:43 — commit `e537788` (dirty)
+
+- Output bundle: `test/build/performance_runs/20260412-124655`
+- Platform: `macOS-26.4-arm64-arm-64bit`
+- Repeats per workload: `1`
+
+| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_smoke` | 224.060 | 224.060 | 224.060 | 224.060 |
+| `dtest_solve_list10` | 0.192 | 0.192 | 0.192 | 0.192 |
+| `dtest_solve_list100` | 1.275 | 1.275 | 1.275 | 1.275 |
+| `play_analysis_benchmark` | 0.106 | 0.106 | 0.106 | 0.106 |
+| `alpha_mu_prototype_default` | 0.249 | 0.249 | 0.249 | 0.249 |
+| `alpha_mu_prototype_bridge_dds` | 0.472 | 0.472 | 0.472 | 0.472 |

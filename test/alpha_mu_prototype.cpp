@@ -1804,6 +1804,27 @@ namespace
   }
 
 
+  static int ExactBridgeDDSScoreForWorld(
+    const BridgeState& state,
+    const unsigned worldIndex)
+  {
+    futureTricks fut;
+    memset(&fut, 0, sizeof(fut));
+
+    const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
+    const int ret = SolveBoardPBN(deal, -1, 1, 0, &fut, 0);
+    CheckDDS(ret, "SolveBoardPBN exact bridge DDS score");
+
+    const int best = BestScore(fut);
+    const int tricksRemaining = RemainingTricksInWorld(state,
+      state.worlds[worldIndex]);
+    const int maxAdditional =
+      (SeatSide(state.playerToMove) == state.maxSide ?
+        best : tricksRemaining - best);
+    return state.maxTricksWon + maxAdditional;
+  }
+
+
   static void LoadHandFile(
     const string& fname,
     HandFileData& data)
@@ -2363,6 +2384,69 @@ namespace
       "one full searched trick plus a DDS bridge leaf should still collapse to a single exact-score vector in a one-world state");
     Check(FrontContains(front, optimum),
       "one full searched trick plus a DDS bridge leaf should preserve the golden FUT optimum on a real DDS world");
+
+
+    BridgeState multiLeafState;
+    multiLeafState.playerToMove = SEAT_NORTH;
+    multiLeafState.maxSide = 0;
+    multiLeafState.trumpSuit = -1;
+    multiLeafState.trickLeader = SEAT_NORTH;
+    multiLeafState.leadSuit = -1;
+    multiLeafState.possibleWorlds = WorldMask(2, 0x3ULL);
+    multiLeafState.worlds.push_back(ParsePBNWorld("N:A... K... 2... 3..."));
+    multiLeafState.worlds.push_back(ParsePBNWorld("N:Q... K... A... 3..."));
+
+    OutcomeVector multiLeafExact(2);
+    multiLeafExact.valid = WorldMask(2, 0x3ULL);
+    multiLeafExact.values[0] = ExactBridgeDDSScoreForWorld(multiLeafState, 0);
+    multiLeafExact.values[1] = ExactBridgeDDSScoreForWorld(multiLeafState, 1);
+    Check(multiLeafExact.values[0] == 1 && multiLeafExact.values[1] == 1,
+      "multi-world bridge DDS leaf should return the expected exact one-trick values before any searched continuation");
+
+    const ParetoFront multiLeafFront = SearchBridgeState(multiLeafState, 0);
+    Check(multiLeafFront.vectors.size() == 1,
+      "multi-world bridge DDS leaf evaluation should collapse to one exact vector before any searched continuation");
+    Check(FrontContains(multiLeafFront, multiLeafExact),
+      "multi-world bridge DDS leaf evaluation should match the direct DDS exact trick counts across surviving worlds");
+
+    BridgeState splitState;
+    splitState.playerToMove = SEAT_NORTH;
+    splitState.maxSide = 0;
+    splitState.trumpSuit = -1;
+    splitState.trickLeader = SEAT_EAST;
+    splitState.leadSuit = SUIT_HEARTS;
+    splitState.possibleWorlds = WorldMask(2, 0x3ULL);
+    splitState.currentTrick.push_back(BridgeMove(SUIT_HEARTS, 'K'));
+    splitState.currentTrick.push_back(BridgeMove(SUIT_HEARTS, 'T'));
+    splitState.currentTrick.push_back(BridgeMove(SUIT_HEARTS, 'J'));
+    splitState.currentTrickPlayers.push_back(SEAT_EAST);
+    splitState.currentTrickPlayers.push_back(SEAT_SOUTH);
+    splitState.currentTrickPlayers.push_back(SEAT_WEST);
+    splitState.worlds.push_back(ParsePBNWorld("N:K2.A.. J3... A4... Q5..."));
+    splitState.worlds.push_back(ParsePBNWorld("N:A2.Q.. Q3... K4... J5..."));
+
+    const vector<BridgeMove> splitMoves = GenerateBridgeMoves(splitState);
+    Check(splitMoves.size() == 2,
+      "multi-world bridge DDS continuation should expose exactly the two world-distinguishing heart plays");
+    Check(splitMoves[0] == BridgeMove(SUIT_HEARTS, 'Q'),
+      "multi-world bridge DDS continuation should include the world-1 heart completion");
+    Check(splitMoves[1] == BridgeMove(SUIT_HEARTS, 'A'),
+      "multi-world bridge DDS continuation should include the world-0 heart completion");
+
+    const ParetoFront splitContinuation = SearchBridgeState(splitState, 2);
+    OutcomeVector world0Only(2);
+    world0Only.valid = WorldMask(2, 0x1ULL);
+    world0Only.values[0] = 3;
+    OutcomeVector world1Only(2);
+    world1Only.valid = WorldMask(2, 0x2ULL);
+    world1Only.values[1] = 2;
+
+    Check(splitContinuation.vectors.size() == 2,
+      "multi-world bridge DDS continuation should keep two sparse exact-score vectors after the searched continuation");
+    Check(FrontContains(splitContinuation, world0Only),
+      "multi-world bridge DDS continuation should preserve the world-0-only exact continuation [3 x]");
+    Check(FrontContains(splitContinuation, world1Only),
+      "multi-world bridge DDS continuation should preserve the world-1-only exact continuation [x 2]");
   }
 
 
