@@ -50,6 +50,8 @@ The generated site includes:
 - `alpha-mu-test-set.md` — paper-derived alpha-mu test families and hand sets
 - `implementation-plan.md` — staged implementation roadmap
 - `action-plan.md` — concrete next-cycle execution checklist
+- `performance.md` — historical performance notes and the standardized post-change benchmark workflow
+- `performance-log.md` — append-only record of standardized benchmark runs
 - `legacy-docs.md` — guide to the historical documentation in `../doc/`
 
 Selected existing Markdown documentation from the repository is also included in the Doxygen input set.

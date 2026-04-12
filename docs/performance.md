@@ -1,0 +1,98 @@
+# Performance Tracking
+
+This page captures two things:
+
+1. the earliest preserved performance history visible in this repository, and
+2. the standardized post-change performance routine we now use after important code changes.
+
+## Earliest preserved performance records
+
+The oldest performance note currently preserved in-tree is in `ChangeLog` under **DDS 1.0.1**.
+
+- `ChangeLog:718-728`
+- It records that reusing transposition-table contents for subsequent searches gave a **decrease in search time**, usually slight and sometimes substantial.
+
+That is the earliest performance-related record I found, but it is qualitative rather than numeric.
+
+## Earliest quantified performance claim
+
+The earliest explicit numeric claim currently preserved in-tree is in `ChangeLog` under **DDS 1.0.5**.
+
+- `ChangeLog:661-668`
+- It reports **about 25% speed improvement** from a search algorithm change.
+
+## Early milestone entries from `ChangeLog`
+
+| Release | Evidence | Notes |
+| --- | --- | --- |
+| `DDS 1.0.1` | search time decreased in most cases; substantial in a few | earliest preserved performance mention |
+| `DDS 1.0.5` | about **25%** speed improvement | earliest quantified claim |
+| `DDS 1.0.6` | about **10%** increased speed | quick-tricks improvement |
+| `DDS 1.1.0` | about **2x** the speed of `1.0.6` | major TT and quick-tricks redesign |
+| `DDS 1.1.2` | about **15%** improvement | move-ordering improvement |
+| `DDS 1.1.3` | about **20%** total improvement | compiler plus algorithm improvements |
+| `DDS 2.0.0` | single-thread speed about equal to `1.1.9`; two threads about **2x** single-thread | thread-safe `SolveBoard` and parallel use |
+| `DDS 2.1.2` | about **10%** faster than `2.1.1` | quick-tricks and move-ordering changes |
+| `DDS 2.2.0` | about **10-15%** faster than `2.1.2` | `SolveAllBoards` added |
+| `DDS 2.8.0` | about **15%** faster than `2.7.0` | faster move generation and scheduler changes |
+| `DDS 2.8.4` | lower-memory mode about **11-14% slower** | explicit speed/memory trade-off |
+
+## Earliest dated benchmark artifact in git history
+
+The earliest dated benchmark/performance artifact I found in the repository history is the addition of the historical document:
+
+- commit `87e6d52`
+- date `2014-11-25`
+- message: `Updates to documentation directory, incl new Performance document`
+
+That corresponds to:
+
+- `doc/2014-11 Performance and Benchmarking.docx`
+- `doc/2014-11 Performance and Benchmarking.pdf`
+
+## Standardized post-change performance suite
+
+After every **important** code change, run the standardized suite:
+
+```zsh
+python3 test/standard_performance.py
+```
+
+What it does:
+
+- rebuilds the library with `make macos` in `src/`,
+- rebuilds the key test binaries in `test/`,
+- runs a fixed workload set several times,
+- writes a timestamped bundle under `test/build/performance_runs/`,
+- appends a summarized entry to `docs/performance-log.md`.
+
+Default workloads:
+
+1. `regression_api_smoke`
+2. `dtest_solve_list10`
+3. `dtest_solve_list100`
+4. `play_analysis_benchmark`
+5. `alpha_mu_prototype_default`
+6. `alpha_mu_prototype_bridge_dds`
+
+The default repeat count is `1` so the routine can be used after every important code change without becoming too disruptive. For a stronger comparison run, increase it explicitly, for example:
+
+```zsh
+python3 test/standard_performance.py --repeats 3
+```
+
+For deeper alpha-mu root instrumentation, keep using the separate specialized runner:
+
+```zsh
+python3 test/alpha_mu_benchmark.py
+```
+
+## Recorded results
+
+Routine standardized runs are recorded in:
+
+- `docs/performance-log.md`
+
+Raw per-run logs and machine-readable summaries are written to:
+
+- `test/build/performance_runs/<timestamp>/`

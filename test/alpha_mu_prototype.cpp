@@ -884,6 +884,78 @@ namespace
   }
 
 
+  static int RankValue(const char rank)
+  {
+    return RankOrder(rank) + 2;
+  }
+
+
+  static unsigned WorldCardCount(const ParsedWorld& world)
+  {
+    unsigned count = 0;
+    for (int player = 0; player < 4; player++)
+    {
+      for (int suit = 0; suit < 4; suit++)
+        count += static_cast<unsigned>(world.suits[player][suit].size());
+    }
+    return count;
+  }
+
+
+  static string SerializePBNWorld(const ParsedWorld& world)
+  {
+    ostringstream oss;
+    oss << "N:";
+
+    for (int seat = 0; seat < 4; seat++)
+    {
+      if (seat != 0)
+        oss << " ";
+
+      for (int suit = 0; suit < 4; suit++)
+      {
+        if (suit != 0)
+          oss << ".";
+        oss << world.suits[seat][suit];
+      }
+    }
+
+    return oss.str();
+  }
+
+
+  static dealPBN MakeDDSDealPBN(
+    const BridgeState& state,
+    const ParsedWorld& world)
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+
+    deal.trump = (state.trumpSuit >= 0 ? state.trumpSuit : 4);
+    deal.first = (state.currentTrick.empty() ? state.playerToMove : state.trickLeader);
+
+    for (unsigned i = 0; i < state.currentTrick.size() && i < 3; i++)
+    {
+      deal.currentTrickSuit[i] = state.currentTrick[i].suit;
+      deal.currentTrickRank[i] = RankValue(state.currentTrick[i].rank);
+    }
+
+    const string remain = SerializePBNWorld(world);
+    Check(remain.size() < sizeof(deal.remainCards),
+      "bridge DDS leaf serialization should fit into dealPBN.remainCards");
+    strcpy(deal.remainCards, remain.c_str());
+    return deal;
+  }
+
+
+  static int RemainingTricksInWorld(
+    const BridgeState& state,
+    const ParsedWorld& world)
+  {
+    return static_cast<int>((WorldCardCount(world) + state.currentTrick.size()) / 4U);
+  }
+
+
   static bool BridgeMoveLess(
     const BridgeMove& left,
     const BridgeMove& right)
@@ -1111,9 +1183,11 @@ namespace
 
 
   static ParetoFront MakeZeroFront(const unsigned worldCount);
+  static int BestScore(const futureTricks& fut);
+  static void CheckDDS(const int ret, const string& tag);
 
 
-  static ParetoFront MakeBridgeLeafFront(const BridgeState& state)
+  static ParetoFront MakeBridgeTerminalFront(const BridgeState& state)
   {
     ParetoFront front(state.possibleWorlds.count);
     OutcomeVector vec(state.possibleWorlds.count);
@@ -1121,31 +1195,97 @@ namespace
     for (unsigned i = 0; i < vec.values.size(); i++)
     {
       if (vec.valid.Has(i))
-        vec.values[i] = (state.maxTricksWon > 0 ? 1 : 0);
+        vec.values[i] = state.maxTricksWon;
     }
     front.Insert(vec);
     return front;
   }
 
 
+  static ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state)
+  {
+    vector<unsigned> active;
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      if (state.possibleWorlds.Has(i))
+        active.push_back(i);
+    }
+
+    if (active.empty())
+      return MakeZeroFront(state.possibleWorlds.count);
+
+    bool allFinished = state.currentTrick.empty();
+    for (unsigned i = 0; i < active.size(); i++)
+    {
+      if (WorldCardCount(state.worlds[active[i]]) != 0)
+      {
+        allFinished = false;
+        break;
+      }
+    }
+
+    if (allFinished)
+      return MakeBridgeTerminalFront(state);
+
+    ParetoFront front(state.possibleWorlds.count);
+    OutcomeVector vec(state.possibleWorlds.count);
+    vec.valid = state.possibleWorlds;
+
+    for (unsigned i = 0; i < active.size(); i++)
+    {
+      const unsigned worldIndex = active[i];
+      futureTricks fut;
+      memset(&fut, 0, sizeof(fut));
+
+      const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
+      const int ret = SolveBoardPBN(deal, -1, 1, 0, &fut, 0);
+      CheckDDS(ret, "SolveBoardPBN bridge DDS leaf");
+
+      const int best = BestScore(fut);
+      const int tricksRemaining = RemainingTricksInWorld(state,
+        state.worlds[worldIndex]);
+      const int maxAdditional =
+        (SeatSide(state.playerToMove) == state.maxSide ?
+          best : tricksRemaining - best);
+      vec.values[worldIndex] = state.maxTricksWon + maxAdditional;
+    }
+
+    front.Insert(vec);
+    return front;
+  }
+
+
+  static int BridgeDepthCost(
+    const BridgeState& state,
+    const BridgeState& child)
+  {
+    return (state.currentTrick.size() == 3 && child.currentTrick.empty() ? 1 : 0);
+  }
+
+
   static ParetoFront SearchBridgeState(
     const BridgeState& state,
-    const int pliesRemaining)
+    const int tricksRemaining)
   {
     if (state.possibleWorlds.Empty())
       return MakeZeroFront(state.possibleWorlds.count);
 
-    if (pliesRemaining <= 0 || GenerateBridgeMoves(state).empty())
-      return MakeBridgeLeafFront(state);
+    if (tricksRemaining <= 0)
+      return MakeBridgeDDSLeafFront(state);
 
     const vector<BridgeChild> children = ExpandBridgeChildren(state);
+    if (children.empty())
+      return MakeBridgeDDSLeafFront(state);
+
     if (SeatSide(state.playerToMove) == state.maxSide)
     {
       ParetoFront front(state.possibleWorlds.count);
       for (unsigned i = 0; i < children.size(); i++)
       {
+        const int nextDepth = tricksRemaining - BridgeDepthCost(state,
+          children[i].state);
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeState(children[i].state, pliesRemaining - 1));
+          SearchBridgeState(children[i].state, nextDepth));
       }
       return front;
     }
@@ -1154,9 +1294,11 @@ namespace
     bool initialized = false;
     for (unsigned i = 0; i < children.size(); i++)
     {
+      const int nextDepth = tricksRemaining - BridgeDepthCost(state,
+        children[i].state);
       const ParetoFront childFront = SearchBridgeState(
         children[i].state,
-        pliesRemaining - 1);
+        nextDepth);
       if (! initialized)
       {
         front = childFront;
@@ -2172,13 +2314,55 @@ namespace
     Check(manual.maxTricksWon == 1,
       "bridge search control should count a won trick for the Max side");
 
-    const ParetoFront front = SearchBridgeState(state, 4);
+    const ParetoFront front = SearchBridgeState(state, 1);
     Check(front.vectors.size() == 2,
       "bridge search control should keep one sparse winning vector per viable opening lead");
     Check(FrontContains(front, MakeBinaryOutcome("1x")),
       "bridge search control should keep the lead that wins only in the first world");
     Check(FrontContains(front, MakeBinaryOutcome("x1")),
       "bridge search control should keep the lead that wins only in the second world");
+  }
+
+
+  static void TestBridgeMultiTrickDDSLeaf()
+  {
+    SetMaxThreads(0);
+
+    HandFileData data;
+    LoadHandFile("hands/alpha_mu_play.txt", data);
+    Check(data.number >= 1,
+      "alpha_mu_play.txt should provide at least one real DDS world for the multi-trick bridge test");
+
+    const int handno = 0;
+    BridgeState state;
+    state.worlds.push_back(ParsePBNWorld(data.dealList[handno].remainCards));
+    state.possibleWorlds = WorldMask(1, 0x1ULL);
+    state.playerToMove = data.dealList[handno].first;
+    state.maxSide = SeatSide(state.playerToMove);
+    state.trumpSuit = (data.dealList[handno].trump == 4 ? -1 :
+      data.dealList[handno].trump);
+    state.trickLeader = state.playerToMove;
+    state.leadSuit = -1;
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(! moves.empty(),
+      "multi-trick bridge test should expose at least one legal opening move in the real DDS world");
+
+    OutcomeVector optimum(1);
+    optimum.valid = WorldMask(1, 0x1ULL);
+    optimum.values[0] = BestScore(data.futList[handno]);
+
+    const ParetoFront directLeaf = SearchBridgeState(state, 0);
+    Check(directLeaf.vectors.size() == 1,
+      "bridge DDS leaf evaluation should collapse to a single exact-score vector in a one-world state");
+    Check(FrontContains(directLeaf, optimum),
+      "bridge DDS leaf evaluation should match the golden FUT optimum on a real DDS world");
+
+    const ParetoFront front = SearchBridgeState(state, 1);
+    Check(front.vectors.size() == 1,
+      "one full searched trick plus a DDS bridge leaf should still collapse to a single exact-score vector in a one-world state");
+    Check(FrontContains(front, optimum),
+      "one full searched trick plus a DDS bridge leaf should preserve the golden FUT optimum on a real DDS world");
   }
 
 
@@ -2404,8 +2588,20 @@ namespace
 }
 
 
-int main()
+int main(int argc, char ** argv)
 {
+  if (argc >= 2)
+  {
+    const string mode(argv[1]);
+    if (mode == "bridge_dds")
+    {
+      TestBridgeMultiTrickDDSLeaf();
+      cout << "alpha_mu_prototype: multi-trick bridge DDS leaf search OK\n";
+      cout << "alpha_mu_prototype: all checks passed\n";
+      return 0;
+    }
+  }
+
   TestParetoInsert();
   cout << "alpha_mu_prototype: Pareto insert test OK\n";
 
@@ -2450,6 +2646,7 @@ int main()
 
   TestDDSLeafDemo();
   cout << "alpha_mu_prototype: DDS leaf demo and leaf parallelization OK\n";
+
 
   cout << "alpha_mu_prototype: all checks passed\n";
   return 0;
