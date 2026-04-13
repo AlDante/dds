@@ -75,7 +75,9 @@ Default workloads:
 5. `alpha_mu_prototype_default`
 6. `alpha_mu_prototype_bridge_dds`
 
-The default repeat count is `1` so the routine can be used after every important code change without becoming too disruptive. For a stronger comparison run, increase it explicitly, for example:
+The default requested repeat count is `1` so the routine can be used after every important code change without becoming too disruptive. Short `dtest` workloads are additionally stabilized with one unmeasured warmup run and at least three measured repeats so transient startup or scheduling delays do not invert the relative timings of `list10` and `list100`.
+
+For a stronger comparison run, increase the requested repeat count explicitly, for example:
 
 ```zsh
 python3 test/standard_performance.py --repeats 3

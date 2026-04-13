@@ -29,12 +29,18 @@ DEFAULT_WORKLOADS = [
         "cwd": "test",
         "command": ["./build/dtest", "-f", "../hands/list10.txt", "-s", "solve"],
         "requires_dyld": True,
+        "warmup_runs": 1,
+        "minimum_repeats": 3,
+        "timing_note": "1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.",
     },
     {
         "name": "dtest_solve_list100",
         "cwd": "test",
         "command": ["./build/dtest", "-f", "../hands/list100.txt", "-s", "solve"],
         "requires_dyld": True,
+        "warmup_runs": 1,
+        "minimum_repeats": 3,
+        "timing_note": "1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.",
     },
     {
         "name": "play_analysis_benchmark",
@@ -138,6 +144,23 @@ def summarize_workload_runs(name: str, command_text: str, runs: list[dict[str, A
     }
 
 
+def actual_repeats_for_workload(workload: dict[str, Any], requested_repeats: int) -> int:
+    return max(requested_repeats, int(workload.get("minimum_repeats", 1)))
+
+
+def warmup_runs_for_workload(workload: dict[str, Any]) -> int:
+    return int(workload.get("warmup_runs", 0))
+
+
+def timing_notes(summary: dict[str, Any]) -> list[str]:
+    notes: list[str] = []
+    for workload in summary["workloads"]:
+        note = workload.get("timing_note")
+        if note:
+            notes.append(f"`{workload['name']}`: {note}")
+    return notes
+
+
 def markdown_summary(summary: dict[str, Any]) -> str:
     lines: list[str] = []
     lines.append("# Standard Performance Summary")
@@ -148,7 +171,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append(f"- Dirty tree: `{summary['git_dirty']}`")
     lines.append(f"- Platform: `{summary['platform']}`")
     lines.append(f"- Python: `{summary['python']}`")
-    lines.append(f"- Repeats per workload: `{summary['repeats']}`")
+    lines.append(f"- Requested repeats per workload: `{summary['repeats']}`")
     lines.append("")
     lines.append("## Build steps")
     lines.append("")
@@ -166,6 +189,13 @@ def markdown_summary(summary: dict[str, Any]) -> str:
             f"{workload['max_elapsed_seconds']:.3f} | {workload['run_count']} |"
         )
     lines.append("")
+    note_lines = timing_notes(summary)
+    if note_lines:
+        lines.append("## Timing stabilization notes")
+        lines.append("")
+        for note in note_lines:
+            lines.append(f"- {note}")
+        lines.append("")
     lines.append("## Notes")
     lines.append("")
     lines.append("- This suite is intended for routine post-change performance checks after important code modifications.")
@@ -195,7 +225,12 @@ def append_log_entry(log_path: Path, summary: dict[str, Any]) -> None:
     lines.append("")
     lines.append(f"- Output bundle: `{relative_output_dir}`")
     lines.append(f"- Platform: `{summary['platform']}`")
-    lines.append(f"- Repeats per workload: `{summary['repeats']}`")
+    lines.append(f"- Requested repeats per workload: `{summary['repeats']}`")
+    note_lines = timing_notes(summary)
+    if note_lines:
+        lines.append("- Timing stabilization:")
+        for note in note_lines:
+            lines.append(f"  - {note}")
     lines.append("")
     lines.append("| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |")
     lines.append("| --- | ---: | ---: | ---: | ---: |")
@@ -212,7 +247,12 @@ def append_log_entry(log_path: Path, summary: dict[str, Any]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the standardized DDS performance suite and record the results.")
-    parser.add_argument("--repeats", type=int, default=1, help="Number of times to run each workload.")
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help="Requested number of measured runs per workload; some short workloads may use more repeats for timing stability.",
+    )
     parser.add_argument(
         "--output-dir",
         default="",
@@ -251,8 +291,20 @@ def main() -> int:
     for workload_index, workload in enumerate(DEFAULT_WORKLOADS, start=len(build_results) + 1):
         cwd = root / workload["cwd"]
         env = run_env if workload.get("requires_dyld") else None
+        warmup_runs = warmup_runs_for_workload(workload)
+        for warmup_number in range(1, warmup_runs + 1):
+            warmup_result = run_command(workload["command"], cwd, env)
+            log_name = f"{workload_index:02d}_{workload['name']}_warmup{warmup_number}.log"
+            write_text(output_dir / log_name, warmup_result["output"])
+            if warmup_result["returncode"] != 0:
+                print(warmup_result["output"], end="")
+                raise RuntimeError(
+                    f"Workload '{workload['name']}' warmup {warmup_number} failed with exit code {warmup_result['returncode']}"
+                )
+
+        measured_repeats = actual_repeats_for_workload(workload, args.repeats)
         runs: list[dict[str, Any]] = []
-        for run_number in range(1, args.repeats + 1):
+        for run_number in range(1, measured_repeats + 1):
             result = run_command(workload["command"], cwd, env)
             runs.append(
                 {
@@ -271,6 +323,8 @@ def main() -> int:
         workload_summaries.append(
             summarize_workload_runs(workload["name"], shlex.join(workload["command"]), runs)
         )
+        workload_summaries[-1]["warmup_runs"] = warmup_runs
+        workload_summaries[-1]["timing_note"] = workload.get("timing_note", "") if warmup_runs or measured_repeats != args.repeats else ""
 
     summary = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),

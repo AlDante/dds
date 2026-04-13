@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="860" viewBox="0 0 1320 860" role="img" aria-labelledby="title desc">
+<title id="title">DDS standardized performance trend</title>
+<desc id="desc">Median elapsed seconds per workload across recorded standardized performance runs on a logarithmic y-axis.</desc>
+<rect x="0" y="0" width="1320" height="860" fill="#ffffff" />
+<text x="110.00" y="48.00" font-size="28" font-weight="700" fill="#111827">DDS standardized performance trend</text>
+<text x="110.00" y="78.00" font-size="15" fill="#4b5563">Median elapsed seconds per workload entry from docs/performance-log.md (logarithmic y-axis).</text>
+<rect x="110.00" y="120.00" width="930.00" height="550.00" fill="#fcfcfd" stroke="#d1d5db" stroke-width="1" />
+<line x1="110.00" y1="670.00" x2="1040.00" y2="670.00" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="675.00" text-anchor="end" font-size="13" fill="#374151">0.01 s</text>
+<line x1="110.00" y1="636.89" x2="1040.00" y2="636.89" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="641.89" text-anchor="end" font-size="13" fill="#374151">0.02 s</text>
+<line x1="110.00" y1="593.11" x2="1040.00" y2="593.11" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="598.11" text-anchor="end" font-size="13" fill="#374151">0.05 s</text>
+<line x1="110.00" y1="560.00" x2="1040.00" y2="560.00" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="565.00" text-anchor="end" font-size="13" fill="#374151">0.10 s</text>
+<line x1="110.00" y1="526.89" x2="1040.00" y2="526.89" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="531.89" text-anchor="end" font-size="13" fill="#374151">0.20 s</text>
+<line x1="110.00" y1="483.11" x2="1040.00" y2="483.11" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="488.11" text-anchor="end" font-size="13" fill="#374151">0.50 s</text>
+<line x1="110.00" y1="450.00" x2="1040.00" y2="450.00" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="455.00" text-anchor="end" font-size="13" fill="#374151">1.0 s</text>
+<line x1="110.00" y1="416.89" x2="1040.00" y2="416.89" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="421.89" text-anchor="end" font-size="13" fill="#374151">2.0 s</text>
+<line x1="110.00" y1="373.11" x2="1040.00" y2="373.11" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="378.11" text-anchor="end" font-size="13" fill="#374151">5.0 s</text>
+<line x1="110.00" y1="340.00" x2="1040.00" y2="340.00" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="345.00" text-anchor="end" font-size="13" fill="#374151">10 s</text>
+<line x1="110.00" y1="306.89" x2="1040.00" y2="306.89" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="311.89" text-anchor="end" font-size="13" fill="#374151">20 s</text>
+<line x1="110.00" y1="263.11" x2="1040.00" y2="263.11" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="268.11" text-anchor="end" font-size="13" fill="#374151">50 s</text>
+<line x1="110.00" y1="230.00" x2="1040.00" y2="230.00" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="235.00" text-anchor="end" font-size="13" fill="#374151">100 s</text>
+<line x1="110.00" y1="196.89" x2="1040.00" y2="196.89" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="201.89" text-anchor="end" font-size="13" fill="#374151">200 s</text>
+<line x1="110.00" y1="153.11" x2="1040.00" y2="153.11" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="158.11" text-anchor="end" font-size="13" fill="#374151">500 s</text>
+<line x1="110.00" y1="120.00" x2="1040.00" y2="120.00" stroke="#e5e7eb" stroke-width="1" />
+<text x="96.00" y="125.00" text-anchor="end" font-size="13" fill="#374151">1000 s</text>
+<line x1="110.00" y1="120.00" x2="110.00" y2="670.00" stroke="#6b7280" stroke-width="1.5" />
+<line x1="110.00" y1="670.00" x2="1040.00" y2="670.00" stroke="#6b7280" stroke-width="1.5" />
+<text x="34.00" y="395.00" transform="rotate(-90 34 395.00)" font-size="14" fill="#374151">Median runtime (seconds, log scale)</text>
+<line x1="110.00" y1="120.00" x2="110.00" y2="670.00" stroke="#f3f4f6" stroke-width="1" />
+<text x="110.00" y="696.00" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 110.00 696.00)">2bec9d9 10:10</text>
+<line x1="296.00" y1="120.00" x2="296.00" y2="670.00" stroke="#f3f4f6" stroke-width="1" />
+<text x="296.00" y="696.00" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 296.00 696.00)">2bec9d9 11:21</text>
+<line x1="482.00" y1="120.00" x2="482.00" y2="670.00" stroke="#f3f4f6" stroke-width="1" />
+<text x="482.00" y="696.00" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 482.00 696.00)">e537788 12:45</text>
+<line x1="668.00" y1="120.00" x2="668.00" y2="670.00" stroke="#f3f4f6" stroke-width="1" />
+<text x="668.00" y="696.00" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 668.00 696.00)">e537788 12:50</text>
+<line x1="854.00" y1="120.00" x2="854.00" y2="670.00" stroke="#f3f4f6" stroke-width="1" />
+<text x="854.00" y="696.00" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 854.00 696.00)">04290a6 17:12</text>
+<line x1="1040.00" y1="120.00" x2="1040.00" y2="670.00" stroke="#f3f4f6" stroke-width="1" />
+<text x="1040.00" y="696.00" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 1040.00 696.00)">6a0afe7 06:47</text>
+<text x="575.00" y="824.00" text-anchor="middle" font-size="14" fill="#374151">Commit/time of recorded standardized run</text>
+<polyline points="110.00,490.21 296.00,475.94 482.00,268.35 668.00,485.87 854.00,476.77 1040.00,488.90" fill="none" stroke="#4C78A8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="110.00" cy="490.21" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="296.00" cy="475.94" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="482.00" cy="268.35" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="668.00" cy="485.87" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="854.00" cy="476.77" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="1040.00" cy="488.90" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<polyline points="110.00,540.63 296.00,528.59 482.00,491.22 668.00,516.42 854.00,501.40 1040.00,316.27" fill="none" stroke="#F58518" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="110.00" cy="540.63" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="296.00" cy="528.59" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="482.00" cy="491.22" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="668.00" cy="516.42" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="854.00" cy="501.40" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="1040.00" cy="316.27" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<polyline points="110.00,542.58 296.00,521.26 482.00,515.66 668.00,528.84 854.00,353.24 1040.00,547.84" fill="none" stroke="#54A24B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="110.00" cy="542.58" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="296.00" cy="521.26" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="482.00" cy="515.66" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="668.00" cy="528.84" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="854.00" cy="353.24" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="1040.00" cy="547.84" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<polyline points="110.00,441.77 296.00,439.76 482.00,439.61 668.00,438.39 854.00,399.57 1040.00,439.76" fill="none" stroke="#E45756" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="110.00" cy="441.77" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="296.00" cy="439.76" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="482.00" cy="439.61" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="668.00" cy="438.39" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="854.00" cy="399.57" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="1040.00" cy="439.76" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<polyline points="110.00,556.77 296.00,532.72 482.00,532.45 668.00,557.22 854.00,525.01 1040.00,540.63" fill="none" stroke="#72B7B2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="110.00" cy="556.77" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="296.00" cy="532.72" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="482.00" cy="532.45" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="668.00" cy="557.22" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="854.00" cy="525.01" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="1040.00" cy="540.63" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<polyline points="110.00,195.08 296.00,189.86 482.00,191.89 668.00,191.46 854.00,190.73 1040.00,192.07" fill="none" stroke="#B279A2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="110.00" cy="195.08" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="296.00" cy="189.86" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="482.00" cy="191.89" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="668.00" cy="191.46" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="854.00" cy="190.73" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<circle cx="1040.00" cy="192.07" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<text x="1068.00" y="140.00" font-size="16" font-weight="700" fill="#111827">Workloads</text>
+<line x1="1068.00" y1="161.00" x2="1096.00" y2="161.00" stroke="#4C78A8" stroke-width="4" stroke-linecap="round" />
+<circle cx="1082.00" cy="161.00" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
+<text x="1108.00" y="166.00" font-size="13" fill="#111827">alpha_mu_prototype_bridge_dds</text>
+<line x1="1068.00" y1="187.00" x2="1096.00" y2="187.00" stroke="#F58518" stroke-width="4" stroke-linecap="round" />
+<circle cx="1082.00" cy="187.00" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
+<text x="1108.00" y="192.00" font-size="13" fill="#111827">alpha_mu_prototype_default</text>
+<line x1="1068.00" y1="213.00" x2="1096.00" y2="213.00" stroke="#54A24B" stroke-width="4" stroke-linecap="round" />
+<circle cx="1082.00" cy="213.00" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
+<text x="1108.00" y="218.00" font-size="13" fill="#111827">dtest_solve_list10</text>
+<line x1="1068.00" y1="239.00" x2="1096.00" y2="239.00" stroke="#E45756" stroke-width="4" stroke-linecap="round" />
+<circle cx="1082.00" cy="239.00" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
+<text x="1108.00" y="244.00" font-size="13" fill="#111827">dtest_solve_list100</text>
+<line x1="1068.00" y1="265.00" x2="1096.00" y2="265.00" stroke="#72B7B2" stroke-width="4" stroke-linecap="round" />
+<circle cx="1082.00" cy="265.00" r="4.50" fill="#72B7B2" stroke="#ffffff" stroke-width="1.5" />
+<text x="1108.00" y="270.00" font-size="13" fill="#111827">play_analysis_benchmark</text>
+<line x1="1068.00" y1="291.00" x2="1096.00" y2="291.00" stroke="#B279A2" stroke-width="4" stroke-linecap="round" />
+<circle cx="1082.00" cy="291.00" r="4.50" fill="#B279A2" stroke="#ffffff" stroke-width="1.5" />
+<text x="1108.00" y="296.00" font-size="13" fill="#111827">regression_api_smoke</text>
+<text x="1068.00" y="348.00" font-size="16" font-weight="700" fill="#111827">Latest entry</text>
+<text x="1068.00" y="372.00" font-size="13" fill="#374151">2026-04-13 06:47:57 / 6a0afe7 dirty</text>
+</svg>

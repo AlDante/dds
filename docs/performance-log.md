@@ -82,3 +82,21 @@ _The graph plots median elapsed seconds per workload on a logarithmic Y-axis so 
 | `play_analysis_benchmark` | 0.208 | 0.208 | 0.208 | 0.208 |
 | `alpha_mu_prototype_default` | 0.341 | 0.341 | 0.341 | 0.341 |
 | `alpha_mu_prototype_bridge_dds` | 0.571 | 0.571 | 0.571 | 0.571 |
+
+## 2026-04-13 06:47:57 — commit `6a0afe7` (dirty)
+
+- Output bundle: `test/build/performance_runs/20260413-064240`
+- Platform: `macOS-26.4-arm64-arm-64bit`
+- Requested repeats per workload: `1`
+- Timing stabilization:
+  - `dtest_solve_list10`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
+  - `dtest_solve_list100`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
+
+| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_smoke` | 221.221 | 221.221 | 221.221 | 221.221 |
+| `dtest_solve_list10` | 0.129 | 0.149 | 0.116 | 0.201 |
+| `dtest_solve_list100` | 1.239 | 1.233 | 1.211 | 1.248 |
+| `play_analysis_benchmark` | 0.150 | 0.150 | 0.150 | 0.150 |
+| `alpha_mu_prototype_default` | 16.432 | 16.432 | 16.432 | 16.432 |
+| `alpha_mu_prototype_bridge_dds` | 0.443 | 0.443 | 0.443 | 0.443 |
