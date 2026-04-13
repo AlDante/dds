@@ -17,63 +17,68 @@ from typing import Any
 from performance_log_graph import render_performance_log_graph
 
 
+SHORT_WORKLOAD_POLICY = {
+    "warmup_runs": 1,
+    "minimum_repeats": 3,
+    "minimum_measured_seconds": 1.0,
+    "maximum_repeats": 10,
+}
+
+TIMING_GOAL_TEXT = (
+    "short workloads are measured with enough warmup and repeats to make the reported medians "
+    "stable to about 0.1 s or better."
+)
+
+
+def workload_definition(
+    name: str,
+    command: list[str],
+    *,
+    cwd: str = "test",
+    requires_dyld: bool = True,
+    short_workload: bool = False,
+) -> dict[str, Any]:
+    definition = {
+        "name": name,
+        "cwd": cwd,
+        "command": command,
+        "requires_dyld": requires_dyld,
+    }
+    if short_workload:
+        definition.update(SHORT_WORKLOAD_POLICY)
+    return definition
+
+
 DEFAULT_WORKLOADS = [
-    {
-        "name": "regression_api_smoke",
-        "cwd": "test",
-        "command": ["./build/regression_api", "../hands/list10.txt", "../hands/thomas1.txt"],
-        "requires_dyld": True,
-    },
-    {
-        "name": "dtest_solve_list10",
-        "cwd": "test",
-        "command": ["./build/dtest", "-f", "../hands/list10.txt", "-s", "solve"],
-        "requires_dyld": True,
-        "warmup_runs": 1,
-        "minimum_repeats": 3,
-        "minimum_measured_seconds": 1.0,
-        "maximum_repeats": 10,
-    },
-    {
-        "name": "dtest_solve_list100",
-        "cwd": "test",
-        "command": ["./build/dtest", "-f", "../hands/list100.txt", "-s", "solve"],
-        "requires_dyld": True,
-        "warmup_runs": 1,
-        "minimum_repeats": 3,
-        "minimum_measured_seconds": 1.0,
-        "maximum_repeats": 10,
-    },
-    {
-        "name": "play_analysis_benchmark",
-        "cwd": "test",
-        "command": ["./build/play_analysis_benchmark"],
-        "requires_dyld": True,
-        "warmup_runs": 1,
-        "minimum_repeats": 3,
-        "minimum_measured_seconds": 1.0,
-        "maximum_repeats": 10,
-    },
-    {
-        "name": "alpha_mu_prototype_default",
-        "cwd": "test",
-        "command": ["./build/alpha_mu_prototype"],
-        "requires_dyld": True,
-        "warmup_runs": 1,
-        "minimum_repeats": 3,
-        "minimum_measured_seconds": 1.0,
-        "maximum_repeats": 10,
-    },
-    {
-        "name": "alpha_mu_prototype_bridge_dds",
-        "cwd": "test",
-        "command": ["./build/alpha_mu_prototype", "bridge_dds"],
-        "requires_dyld": True,
-        "warmup_runs": 1,
-        "minimum_repeats": 3,
-        "minimum_measured_seconds": 1.0,
-        "maximum_repeats": 10,
-    },
+    workload_definition(
+        "regression_api_smoke",
+        ["./build/regression_api", "../hands/list10.txt", "../hands/thomas1.txt"],
+    ),
+    workload_definition(
+        "dtest_solve_list10",
+        ["./build/dtest", "-f", "../hands/list10.txt", "-s", "solve"],
+        short_workload=True,
+    ),
+    workload_definition(
+        "dtest_solve_list100",
+        ["./build/dtest", "-f", "../hands/list100.txt", "-s", "solve"],
+        short_workload=True,
+    ),
+    workload_definition(
+        "play_analysis_benchmark",
+        ["./build/play_analysis_benchmark"],
+        short_workload=True,
+    ),
+    workload_definition(
+        "alpha_mu_prototype_default",
+        ["./build/alpha_mu_prototype"],
+        short_workload=True,
+    ),
+    workload_definition(
+        "alpha_mu_prototype_bridge_dds",
+        ["./build/alpha_mu_prototype", "bridge_dds"],
+        short_workload=True,
+    ),
 ]
 
 
@@ -123,6 +128,10 @@ def git_text(root: Path, *args: str) -> str:
     if proc.returncode != 0:
         return "unknown"
     return proc.stdout.strip()
+
+
+def git_is_dirty(root: Path) -> bool:
+    return git_text(root, "status", "--short") not in ("", "unknown")
 
 
 def build_steps(root: Path) -> list[tuple[str, list[str], Path]]:
@@ -207,6 +216,17 @@ def timing_notes(summary: dict[str, Any]) -> list[str]:
     return notes
 
 
+def markdown_workload_row(workload: dict[str, Any], include_run_count: bool = False) -> str:
+    row = (
+        f"| `{workload['name']}` | {workload['median_elapsed_seconds']:.3f} | "
+        f"{workload['mean_elapsed_seconds']:.3f} | {workload['min_elapsed_seconds']:.3f} | "
+        f"{workload['max_elapsed_seconds']:.3f} |"
+    )
+    if include_run_count:
+        return row[:-1] + f" {workload['run_count']} |"
+    return row
+
+
 def markdown_summary(summary: dict[str, Any]) -> str:
     lines: list[str] = []
     lines.append("# Standard Performance Summary")
@@ -218,7 +238,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append(f"- Platform: `{summary['platform']}`")
     lines.append(f"- Python: `{summary['python']}`")
     lines.append(f"- Requested repeats per workload: `{summary['repeats']}`")
-    lines.append("- Timing goal: short workloads are measured with enough warmup and repeats to make the reported medians stable to about 0.1 s or better.")
+    lines.append(f"- Timing goal: {TIMING_GOAL_TEXT}")
     lines.append("")
     lines.append("## Build steps")
     lines.append("")
@@ -230,11 +250,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append("| Workload | Median (s) | Mean (s) | Min (s) | Max (s) | Runs |")
     lines.append("| --- | ---: | ---: | ---: | ---: | ---: |")
     for workload in summary["workloads"]:
-        lines.append(
-            f"| `{workload['name']}` | {workload['median_elapsed_seconds']:.3f} | "
-            f"{workload['mean_elapsed_seconds']:.3f} | {workload['min_elapsed_seconds']:.3f} | "
-            f"{workload['max_elapsed_seconds']:.3f} | {workload['run_count']} |"
-        )
+        lines.append(markdown_workload_row(workload, include_run_count=True))
     lines.append("")
     note_lines = timing_notes(summary)
     if note_lines:
@@ -282,11 +298,7 @@ def append_log_entry(log_path: Path, summary: dict[str, Any]) -> None:
     lines.append("| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |")
     lines.append("| --- | ---: | ---: | ---: | ---: |")
     for workload in summary["workloads"]:
-        lines.append(
-            f"| `{workload['name']}` | {workload['median_elapsed_seconds']:.3f} | "
-            f"{workload['mean_elapsed_seconds']:.3f} | {workload['min_elapsed_seconds']:.3f} | "
-            f"{workload['max_elapsed_seconds']:.3f} |"
-        )
+        lines.append(markdown_workload_row(workload))
     lines.append("")
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write("\n".join(lines))
@@ -390,7 +402,7 @@ def main() -> int:
         "repository": str(root),
         "output_dir": str(output_dir),
         "git_commit": git_text(root, "rev-parse", "--short", "HEAD"),
-        "git_dirty": bool(git_text(root, "status", "--short")),
+        "git_dirty": git_is_dirty(root),
         "platform": platform.platform(),
         "python": sys.version.split()[0],
         "repeats": args.repeats,

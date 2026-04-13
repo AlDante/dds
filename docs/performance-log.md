@@ -131,3 +131,24 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 | `play_analysis_benchmark` | 0.107 | 0.107 | 0.103 | 0.114 |
 | `alpha_mu_prototype_default` | 0.156 | 0.157 | 0.154 | 0.162 |
 | `alpha_mu_prototype_bridge_dds` | 0.449 | 0.450 | 0.448 | 0.454 |
+
+## 2026-04-13 21:05:52 — commit `75252de`
+
+- Output bundle: `test/build/performance_runs/20260413-210045`
+- Platform: `macOS-26.4-arm64-arm-64bit`
+- Requested repeats per workload: `1`
+- Timing stabilization:
+  - `dtest_solve_list10`: 1 unmeasured warmup run; 9 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `dtest_solve_list100`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `play_analysis_benchmark`: 1 unmeasured warmup run; 10 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_prototype_default`: 1 unmeasured warmup run; 7 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_prototype_bridge_dds`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+
+| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_smoke` | 252.324 | 252.324 | 252.324 | 252.324 |
+| `dtest_solve_list10` | 0.121 | 0.124 | 0.109 | 0.143 |
+| `dtest_solve_list100` | 1.250 | 1.249 | 1.202 | 1.296 |
+| `play_analysis_benchmark` | 0.106 | 0.108 | 0.098 | 0.131 |
+| `alpha_mu_prototype_default` | 0.147 | 0.147 | 0.139 | 0.154 |
+| `alpha_mu_prototype_bridge_dds` | 0.449 | 0.448 | 0.437 | 0.458 |
