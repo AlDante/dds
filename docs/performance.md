@@ -75,7 +75,24 @@ Default workloads:
 5. `alpha_mu_prototype_default`
 6. `alpha_mu_prototype_bridge_dds`
 
-The default requested repeat count is `1` so the routine can be used after every important code change without becoming too disruptive. Short `dtest` workloads are additionally stabilized with one unmeasured warmup run and at least three measured repeats so transient startup or scheduling delays do not invert the relative timings of `list10` and `list100`.
+The default requested repeat count is `1` so the routine can be used after every important code change without becoming too disruptive.
+
+To keep reported medians accurate to roughly `0.1 s` or better, all short workloads in the standardized suite are stabilized automatically with:
+
+- one unmeasured warmup run,
+- at least three measured repeats,
+- enough measured repeats to accumulate at least `1.0 s` of measured wall time,
+- and an automatic cap of `10` repeats unless the user explicitly requests more.
+
+This covers:
+
+- `dtest_solve_list10`
+- `dtest_solve_list100`
+- `play_analysis_benchmark`
+- `alpha_mu_prototype_default`
+- `alpha_mu_prototype_bridge_dds`
+
+The goal is to suppress transient startup and scheduling noise without materially lengthening the standardized suite.
 
 For a stronger comparison run, increase the requested repeat count explicitly, for example:
 

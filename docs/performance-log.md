@@ -8,6 +8,8 @@ Each entry links to a timestamped result bundle under `test/build/performance_ru
 
 _The graph plots median elapsed seconds per workload on a logarithmic Y-axis so both long DDS regression runs and fast benchmark checks remain visible._
 
+_Entries that include a `Timing stabilization` section use warmup runs plus adaptive repeat counts for short workloads so the reported medians are stable to about `0.1 s` or better._
+
 ## 2026-04-12 10:10:11 — commit `2bec9d9` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-095932`
@@ -100,3 +102,24 @@ _The graph plots median elapsed seconds per workload on a logarithmic Y-axis so 
 | `play_analysis_benchmark` | 0.150 | 0.150 | 0.150 | 0.150 |
 | `alpha_mu_prototype_default` | 16.432 | 16.432 | 16.432 | 16.432 |
 | `alpha_mu_prototype_bridge_dds` | 0.443 | 0.443 | 0.443 | 0.443 |
+
+## 2026-04-13 09:54:02 — commit `e83103f` (dirty)
+
+- Output bundle: `test/build/performance_runs/20260413-094756`
+- Platform: `macOS-26.4-arm64-arm-64bit`
+- Requested repeats per workload: `1`
+- Timing stabilization:
+  - `dtest_solve_list10`: 1 unmeasured warmup run; 6 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `dtest_solve_list100`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `play_analysis_benchmark`: 1 unmeasured warmup run; 10 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_prototype_default`: 1 unmeasured warmup run; 7 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_prototype_bridge_dds`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+
+| Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_smoke` | 219.642 | 219.642 | 219.642 | 219.642 |
+| `dtest_solve_list10` | 0.194 | 0.191 | 0.171 | 0.199 |
+| `dtest_solve_list100` | 2.347 | 2.346 | 2.344 | 2.348 |
+| `play_analysis_benchmark` | 0.107 | 0.107 | 0.103 | 0.114 |
+| `alpha_mu_prototype_default` | 0.156 | 0.157 | 0.154 | 0.162 |
+| `alpha_mu_prototype_bridge_dds` | 0.449 | 0.450 | 0.448 | 0.454 |

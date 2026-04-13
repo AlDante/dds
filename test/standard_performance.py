@@ -31,7 +31,8 @@ DEFAULT_WORKLOADS = [
         "requires_dyld": True,
         "warmup_runs": 1,
         "minimum_repeats": 3,
-        "timing_note": "1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.",
+        "minimum_measured_seconds": 1.0,
+        "maximum_repeats": 10,
     },
     {
         "name": "dtest_solve_list100",
@@ -40,25 +41,38 @@ DEFAULT_WORKLOADS = [
         "requires_dyld": True,
         "warmup_runs": 1,
         "minimum_repeats": 3,
-        "timing_note": "1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.",
+        "minimum_measured_seconds": 1.0,
+        "maximum_repeats": 10,
     },
     {
         "name": "play_analysis_benchmark",
         "cwd": "test",
         "command": ["./build/play_analysis_benchmark"],
         "requires_dyld": True,
+        "warmup_runs": 1,
+        "minimum_repeats": 3,
+        "minimum_measured_seconds": 1.0,
+        "maximum_repeats": 10,
     },
     {
         "name": "alpha_mu_prototype_default",
         "cwd": "test",
         "command": ["./build/alpha_mu_prototype"],
         "requires_dyld": True,
+        "warmup_runs": 1,
+        "minimum_repeats": 3,
+        "minimum_measured_seconds": 1.0,
+        "maximum_repeats": 10,
     },
     {
         "name": "alpha_mu_prototype_bridge_dds",
         "cwd": "test",
         "command": ["./build/alpha_mu_prototype", "bridge_dds"],
         "requires_dyld": True,
+        "warmup_runs": 1,
+        "minimum_repeats": 3,
+        "minimum_measured_seconds": 1.0,
+        "maximum_repeats": 10,
     },
 ]
 
@@ -152,6 +166,38 @@ def warmup_runs_for_workload(workload: dict[str, Any]) -> int:
     return int(workload.get("warmup_runs", 0))
 
 
+def minimum_measured_seconds_for_workload(workload: dict[str, Any]) -> float:
+    return float(workload.get("minimum_measured_seconds", 0.0))
+
+
+def maximum_repeats_for_workload(workload: dict[str, Any], requested_repeats: int) -> int:
+    configured_max = int(workload.get("maximum_repeats", requested_repeats))
+    return max(configured_max, requested_repeats)
+
+
+def timing_note_for_workload(
+    workload: dict[str, Any], requested_repeats: int, measured_repeats: int, warmup_runs: int
+) -> str:
+    minimum_repeats = int(workload.get("minimum_repeats", 1))
+    minimum_measured_seconds = minimum_measured_seconds_for_workload(workload)
+    maximum_repeats = int(workload.get("maximum_repeats", measured_repeats))
+
+    if warmup_runs == 0 and minimum_repeats <= requested_repeats and minimum_measured_seconds <= 0.0:
+        return ""
+
+    pieces: list[str] = []
+    if warmup_runs:
+        pieces.append(f"{warmup_runs} unmeasured warmup run{'s' if warmup_runs != 1 else ''}")
+    pieces.append(f"{measured_repeats} measured repeat{'s' if measured_repeats != 1 else ''}")
+    if minimum_repeats > requested_repeats:
+        pieces.append(f"minimum measured repeat count raised from requested {requested_repeats} to {minimum_repeats}")
+    if minimum_measured_seconds > 0.0:
+        pieces.append(f"cumulative measured wall time target ≥ {minimum_measured_seconds:.1f} s")
+    if maximum_repeats > max(requested_repeats, minimum_repeats) and minimum_measured_seconds > 0.0:
+        pieces.append(f"automatic repeats capped at {maximum_repeats} unless the user requests more")
+    return "; ".join(pieces) + "."
+
+
 def timing_notes(summary: dict[str, Any]) -> list[str]:
     notes: list[str] = []
     for workload in summary["workloads"]:
@@ -172,6 +218,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append(f"- Platform: `{summary['platform']}`")
     lines.append(f"- Python: `{summary['python']}`")
     lines.append(f"- Requested repeats per workload: `{summary['repeats']}`")
+    lines.append("- Timing goal: short workloads are measured with enough warmup and repeats to make the reported medians stable to about 0.1 s or better.")
     lines.append("")
     lines.append("## Build steps")
     lines.append("")
@@ -303,8 +350,17 @@ def main() -> int:
                 )
 
         measured_repeats = actual_repeats_for_workload(workload, args.repeats)
+        minimum_measured_seconds = minimum_measured_seconds_for_workload(workload)
+        maximum_repeats = maximum_repeats_for_workload(workload, args.repeats)
         runs: list[dict[str, Any]] = []
-        for run_number in range(1, measured_repeats + 1):
+        measured_elapsed_seconds = 0.0
+        run_number = 0
+        while run_number < measured_repeats or (
+            minimum_measured_seconds > 0.0
+            and measured_elapsed_seconds < minimum_measured_seconds
+            and run_number < maximum_repeats
+        ):
+            run_number += 1
             result = run_command(workload["command"], cwd, env)
             runs.append(
                 {
@@ -312,6 +368,7 @@ def main() -> int:
                     "elapsed_seconds": result["elapsed_seconds"],
                 }
             )
+            measured_elapsed_seconds += result["elapsed_seconds"]
             log_name = f"{workload_index:02d}_{workload['name']}_run{run_number}.log"
             write_text(output_dir / log_name, result["output"])
             if result["returncode"] != 0:
@@ -324,7 +381,9 @@ def main() -> int:
             summarize_workload_runs(workload["name"], shlex.join(workload["command"]), runs)
         )
         workload_summaries[-1]["warmup_runs"] = warmup_runs
-        workload_summaries[-1]["timing_note"] = workload.get("timing_note", "") if warmup_runs or measured_repeats != args.repeats else ""
+        workload_summaries[-1]["timing_note"] = timing_note_for_workload(
+            workload, args.repeats, workload_summaries[-1]["run_count"], warmup_runs
+        )
 
     summary = {
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
