@@ -600,9 +600,10 @@ namespace
   enum ConstraintKind
   {
     CONSTRAINT_HAS_CARD = 0,
-    CONSTRAINT_VOID_SUIT = 1,
-    CONSTRAINT_MIN_LENGTH = 2,
-    CONSTRAINT_MAX_LENGTH = 3
+    CONSTRAINT_NOT_HAS_CARD = 1,
+    CONSTRAINT_VOID_SUIT = 2,
+    CONSTRAINT_MIN_LENGTH = 3,
+    CONSTRAINT_MAX_LENGTH = 4
   };
 
 
@@ -702,8 +703,10 @@ namespace
     unsigned afterBiddingCount;
     unsigned afterPlayHistoryCount;
     unsigned afterCurrentTrickCount;
+    unsigned afterSamplingCount;
     unsigned finalWorldCount;
     unsigned duplicateWorldsRemoved;
+    unsigned sampledOutWorlds;
 
     WorldGenerationStats() :
       candidateWorldCount(0),
@@ -711,8 +714,10 @@ namespace
       afterBiddingCount(0),
       afterPlayHistoryCount(0),
       afterCurrentTrickCount(0),
+      afterSamplingCount(0),
       finalWorldCount(0),
-      duplicateWorldsRemoved(0)
+      duplicateWorldsRemoved(0),
+      sampledOutWorlds(0)
     {
     }
   };
@@ -759,6 +764,19 @@ namespace
       return c;
     }
 
+    static WorldConstraint NotHasCard(
+      const int playerArg,
+      const int suitArg,
+      const char rankArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_NOT_HAS_CARD;
+      c.player = playerArg;
+      c.suit = suitArg;
+      c.rank = rankArg;
+      return c;
+    }
+
     static WorldConstraint MinLength(
       const int playerArg,
       const int suitArg,
@@ -794,13 +812,17 @@ namespace
     vector<PlayHistoryEvent> playHistory;
     vector<PlayHistoryEvent> currentTrickHistory;
     bool deduplicateEquivalentWorlds;
+    unsigned sampleLimit;
+    unsigned samplingSeed;
 
     BridgeInformationState() :
       knownCardConstraints(),
       biddingConstraints(),
       playHistory(),
       currentTrickHistory(),
-      deduplicateEquivalentWorlds(false)
+      deduplicateEquivalentWorlds(false),
+      sampleLimit(0),
+      samplingSeed(0)
     {
     }
   };
@@ -1394,6 +1416,10 @@ namespace
         return WorldHasCard(world, constraint.player, constraint.suit,
           constraint.rank);
 
+      case CONSTRAINT_NOT_HAS_CARD:
+        return ! WorldHasCard(world, constraint.player, constraint.suit,
+          constraint.rank);
+
       case CONSTRAINT_VOID_SUIT:
         return WorldSuitLength(world, constraint.player, constraint.suit) == 0;
 
@@ -1519,6 +1545,50 @@ namespace
   }
 
 
+  static WorldMask SampleWorldMaskDeterministically(
+    const vector<ParsedWorld>& worlds,
+    const WorldMask& candidates,
+    const unsigned sampleLimit,
+    const unsigned samplingSeed,
+    unsigned& sampledOutWorlds)
+  {
+    sampledOutWorlds = 0;
+    if (sampleLimit == 0)
+      return candidates;
+
+    vector<unsigned> active;
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      if (candidates.Has(i))
+        active.push_back(i);
+    }
+
+    if (active.size() <= sampleLimit)
+      return candidates;
+
+    sort(active.begin(), active.end(),
+      [&](const unsigned left, const unsigned right)
+      {
+        const string leftKey = SerializePBNWorld(worlds[left]);
+        const string rightKey = SerializePBNWorld(worlds[right]);
+        if (leftKey != rightKey)
+          return leftKey < rightKey;
+        return left < right;
+      });
+
+    WorldMask sampled = WorldMask::None(candidates.count);
+    const unsigned offset = samplingSeed % static_cast<unsigned>(active.size());
+    for (unsigned i = 0; i < sampleLimit; i++)
+    {
+      const unsigned picked = active[(offset + i) % active.size()];
+      sampled.bits |= (1ULL << picked);
+    }
+
+    sampledOutWorlds = static_cast<unsigned>(active.size()) - sampleLimit;
+    return sampled;
+  }
+
+
   static WorldMask GeneratePossibleWorlds(
     const vector<ParsedWorld>& worlds,
     const BridgeInformationState& information,
@@ -1552,6 +1622,15 @@ namespace
       mask = DeduplicateWorldMask(worlds, mask, duplicatesRemoved);
       if (stats != NULL)
         stats->duplicateWorldsRemoved = duplicatesRemoved;
+    }
+
+    unsigned sampledOutWorlds = 0;
+    mask = SampleWorldMaskDeterministically(worlds, mask, information.sampleLimit,
+      information.samplingSeed, sampledOutWorlds);
+    if (stats != NULL)
+    {
+      stats->afterSamplingCount = mask.PopCount();
+      stats->sampledOutWorlds = sampledOutWorlds;
     }
 
     if (stats != NULL)
@@ -2469,6 +2548,8 @@ namespace
       "play-style void and card-location constraints should isolate the final world");
     Check(playStats.afterKnownCardCount == 1,
       "world-generation stats should record the known-card filter before later stages");
+    Check(playStats.afterSamplingCount == 1,
+      "world-generation stats should report the unchanged count when no sampling is requested");
     Check(playStats.finalWorldCount == 1,
       "world-generation stats should record the final surviving world count");
 
@@ -2497,6 +2578,13 @@ namespace
       "world-generation should remove one duplicate world after staged filtering");
     Check(dedupMask == WorldMask(5, 0xCU),
       "world deduplication should keep the first equivalent surviving world and drop later duplicates");
+
+    BridgeInformationState notHasInfo;
+    notHasInfo.knownCardConstraints.push_back(
+      WorldConstraint::NotHasCard(SEAT_WEST, SUIT_SPADES, '3'));
+    const WorldMask notHasMask = GeneratePossibleWorlds(worlds, notHasInfo, NULL);
+    Check(notHasMask == WorldMask(4, 0xCU),
+      "explicit cannot-hold-card constraints should keep only worlds where West does not hold the specified spade");
   }
 
 
@@ -2531,6 +2619,47 @@ namespace
       "play-history world generation should report duplicate removal after legality filtering");
     Check(stats.finalWorldCount == 1,
       "play-history world generation should finish with one deduplicated surviving world");
+  }
+
+
+  static void TestDeterministicWorldSampling()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 765.8765.JT9.876 JT98.AKQ.432.AKQ 43.432.8765.5432"));
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 7654.876.JT9.876 JT98.AKQ.432.AKQ 3.5432.8765.5432"));
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543.876.JT.876 JT98.AKQ.432.AKQ .5432.98765.5432"));
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543..JT987.876 JT98.AKQ.432.AKQ .8765432.65.5432"));
+
+    BridgeInformationState first;
+    first.sampleLimit = 2;
+    first.samplingSeed = 0;
+    WorldGenerationStats firstStats;
+    const WorldMask sampleA = GeneratePossibleWorlds(worlds, first, &firstStats);
+    const WorldMask sampleARepeat = GeneratePossibleWorlds(worlds, first, NULL);
+
+    BridgeInformationState second(first);
+    second.samplingSeed = 1;
+    WorldGenerationStats secondStats;
+    const WorldMask sampleB = GeneratePossibleWorlds(worlds, second, &secondStats);
+
+    Check(sampleA == sampleARepeat,
+      "deterministic sampling should reproduce the same sampled world mask for the same seed");
+    Check(sampleA.PopCount() == 2,
+      "deterministic sampling should cap the world mask at the configured sample limit");
+    Check(sampleB.PopCount() == 2,
+      "deterministic sampling should keep the requested number of worlds for a different seed as well");
+    Check(! (sampleA == sampleB),
+      "deterministic sampling should allow the seed to shift which canonical worlds are retained");
+    Check(firstStats.sampledOutWorlds == 2,
+      "deterministic sampling stats should report how many worlds were dropped by sample limiting");
+    Check(firstStats.afterSamplingCount == 2,
+      "deterministic sampling stats should record the post-sampling surviving world count");
+    Check(secondStats.finalWorldCount == 2,
+      "deterministic sampling should leave the final world count equal to the sample limit");
   }
 
 
@@ -2990,6 +3119,9 @@ int main(int argc, char ** argv)
 
   TestPlayHistoryFiltering();
   cout << "alpha_mu_prototype: play-history filtering OK\n";
+
+  TestDeterministicWorldSampling();
+  cout << "alpha_mu_prototype: deterministic world sampling OK\n";
 
   TestBridgeMoveGeneration();
   cout << "alpha_mu_prototype: bridge move generation OK\n";
