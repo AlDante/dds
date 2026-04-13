@@ -10,6 +10,8 @@ _The graph plots median elapsed seconds per workload on a logarithmic Y-axis so 
 
 _Entries that include a `Timing stabilization` section use warmup runs plus adaptive repeat counts for short workloads so the reported medians are stable to about `0.1 s` or better._
 
+_If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
+
 ## 2026-04-12 10:10:11 — commit `2bec9d9` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-095932`
@@ -45,6 +47,8 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 - Output bundle: `test/build/performance_runs/20260412-124110`
 - Platform: `macOS-26.4-arm64-arm-64bit`
 - Repeats per workload: `1`
+- Graph outliers: `alpha_mu_prototype_bridge_dds`
+- Note: `alpha_mu_prototype_bridge_dds` used a temporary overly heavy targeted regression variant before the targeted-scope trim, so it is not directly comparable with later stabilized bridge-dds timings.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |
@@ -75,6 +79,8 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 - Output bundle: `test/build/performance_runs/20260412-170734`
 - Platform: `macOS-26.4-arm64-arm-64bit`
 - Repeats per workload: `1`
+- Graph outliers: `dtest_solve_list10`
+- Note: `dtest_solve_list10` was a single-run wall-clock startup/scheduling outlier; repeated reruns and the program's own internal timing remained near the historical ~0.1-0.2 s range.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |
@@ -93,6 +99,8 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 - Timing stabilization:
   - `dtest_solve_list10`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
   - `dtest_solve_list100`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
+- Graph outliers: `alpha_mu_prototype_default`
+- Note: `alpha_mu_prototype_default` was a single-run wall-clock outlier; repeated reruns remained near the historical ~0.15-0.2 s range and the later stabilized entry supersedes it for trend interpretation.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |

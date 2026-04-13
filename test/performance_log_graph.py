@@ -18,6 +18,8 @@ WORKLOAD_ROW_RE = re.compile(
     r"^\| `(?P<name>[^`]+)` \| (?P<median>[0-9]+(?:\.[0-9]+)?) \| "
     r"(?P<mean>[0-9]+(?:\.[0-9]+)?) \| (?P<min>[0-9]+(?:\.[0-9]+)?) \| (?P<max>[0-9]+(?:\.[0-9]+)?) \|$"
 )
+GRAPH_OUTLIERS_RE = re.compile(r"^- Graph outliers: (?P<workloads>.+)$")
+BACKTICK_NAME_RE = re.compile(r"`([^`]+)`")
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,7 @@ class PerformanceEntry:
     commit: str
     dirty: bool
     workloads: dict[str, float]
+    graph_outliers: frozenset[str]
 
 
 def repo_root() -> Path:
@@ -38,9 +41,10 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
     current_commit: str | None = None
     current_dirty = False
     current_workloads: dict[str, float] = {}
+    current_graph_outliers: set[str] = set()
 
     def flush_current() -> None:
-        nonlocal current_timestamp, current_commit, current_dirty, current_workloads
+        nonlocal current_timestamp, current_commit, current_dirty, current_workloads, current_graph_outliers
         if current_timestamp is None or current_commit is None:
             return
         if current_workloads:
@@ -50,12 +54,14 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
                     commit=current_commit,
                     dirty=current_dirty,
                     workloads=dict(current_workloads),
+                    graph_outliers=frozenset(current_graph_outliers),
                 )
             )
         current_timestamp = None
         current_commit = None
         current_dirty = False
         current_workloads = {}
+        current_graph_outliers = set()
 
     for raw_line in log_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -70,6 +76,11 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
         row_match = WORKLOAD_ROW_RE.match(line)
         if row_match and current_timestamp is not None:
             current_workloads[row_match.group("name")] = float(row_match.group("median"))
+            continue
+
+        outlier_match = GRAPH_OUTLIERS_RE.match(line)
+        if outlier_match and current_timestamp is not None:
+            current_graph_outliers.update(BACKTICK_NAME_RE.findall(outlier_match.group("workloads")))
 
     flush_current()
     return entries
@@ -206,6 +217,15 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
             fill="#4b5563",
         )
     )
+    svg_parts.append(
+        svg_text(
+            left_margin,
+            100,
+            "Hollow X markers denote flagged historical outliers/non-comparable measurements and are excluded from the trend line for that workload.",
+            font_size="13",
+            fill="#6b7280",
+        )
+    )
 
     plot_left = left_margin
     plot_right = left_margin + plot_width
@@ -263,26 +283,36 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
 
     for workload_name in workload_names:
         points: list[tuple[float, float]] = []
+        outlier_points: list[tuple[float, float]] = []
         for index, entry in enumerate(entries):
             value = entry.workloads.get(workload_name)
             if value is None or value <= 0.0:
                 continue
-            points.append((x_position(index), y_position(value)))
-        if not points:
+            point = (x_position(index), y_position(value))
+            if workload_name in entry.graph_outliers:
+                outlier_points.append(point)
+            else:
+                points.append(point)
+        if not points and not outlier_points:
             continue
         color = color_by_workload[workload_name]
-        svg_parts.append(
-            svg_polyline(
-                points,
-                fill="none",
-                stroke=color,
-                stroke_width="3",
-                stroke_linecap="round",
-                stroke_linejoin="round",
+        if len(points) >= 2:
+            svg_parts.append(
+                svg_polyline(
+                    points,
+                    fill="none",
+                    stroke=color,
+                    stroke_width="3",
+                    stroke_linecap="round",
+                    stroke_linejoin="round",
+                )
             )
-        )
         for point_x, point_y in points:
             svg_parts.append(svg_circle(point_x, point_y, 4.5, fill=color, stroke="#ffffff", stroke_width="1.5"))
+        for point_x, point_y in outlier_points:
+            svg_parts.append(svg_circle(point_x, point_y, 6.0, fill="#ffffff", stroke=color, stroke_width="2.5"))
+            svg_parts.append(svg_line(point_x - 4.0, point_y - 4.0, point_x + 4.0, point_y + 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
+            svg_parts.append(svg_line(point_x - 4.0, point_y + 4.0, point_x + 4.0, point_y - 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
 
     legend_x = plot_right + 28.0
     legend_y = plot_top + 20.0
@@ -294,8 +324,16 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
         svg_parts.append(svg_circle(legend_x + 14, row_y - 5, 4.5, fill=color, stroke="#ffffff", stroke_width="1.5"))
         svg_parts.append(svg_text(legend_x + 40, row_y, workload_name, font_size="13", fill="#111827"))
 
+    legend_marker_y = legend_y + 26.0 * (len(workload_names) + 1)
+    svg_parts.append(svg_text(legend_x, legend_marker_y, "Graph markers", font_size="16", font_weight="700", fill="#111827"))
+    marker_row_y = legend_marker_y + 26.0
+    svg_parts.append(svg_circle(legend_x + 14, marker_row_y - 5, 6.0, fill="#ffffff", stroke="#6b7280", stroke_width="2.0"))
+    svg_parts.append(svg_line(legend_x + 10, marker_row_y - 9, legend_x + 18, marker_row_y - 1, stroke="#6b7280", stroke_width="1.8", stroke_linecap="round"))
+    svg_parts.append(svg_line(legend_x + 10, marker_row_y - 1, legend_x + 18, marker_row_y - 9, stroke="#6b7280", stroke_width="1.8", stroke_linecap="round"))
+    svg_parts.append(svg_text(legend_x + 40, marker_row_y, "Flagged outlier / non-comparable measurement", font_size="13", fill="#111827"))
+
     latest_entry = entries[-1]
-    summary_y = legend_y + 26.0 * (len(workload_names) + 2)
+    summary_y = legend_y + 26.0 * (len(workload_names) + 4)
     svg_parts.append(svg_text(legend_x, summary_y, "Latest entry", font_size="16", font_weight="700", fill="#111827"))
     svg_parts.append(
         svg_text(
