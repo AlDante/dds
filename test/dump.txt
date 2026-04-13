@@ -1,0 +1,43 @@
+Error code=-14
+
+Deal data:
+trump=N
+first=N
+index=0 currentTrickSuit=H currentTrickRank= K
+index=1 currentTrickSuit=H currentTrickRank= T
+index=2 currentTrickSuit=H currentTrickRank= J
+index1=0 index2=0 remainCards=8196
+index1=0 index2=1 remainCards=16384
+index1=0 index2=2 remainCards=0
+index1=0 index2=3 remainCards=0
+index1=1 index2=0 remainCards=2056
+index1=1 index2=1 remainCards=0
+index1=1 index2=2 remainCards=0
+index1=1 index2=3 remainCards=0
+index1=2 index2=0 remainCards=16400
+index1=2 index2=1 remainCards=0
+index1=2 index2=2 remainCards=0
+index1=2 index2=3 remainCards=0
+index1=3 index2=0 remainCards=4128
+index1=3 index2=1 remainCards=0
+index1=3 index2=2 remainCards=0
+index1=3 index2=3 remainCards=0
+
+target=-1
+solutions=1
+mode=0
+
+
+        S K2
+        H A
+        D --
+        C --
+S Q5            S J3
+H --            H --
+D --            D --
+C --            C --
+        S A4
+        H --
+        D --
+        C --
+
