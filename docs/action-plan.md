@@ -175,3 +175,94 @@ The next cycle should be:
 5. verify correctness,
 6. add optimization-paper features one at a time,
 7. keep DDS root-policy tuning as a secondary support stream.
+
+## Next concrete execution cycles from the current prototype
+
+The prototype now already covers the minimum semantic core plus the first optimization-paper features.
+
+That means the next execution cycles should no longer be framed as “build the first prototype”, but as “turn the existing prototype into a complete alpha-mu implementation”.
+
+### Cycle A — richer world generation
+
+Implement the next realistic-world step:
+
+1. represent bidding constraints, play-history constraints, known cards, and follow-suit implications explicitly,
+2. extend world generation from simple filtered candidate pools to realistic history-derived worlds,
+3. make world sampling reproducible and measurable,
+4. add regression cases that explain why each world is accepted or rejected.
+
+### Cycle B — larger bridge continuations
+
+Extend the bridge search controller from the current small continuation model to larger realistic continuations:
+
+1. support more than two surviving worlds,
+2. support multiple sparse-front shapes after continuation,
+3. support mixed merge/split behavior across multiple tricks,
+4. verify correct empty-trick and partial-trick transitions at larger horizons,
+5. report root move, front, and useful-world counts.
+
+### Cycle C — complete the missing paper motifs
+
+Add controlled fixtures for the motifs not yet directly represented in repository-format material:
+
+1. strategy fusion,
+2. non-locality,
+3. discovery-play / information gain,
+4. rare-bad-event avoidance.
+
+For each fixture, record:
+
+- intended world family,
+- expected root property or move preference,
+- required horizon,
+- whether the case is synthetic or file-backed.
+
+### Cycle D — refactor the prototype into durable units
+
+Before further growth, split the prototype into clearer pieces for:
+
+1. world/state representation,
+2. Pareto-front operations,
+3. bridge-state transitions,
+4. DDS leaf adaptation,
+5. search control,
+6. fixture definition and runner logic.
+
+Keep the alpha-mu code outside the core DDS recursion while doing this.
+
+### Cycle E — instrument alpha-mu for measured optimization
+
+Add benchmark accounting for:
+
+- world generation cost,
+- front sizes and dominance reductions,
+- TT hit/miss counts,
+- cut counts by type,
+- DDS leaf-call counts,
+- elapsed time split by stage.
+
+Do this before adding further performance work.
+
+### Cycle F — graduate from prototype to complete engine
+
+Define the point where alpha-mu stops being only a prototype runner and becomes a complete repository component:
+
+1. a stable alpha-mu entry point,
+2. configurable world count / horizon / seed,
+3. reproducible imperfect-information searches,
+4. documented inputs, outputs, and limits,
+5. maintained regression/benchmark coverage.
+
+## Practical definition of done for alpha-mu
+
+Alpha-mu should only be treated as complete in this repository when all of the following are true:
+
+1. realistic world generation from meaningful histories exists,
+2. bridge continuation search extends well beyond the current showcase depth,
+3. paper-motif fixtures are covered directly,
+4. root reporting includes move/front/cut information,
+5. performance instrumentation separates world generation, search, and DDS leaf cost,
+6. the implementation is organized into durable components,
+7. the engine is runnable reproducibly as a first-class repository-supported alpha-mu searcher,
+8. DDS baseline behavior remains unchanged and benchmark-backed.
+

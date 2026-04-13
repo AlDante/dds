@@ -272,6 +272,225 @@ Possible later topics include:
 
 These are explicitly deferred because they combine correctness, pruning, TT, and architectural risks.
 
+## Phase 8 — realistic world generation and state construction
+
+### Goal
+
+Move from a curated prototype-world pool to realistic alpha-mu inputs derived from actual bridge information.
+
+### Required work
+
+1. Define an explicit prototype-side representation for:
+   - bidding constraints,
+   - play-history constraints,
+   - known cards,
+   - suit-length / void / follow-suit implications,
+   - optional world weights or sampling frequencies.
+2. Extend the possible-world generator to support:
+   - full partial-history filtering rather than only simple showcase constraints,
+   - deterministic sampling with reproducible seeds,
+   - deduplication / canonicalization of equivalent worlds,
+   - rejection accounting so the generator can be debugged and benchmarked.
+3. Add tests for:
+   - worlds eliminated by bidding constraints,
+   - worlds eliminated by play-history legality,
+   - worlds merging under equivalent information,
+   - reproducibility of generated world sets.
+
+### Success criteria
+
+- the prototype can build realistic world sets from nontrivial histories,
+- generated worlds are reproducible and explainable,
+- world-generation cost is measured separately from search cost.
+
+## Phase 9 — broaden bridge search control into a real declarer-play searcher
+
+### Goal
+
+Extend the current small multi-trick controller into a true alpha-mu bridge search over realistic continuations.
+
+### Required work
+
+1. Support broader continuation horizons measured in Max moves.
+2. Preserve correct state transitions for:
+   - empty-trick states,
+   - partial-trick states,
+   - winner advancement,
+   - next-trick lead changes,
+   - legal-move elimination across worlds.
+3. Add regression coverage for:
+   - more than two surviving worlds,
+   - mixed merge/split frontier shapes after continuation,
+   - repeated sparse-front transitions across multiple tricks,
+   - deeper searched continuations before DDS leaf handoff.
+4. Add root result reporting for:
+   - chosen move,
+   - root front,
+   - useful-world counts,
+   - cut activity,
+   - DDS leaf-evaluation count.
+
+### Success criteria
+
+- the prototype can search several Max moves deep on realistic bridge continuations,
+- root move choice is stable on repeated runs,
+- sparse-front behavior remains correct under deeper continuations.
+
+## Phase 10 — complete the paper-motif validation set
+
+### Goal
+
+Ensure the implementation is judged on the imperfect-information motifs alpha-mu is supposed to address, not only on practical DDS-derived hands.
+
+### Required work
+
+1. Add dedicated controlled cases for:
+   - strategy fusion,
+   - non-locality,
+   - discovery-play / information gain,
+   - rare-bad-event avoidance.
+2. For each motif, define:
+   - the intended world family,
+   - the expected root preference or front property,
+   - the minimum horizon required to expose the behavior.
+3. Extend `docs/alpha-mu-test-set.md` with:
+   - explicit motif-to-fixture mapping,
+   - success criteria for move choice and cut behavior,
+   - notes about what is still synthetic versus repository-format.
+
+### Success criteria
+
+- the prototype passes deterministic motif-driven checks,
+- alpha-mu-specific behavior is demonstrated on cases that DDS alone does not explain well.
+
+## Phase 11 — separate prototype internals into durable modules
+
+### Goal
+
+Keep the growing alpha-mu implementation understandable and maintainable before it graduates from a single narrow prototype file.
+
+### Required work
+
+1. Split the current prototype into reusable units for:
+   - world representation and masks,
+   - front operations,
+   - bridge-state transition helpers,
+   - DDS leaf adaptation,
+   - search controller,
+   - fixture definitions and test runners.
+2. Define clear ownership boundaries between:
+   - DDS-perfect-information evaluation,
+   - alpha-mu world/state management,
+   - alpha-mu search semantics,
+   - reporting / instrumentation.
+3. Preserve a dedicated prototype runner while making the code easier to evolve.
+
+### Success criteria
+
+- alpha-mu code is no longer bottlenecked by one growing monolithic prototype file,
+- new features can be added without destabilizing unrelated prototype subsystems.
+
+## Phase 12 — add full search instrumentation and benchmark accounting
+
+### Goal
+
+Make alpha-mu performance work evidence-driven before low-level tuning begins.
+
+### Required work
+
+Measure and report at least:
+
+- generated world count,
+- useful-world count by depth,
+- Pareto-front sizes,
+- dominance reduction counts,
+- TT hit/miss counts,
+- DDS leaf calls,
+- cut counts by kind,
+- elapsed time split by world generation, search, and DDS leaf work.
+
+### Success criteria
+
+- later optimization work can identify actual bottlenecks rather than guess,
+- benchmark reports distinguish world-generation cost from search cost.
+
+## Phase 13 — scale the implementation from prototype to complete alpha-mu engine
+
+### Goal
+
+Close the gap between a validated prototype and a complete repository-supported alpha-mu implementation.
+
+### Required work
+
+1. Define a stable alpha-mu entry point/API around the prototype layer.
+2. Support real contract / declarer / leader input construction for alpha-mu searches.
+3. Support configurable:
+   - world count,
+   - Max-move horizon,
+   - sampling seed,
+   - optional weighting / pruning policy.
+4. Ensure deterministic reproducibility for debugging and regression.
+5. Add documentation for invocation, expected outputs, and limits.
+
+### Success criteria
+
+- alpha-mu is runnable as a first-class repository component rather than only as an internal experiment,
+- callers can request and reproduce imperfect-information searches with explicit configuration.
+
+## Phase 14 — optimize only measured bottlenecks
+
+### Goal
+
+Improve performance after the algorithm is complete and benchmarked, without compromising correctness.
+
+### Recommended order
+
+1. front representation / reduction cost,
+2. world canonicalization and hashing,
+3. TT key design and reuse quality,
+4. DDS leaf batching / parallelization policy,
+5. only then SIMD or lower-level data-layout tuning if measurements justify it.
+
+### Success criteria
+
+- optimization work is benchmark-backed,
+- correctness and move-choice stability remain unchanged.
+
+## Phase 15 — integration decision point
+
+### Goal
+
+Decide how far alpha-mu should move beyond the prototype/test layer.
+
+### Decision questions
+
+1. Should alpha-mu remain a separate experimental component?
+2. Should a public or semi-public API be added?
+3. Which DDS internals, if any, are safe to reuse more directly?
+4. Is deeper solver-core integration justified by measured value?
+
+### Guidance
+
+Do not force integration for its own sake. Only integrate deeper if:
+
+- the complete alpha-mu implementation is stable,
+- the benchmark/test corpus is broad enough,
+- the architectural benefit outweighs the correctness risk.
+
+## Definition of complete alpha-mu implementation for this repository
+
+The project should only describe alpha-mu as complete when all of the following are true:
+
+1. realistic world generation exists from meaningful bidding/play histories,
+2. bridge continuation search extends beyond the current small multi-trick showcase,
+3. paper-motif fixtures for strategy fusion, non-locality, discovery play, and rare bad events are covered,
+4. root results include usable move/front/cut reporting,
+5. performance instrumentation exists for world generation, front work, cuts, TT reuse, and DDS leaf calls,
+6. the implementation is organized into durable modules rather than one narrow prototype file,
+7. the component can be run reproducibly as a first-class repository-supported alpha-mu engine,
+8. performance tuning has been applied only where measurements justify it,
+9. DDS baseline behavior remains unchanged and benchmark-backed throughout.
+
 ## Recommended immediate next move
 
 The next practical step is still **not** to redesign `ABsearch*()`.

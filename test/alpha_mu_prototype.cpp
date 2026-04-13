@@ -670,6 +670,54 @@ namespace
   };
 
 
+  struct PlayHistoryEvent
+  {
+    int player;
+    int leadSuit;
+    BridgeMove move;
+
+    PlayHistoryEvent() :
+      player(0),
+      leadSuit(-1),
+      move()
+    {
+    }
+
+    PlayHistoryEvent(
+      const int playerArg,
+      const int leadSuitArg,
+      const BridgeMove& moveArg) :
+      player(playerArg),
+      leadSuit(leadSuitArg),
+      move(moveArg)
+    {
+    }
+  };
+
+
+  struct WorldGenerationStats
+  {
+    unsigned candidateWorldCount;
+    unsigned afterKnownCardCount;
+    unsigned afterBiddingCount;
+    unsigned afterPlayHistoryCount;
+    unsigned afterCurrentTrickCount;
+    unsigned finalWorldCount;
+    unsigned duplicateWorldsRemoved;
+
+    WorldGenerationStats() :
+      candidateWorldCount(0),
+      afterKnownCardCount(0),
+      afterBiddingCount(0),
+      afterPlayHistoryCount(0),
+      afterCurrentTrickCount(0),
+      finalWorldCount(0),
+      duplicateWorldsRemoved(0)
+    {
+    }
+  };
+
+
   struct WorldConstraint
   {
     ConstraintKind kind;
@@ -735,6 +783,25 @@ namespace
       c.suit = suitArg;
       c.count = countArg;
       return c;
+    }
+  };
+
+
+  struct BridgeInformationState
+  {
+    vector<WorldConstraint> knownCardConstraints;
+    vector<WorldConstraint> biddingConstraints;
+    vector<PlayHistoryEvent> playHistory;
+    vector<PlayHistoryEvent> currentTrickHistory;
+    bool deduplicateEquivalentWorlds;
+
+    BridgeInformationState() :
+      knownCardConstraints(),
+      biddingConstraints(),
+      playHistory(),
+      currentTrickHistory(),
+      deduplicateEquivalentWorlds(false)
+    {
     }
   };
 
@@ -1344,30 +1411,162 @@ namespace
   }
 
 
+  static bool WorldMatchesAllConstraints(
+    const ParsedWorld& world,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      if (! WorldMatchesConstraint(world, constraints[i]))
+        return false;
+    }
+    return true;
+  }
+
+
+  static WorldMask FilterWorldsByConstraints(
+    const vector<ParsedWorld>& worlds,
+    const WorldMask& candidates,
+    const vector<WorldConstraint>& constraints)
+  {
+    if (constraints.empty())
+      return candidates;
+
+    WorldMask mask = WorldMask::None(candidates.count);
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      if (! candidates.Has(i))
+        continue;
+
+      if (WorldMatchesAllConstraints(worlds[i], constraints))
+        mask.bits |= (1ULL << i);
+    }
+    return mask;
+  }
+
+
+  static bool WorldCanReplayHistory(
+    const ParsedWorld& world,
+    const vector<PlayHistoryEvent>& history)
+  {
+    ParsedWorld replay(world);
+    for (unsigned i = 0; i < history.size(); i++)
+    {
+      const PlayHistoryEvent& event = history[i];
+      if (! WorldHasCard(replay, event.player, event.move.suit, event.move.rank))
+        return false;
+
+      if (event.leadSuit >= 0 &&
+          event.move.suit != event.leadSuit &&
+          WorldSuitLength(replay, event.player, event.leadSuit) > 0)
+      {
+        return false;
+      }
+
+      RemoveCardFromWorld(replay, event.player, event.move);
+    }
+    return true;
+  }
+
+
+  static WorldMask FilterWorldsByHistory(
+    const vector<ParsedWorld>& worlds,
+    const WorldMask& candidates,
+    const vector<PlayHistoryEvent>& history)
+  {
+    if (history.empty())
+      return candidates;
+
+    WorldMask mask = WorldMask::None(candidates.count);
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      if (! candidates.Has(i))
+        continue;
+
+      if (WorldCanReplayHistory(worlds[i], history))
+        mask.bits |= (1ULL << i);
+    }
+    return mask;
+  }
+
+
+  static WorldMask DeduplicateWorldMask(
+    const vector<ParsedWorld>& worlds,
+    const WorldMask& candidates,
+    unsigned& duplicatesRemoved)
+  {
+    map<string, unsigned> firstSeen;
+    WorldMask deduped = WorldMask::None(candidates.count);
+    duplicatesRemoved = 0;
+
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      if (! candidates.Has(i))
+        continue;
+
+      const string key = SerializePBNWorld(worlds[i]);
+      if (firstSeen.find(key) != firstSeen.end())
+      {
+        duplicatesRemoved++;
+        continue;
+      }
+
+      firstSeen[key] = i;
+      deduped.bits |= (1ULL << i);
+    }
+
+    return deduped;
+  }
+
+
+  static WorldMask GeneratePossibleWorlds(
+    const vector<ParsedWorld>& worlds,
+    const BridgeInformationState& information,
+    WorldGenerationStats* stats)
+  {
+    WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
+    if (stats != NULL)
+      stats->candidateWorldCount = mask.PopCount();
+
+    mask = FilterWorldsByConstraints(worlds, mask,
+      information.knownCardConstraints);
+    if (stats != NULL)
+      stats->afterKnownCardCount = mask.PopCount();
+
+    mask = FilterWorldsByConstraints(worlds, mask,
+      information.biddingConstraints);
+    if (stats != NULL)
+      stats->afterBiddingCount = mask.PopCount();
+
+    mask = FilterWorldsByHistory(worlds, mask, information.playHistory);
+    if (stats != NULL)
+      stats->afterPlayHistoryCount = mask.PopCount();
+
+    mask = FilterWorldsByHistory(worlds, mask, information.currentTrickHistory);
+    if (stats != NULL)
+      stats->afterCurrentTrickCount = mask.PopCount();
+
+    if (information.deduplicateEquivalentWorlds)
+    {
+      unsigned duplicatesRemoved = 0;
+      mask = DeduplicateWorldMask(worlds, mask, duplicatesRemoved);
+      if (stats != NULL)
+        stats->duplicateWorldsRemoved = duplicatesRemoved;
+    }
+
+    if (stats != NULL)
+      stats->finalWorldCount = mask.PopCount();
+    return mask;
+  }
+
+
   static WorldMask GeneratePossibleWorlds(
     const vector<ParsedWorld>& worlds,
     const vector<WorldConstraint>& constraints)
   {
-    WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
-    mask.bits = 0ULL;
-
-    for (unsigned i = 0; i < worlds.size(); i++)
-    {
-      bool ok = true;
-      for (unsigned j = 0; j < constraints.size(); j++)
-      {
-        if (! WorldMatchesConstraint(worlds[i], constraints[j]))
-        {
-          ok = false;
-          break;
-        }
-      }
-
-      if (ok)
-        mask.bits |= (1ULL << i);
-    }
-
-    return mask;
+    BridgeInformationState information;
+    information.knownCardConstraints = constraints;
+    return GeneratePossibleWorlds(worlds, information, NULL);
   }
 
 
@@ -2245,27 +2444,93 @@ namespace
     Check(WorldSuitLength(worlds[3], SEAT_WEST, SUIT_SPADES) == 0,
       "possible-world parser should preserve empty suits");
 
-    vector<WorldConstraint> biddingLike;
-    biddingLike.push_back(WorldConstraint::MinLength(
+    BridgeInformationState biddingInfo;
+    biddingInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
       SEAT_EAST, SUIT_SPADES, 5));
-    const WorldMask biddingMask = GeneratePossibleWorlds(worlds, biddingLike);
+    WorldGenerationStats biddingStats;
+    const WorldMask biddingMask = GeneratePossibleWorlds(worlds, biddingInfo,
+      &biddingStats);
     Check(biddingMask == WorldMask(4, 0xCU),
       "bidding-style spade-length constraint should keep the last two worlds");
+    Check(biddingStats.candidateWorldCount == 4,
+      "world-generation stats should count the initial candidate pool");
+    Check(biddingStats.afterBiddingCount == 2,
+      "world-generation stats should record the post-bidding surviving worlds");
 
-    vector<WorldConstraint> playLike;
-    playLike.push_back(WorldConstraint::VoidSuit(SEAT_WEST, SUIT_SPADES));
-    playLike.push_back(WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
-    const WorldMask playMask = GeneratePossibleWorlds(worlds, playLike);
+    BridgeInformationState playInfo;
+    playInfo.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
+    playInfo.biddingConstraints.push_back(
+      WorldConstraint::VoidSuit(SEAT_WEST, SUIT_SPADES));
+    WorldGenerationStats playStats;
+    const WorldMask playMask = GeneratePossibleWorlds(worlds, playInfo,
+      &playStats);
     Check(playMask == WorldMask(4, 0x8U),
       "play-style void and card-location constraints should isolate the final world");
+    Check(playStats.afterKnownCardCount == 1,
+      "world-generation stats should record the known-card filter before later stages");
+    Check(playStats.finalWorldCount == 1,
+      "world-generation stats should record the final surviving world count");
 
-    vector<WorldConstraint> combined;
-    combined.push_back(WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 5));
-    combined.push_back(WorldConstraint::MaxLength(SEAT_EAST, SUIT_HEARTS, 0));
-    combined.push_back(WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
-    const WorldMask combinedMask = GeneratePossibleWorlds(worlds, combined);
+    BridgeInformationState combinedInfo;
+    combinedInfo.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
+    combinedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 5));
+    combinedInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_HEARTS, 0));
+    const WorldMask combinedMask = GeneratePossibleWorlds(worlds, combinedInfo,
+      NULL);
     Check(combinedMask == WorldMask(4, 0x8U),
       "combined bidding/play constraints should identify a single possible world");
+
+    vector<ParsedWorld> duplicateWorlds(worlds);
+    duplicateWorlds.push_back(worlds[3]);
+    BridgeInformationState dedupInfo;
+    dedupInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    dedupInfo.deduplicateEquivalentWorlds = true;
+    WorldGenerationStats dedupStats;
+    const WorldMask dedupMask = GeneratePossibleWorlds(duplicateWorlds,
+      dedupInfo, &dedupStats);
+    Check(dedupStats.duplicateWorldsRemoved == 1,
+      "world-generation should remove one duplicate world after staged filtering");
+    Check(dedupMask == WorldMask(5, 0xCU),
+      "world deduplication should keep the first equivalent surviving world and drop later duplicates");
+  }
+
+
+  static void TestPlayHistoryFiltering()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld("N:A... K.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... .Q.. K... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... .Q.. K... 3..."));
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.deduplicateEquivalentWorlds = true;
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(worlds, info, &stats);
+
+    Check(mask == WorldMask(3, 0x2ULL),
+      "play-history filtering should keep only the world where East could legally fail to follow spades and duplicate removal should keep the first equivalent survivor");
+    Check(stats.afterPlayHistoryCount == 2,
+      "play-history filtering should leave exactly the two equivalent legal worlds before deduplication");
+    Check(stats.afterCurrentTrickCount == 2,
+      "current-trick filtering should preserve worlds that can replay the current partial trick history");
+    Check(stats.duplicateWorldsRemoved == 1,
+      "play-history world generation should report duplicate removal after legality filtering");
+    Check(stats.finalWorldCount == 1,
+      "play-history world generation should finish with one deduplicated surviving world");
   }
 
 
@@ -2722,6 +2987,9 @@ int main(int argc, char ** argv)
 
   TestPossibleWorldGeneration();
   cout << "alpha_mu_prototype: possible-world generation OK\n";
+
+  TestPlayHistoryFiltering();
+  cout << "alpha_mu_prototype: play-history filtering OK\n";
 
   TestBridgeMoveGeneration();
   cout << "alpha_mu_prototype: bridge move generation OK\n";
