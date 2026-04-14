@@ -93,7 +93,8 @@ The targeted `bridge_dds` mode now checks:
 - direct DDS bridge-leaf evaluation on a real hand-file world,
 - one searched trick followed by DDS leaf handoff on that real world,
 - direct DDS bridge-leaf evaluation on a controlled multi-world partial-trick state,
-- and a controlled two-world continuation that preserves sparse exact-score fronts after a deeper searched bridge continuation.
+- a controlled two-world continuation that preserves sparse exact-score fronts after a deeper searched bridge continuation,
+- and a controlled three-world continuation with one merged DDS-backed root branch and three split sparse branches after one searched trick.
 
 The next planned non-performance step is extending this bridge-search control beyond the current first larger three-world continuation case to deeper mixed merge/split continuations and richer possible-world generation from more realistic histories.
 

@@ -3018,6 +3018,100 @@ namespace
       "multi-world bridge DDS continuation should preserve the world-0-only exact continuation [3 x]");
     Check(FrontContains(splitContinuation, world1Only),
       "multi-world bridge DDS continuation should preserve the world-1-only exact continuation [x 2]");
+
+    BridgeState threeWorldState;
+    threeWorldState.playerToMove = SEAT_NORTH;
+    threeWorldState.maxSide = 0;
+    threeWorldState.trumpSuit = -1;
+    threeWorldState.trickLeader = SEAT_NORTH;
+    threeWorldState.leadSuit = -1;
+    threeWorldState.possibleWorlds = WorldMask(3, 0x7ULL);
+    threeWorldState.worlds.push_back(ParsePBNWorld("N:2.K.. A.Q.. 3.2.. 4.3.."));
+    threeWorldState.worlds.push_back(ParsePBNWorld("N:2.Q.. A.J.. 3.2.. 4.3.."));
+    threeWorldState.worlds.push_back(ParsePBNWorld("N:2.J.. A.T.. 3.2.. 4.3.."));
+
+    const vector<BridgeMove> threeWorldMoves = GenerateBridgeMoves(threeWorldState);
+    Check(threeWorldMoves.size() == 4,
+      "three-world bridge DDS continuation should expose one shared spade lead and three world-specific heart leads");
+
+    const BridgeRootReport threeWorldReport = AnalyzeBridgeRoot(threeWorldState, 1);
+    Check(threeWorldReport.children.size() == 4,
+      "three-world bridge DDS continuation should report one root child per legal lead before DDS handoff");
+
+    const ParetoFront threeWorldFront = SearchBridgeState(threeWorldState, 1);
+    Check(threeWorldReport.rootFront.vectors.size() == threeWorldFront.vectors.size(),
+      "three-world bridge DDS continuation root reporting should match the direct DDS-backed root front size");
+
+    OutcomeVector mergedThreeWorld(3);
+    mergedThreeWorld.valid = WorldMask(3, 0x7ULL);
+    mergedThreeWorld.values[0] = 1;
+    mergedThreeWorld.values[1] = 1;
+    mergedThreeWorld.values[2] = 1;
+
+    OutcomeVector threeWorld0Only(3);
+    threeWorld0Only.valid = WorldMask(3, 0x1ULL);
+    threeWorld0Only.values[0] = 1;
+
+    OutcomeVector threeWorld1Only(3);
+    threeWorld1Only.valid = WorldMask(3, 0x2ULL);
+    threeWorld1Only.values[1] = 1;
+
+    OutcomeVector threeWorld2Only(3);
+    threeWorld2Only.valid = WorldMask(3, 0x4ULL);
+    threeWorld2Only.values[2] = 1;
+
+    Check(FrontContains(threeWorldFront, mergedThreeWorld),
+      "three-world bridge DDS continuation should preserve the merged DDS-backed root front [1 1 1]");
+    Check(FrontContains(threeWorldFront, threeWorld0Only),
+      "three-world bridge DDS continuation should preserve the world-0-only DDS-backed root front [1 x x]");
+    Check(FrontContains(threeWorldFront, threeWorld1Only),
+      "three-world bridge DDS continuation should preserve the world-1-only DDS-backed root front [x 1 x]");
+    Check(FrontContains(threeWorldFront, threeWorld2Only),
+      "three-world bridge DDS continuation should preserve the world-2-only DDS-backed root front [x x 1]");
+
+    bool sawSharedSpade = false;
+    bool sawHeartK = false;
+    bool sawHeartQ = false;
+    bool sawHeartJ = false;
+    for (unsigned i = 0; i < threeWorldReport.children.size(); i++)
+    {
+      const BridgeRootChildReport& child = threeWorldReport.children[i];
+      if (child.move == BridgeMove(SUIT_SPADES, '2'))
+      {
+        sawSharedSpade = true;
+        Check(child.validWorlds == WorldMask(3, 0x7ULL),
+          "the shared spade lead should keep all three worlds valid before the DDS leaf handoff");
+        Check(FrontContains(child.front, mergedThreeWorld),
+          "the shared spade lead should produce the merged DDS-backed continuation front [1 1 1]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'K'))
+      {
+        sawHeartK = true;
+        Check(child.validWorlds == WorldMask(3, 0x1ULL),
+          "the heart-K lead should isolate world 0 before the DDS leaf handoff");
+        Check(FrontContains(child.front, threeWorld0Only),
+          "the heart-K lead should produce the world-0-only DDS-backed continuation front [1 x x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'Q'))
+      {
+        sawHeartQ = true;
+        Check(child.validWorlds == WorldMask(3, 0x2ULL),
+          "the heart-Q lead should isolate world 1 before the DDS leaf handoff");
+        Check(FrontContains(child.front, threeWorld1Only),
+          "the heart-Q lead should produce the world-1-only DDS-backed continuation front [x 1 x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'J'))
+      {
+        sawHeartJ = true;
+        Check(child.validWorlds == WorldMask(3, 0x4ULL),
+          "the heart-J lead should isolate world 2 before the DDS leaf handoff");
+        Check(FrontContains(child.front, threeWorld2Only),
+          "the heart-J lead should produce the world-2-only DDS-backed continuation front [x x 1]");
+      }
+    }
+
+    Check(sawSharedSpade && sawHeartK && sawHeartQ && sawHeartJ,
+      "three-world bridge DDS continuation should cover the shared branch and all three split branches in root reporting");
   }
 
 
