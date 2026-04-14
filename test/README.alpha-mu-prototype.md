@@ -10,7 +10,7 @@ It is meant to validate the core paper semantics before deeper optimization work
 
 - world masks,
 - a first possible-world generator from simple constraints,
-- staged possible-world filtering with explicit known-card, cannot-hold-card, bidding-style, and play-history constraints,
+- staged possible-world filtering with explicit known-card, cannot-hold-card, bidding-style (including HCP and balanced-shape), and play-history constraints,
 - deterministic seed-based world downselection after staged filtering,
 - outcome vectors,
 - Pareto fronts,
@@ -42,7 +42,7 @@ The runner performs these checks:
 3. an early-cut toy example
 4. useful-world maintenance at a Min node
 5. world cuts for zero and single useful worlds
-6. possible-world generation from staged known-card, cannot-hold-card, bidding-style, play-history, deduplicated-world filtering, and deterministic downselection
+6. possible-world generation from staged known-card, cannot-hold-card, bidding-style including HCP/balanced-shape filters, play-history, deduplicated-world filtering, and deterministic downselection
 7. bridge move generation over those possible worlds
 8. bridge search control with trick completion, winner advancement, and multi-trick continuation
 9. bridge root reporting over a larger three-world, two-trick continuation with mixed merge/split front behavior
@@ -86,7 +86,7 @@ In particular, it does not yet include:
 - full-scale possible-world generation from complete bidding or play histories,
 - broad bridge-search horizons beyond the current small multi-trick prototype.
 
-Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a staged constraint-based possible-world generator with explicit cannot-hold constraints, play-history legality filtering, deduplication, and deterministic seed-based downselection, a first bridge move generator, multi-trick bridge search control with bridge-specific trick backup, bridge root reporting over a larger three-world continuation, DDS-backed bridge leaf evaluation, and a Pareto-front transposition table are now present in the prototype.
+Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a staged constraint-based possible-world generator with explicit cannot-hold constraints plus HCP/balanced-shape bidding filters, play-history legality filtering, deduplication, and deterministic seed-based downselection, a first bridge move generator, multi-trick bridge search control with bridge-specific trick backup, bridge root reporting over a larger three-world continuation, DDS-backed bridge leaf evaluation, and a Pareto-front transposition table are now present in the prototype.
 
 The targeted `bridge_dds` mode now checks:
 
@@ -97,4 +97,44 @@ The targeted `bridge_dds` mode now checks:
 - and a controlled three-world continuation with one merged DDS-backed root branch and three split sparse branches after one searched trick.
 
 The next planned non-performance step is extending this bridge-search control beyond the current first larger three-world continuation case to deeper mixed merge/split continuations and richer possible-world generation from more realistic histories.
+
+## DDS vs alpha-mu comparison mode
+
+For broad comparisons, use the dedicated runner from the repository root:
+
+```zsh
+python3 test/alpha_mu_dds_compare.py
+```
+
+For lower-level spot checks, the prototype also exposes exact one-world benchmark modes:
+
+```zsh
+DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu_prototype benchmark_dds hands/list100.txt 0
+DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu_prototype benchmark_alpha hands/list100.txt 1 0
+```
+
+and a convenience combined report mode:
+
+```zsh
+DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu_prototype compare_dds hands/list100.txt 1 0
+```
+
+Arguments for `benchmark_dds` are:
+
+1. hand-file path,
+2. maximum boards to test (`0` means all boards in the file).
+
+Arguments for `benchmark_alpha` are:
+
+1. hand-file path,
+2. maximum alpha-mu search depth,
+3. maximum boards to test (`0` means all boards in the file).
+
+The low-level modes and the runner:
+
+- times direct DDS solves over the selected boards,
+- times one-world alpha-mu solves over the same boards at depths `0..max_depth`,
+- checks that every alpha-mu depth preserves the exact DDS score on every board,
+- validate against the hand-file FUT goldens,
+- and print machine-readable `ALPHA_MU_BENCHMARK ...` or `ALPHA_MU_COMPARE ...` lines for higher-level comparison runners.
 

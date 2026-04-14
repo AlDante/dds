@@ -8,10 +8,12 @@
 */
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -603,7 +605,10 @@ namespace
     CONSTRAINT_NOT_HAS_CARD = 1,
     CONSTRAINT_VOID_SUIT = 2,
     CONSTRAINT_MIN_LENGTH = 3,
-    CONSTRAINT_MAX_LENGTH = 4
+    CONSTRAINT_MAX_LENGTH = 4,
+    CONSTRAINT_MIN_HCP = 5,
+    CONSTRAINT_MAX_HCP = 6,
+    CONSTRAINT_BALANCED = 7
   };
 
 
@@ -832,6 +837,37 @@ namespace
       c.count = countArg;
       return c;
     }
+
+    static WorldConstraint MinHCP(
+      const int playerArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_MIN_HCP;
+      c.player = playerArg;
+      c.count = countArg;
+      return c;
+    }
+
+    static WorldConstraint MaxHCP(
+      const int playerArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_MAX_HCP;
+      c.player = playerArg;
+      c.count = countArg;
+      return c;
+    }
+
+    static WorldConstraint Balanced(
+      const int playerArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_BALANCED;
+      c.player = playerArg;
+      return c;
+    }
   };
 
 
@@ -868,6 +904,59 @@ namespace
       leaf(worldCount),
       bestScores(worldCount, 0),
       workerCount(0)
+    {
+    }
+  };
+
+
+  struct DDSVsAlphaMuDepthTiming
+  {
+    int depth;
+    double elapsedSeconds;
+    unsigned mismatches;
+
+    DDSVsAlphaMuDepthTiming() :
+      depth(0),
+      elapsedSeconds(0.0),
+      mismatches(0)
+    {
+    }
+  };
+
+
+  struct DDSVsAlphaMuComparison
+  {
+    string handFile;
+    unsigned boardsTested;
+    double ddsElapsedSeconds;
+    vector<DDSVsAlphaMuDepthTiming> alphaMuDepths;
+
+    DDSVsAlphaMuComparison() :
+      handFile(),
+      boardsTested(0),
+      ddsElapsedSeconds(0.0),
+      alphaMuDepths()
+    {
+    }
+  };
+
+
+  struct BenchmarkMethodSummary
+  {
+    string method;
+    string handFile;
+    unsigned boardsTested;
+    int depth;
+    double elapsedSeconds;
+    unsigned mismatches;
+
+    BenchmarkMethodSummary() :
+      method(),
+      handFile(),
+      boardsTested(0),
+      depth(0),
+      elapsedSeconds(0.0),
+      mismatches(0)
     {
     }
   };
@@ -993,6 +1082,56 @@ namespace
   }
 
 
+  static int HonorPointValue(const char rank)
+  {
+    switch (rank)
+    {
+      case 'A': return 4;
+      case 'K': return 3;
+      case 'Q': return 2;
+      case 'J': return 1;
+      default: return 0;
+    }
+  }
+
+
+  static int WorldHighCardPoints(
+    const ParsedWorld& world,
+    const int player)
+  {
+    int points = 0;
+    for (int suit = 0; suit < 4; suit++)
+    {
+      const string& cards = world.suits[player][suit];
+      for (unsigned i = 0; i < cards.size(); i++)
+        points += HonorPointValue(cards[i]);
+    }
+    return points;
+  }
+
+
+  static bool WorldHasBalancedShape(
+    const ParsedWorld& world,
+    const int player)
+  {
+    int lengths[4];
+    int totalCards = 0;
+    for (int suit = 0; suit < 4; suit++)
+    {
+      lengths[suit] = WorldSuitLength(world, player, suit);
+      totalCards += lengths[suit];
+    }
+
+    if (totalCards != 13)
+      return false;
+
+    sort(lengths, lengths + 4);
+    return ((lengths[0] == 2 && lengths[1] == 3 && lengths[2] == 3 && lengths[3] == 5) ||
+      (lengths[0] == 2 && lengths[1] == 3 && lengths[2] == 4 && lengths[3] == 4) ||
+      (lengths[0] == 3 && lengths[1] == 3 && lengths[2] == 3 && lengths[3] == 4));
+  }
+
+
   static int RankOrder(const char rank)
   {
     const string order = "23456789TJQKA";
@@ -1006,6 +1145,15 @@ namespace
   static int RankValue(const char rank)
   {
     return RankOrder(rank) + 2;
+  }
+
+
+  static char RankFromDDSValue(const int value)
+  {
+    const string order = "23456789TJQKA";
+    if (value < 2 || value > 14)
+      throw runtime_error("Unknown DDS rank value");
+    return order[static_cast<unsigned>(value - 2)];
   }
 
 
@@ -1487,6 +1635,17 @@ namespace
       case CONSTRAINT_MAX_LENGTH:
         return WorldSuitLength(world, constraint.player, constraint.suit) <=
           constraint.count;
+
+      case CONSTRAINT_MIN_HCP:
+        return WorldHighCardPoints(world, constraint.player) >=
+          constraint.count;
+
+      case CONSTRAINT_MAX_HCP:
+        return WorldHighCardPoints(world, constraint.player) <=
+          constraint.count;
+
+      case CONSTRAINT_BALANCED:
+        return WorldHasBalancedShape(world, constraint.player);
 
       default:
         throw runtime_error("Unknown world constraint kind");
@@ -2168,6 +2327,260 @@ namespace
 
   static void LoadHandFile(
     const string& fname,
+    HandFileData& data);
+
+
+  static int SolveDDSLeafWorld(
+    const HandFileData& data,
+    const int index,
+    const int thrId);
+
+
+  static BridgeState MakeBridgeStateFromDDSDeal(
+    const dealPBN& deal)
+  {
+    BridgeState state;
+    state.worlds.push_back(ParsePBNWorld(deal.remainCards));
+    state.possibleWorlds = WorldMask(1, 0x1ULL);
+    state.trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
+    state.trickLeader = deal.first;
+
+    for (int i = 0; i < 3; i++)
+    {
+      if (deal.currentTrickRank[i] == 0)
+        break;
+
+      state.currentTrick.push_back(BridgeMove(
+        deal.currentTrickSuit[i],
+        RankFromDDSValue(deal.currentTrickRank[i])));
+      state.currentTrickPlayers.push_back((deal.first + i) % 4);
+    }
+
+    state.leadSuit = (state.currentTrick.empty() ? -1 :
+      state.currentTrick[0].suit);
+    state.playerToMove =
+      (deal.first + static_cast<int>(state.currentTrick.size())) % 4;
+    state.maxSide = SeatSide(state.playerToMove);
+    state.maxTricksWon = 0;
+    return state;
+  }
+
+
+  static int SingleWorldFrontScore(
+    const ParetoFront& front,
+    const int depth,
+    const int boardIndex)
+  {
+    Check(front.worldCount == 1,
+      "DDS comparison should only inspect single-world alpha-mu fronts");
+    Check(front.vectors.size() == 1,
+      "single-world alpha-mu search should collapse to one exact vector in DDS comparison mode");
+    Check(front.vectors[0].valid == WorldMask(1, 0x1ULL),
+      "single-world alpha-mu comparison front should remain valid in the only world");
+
+    (void) depth;
+    (void) boardIndex;
+    return front.vectors[0].values[0];
+  }
+
+
+  static unsigned BoardsToBenchmark(
+    const HandFileData& data,
+    const int maxBoards)
+  {
+    return static_cast<unsigned>(
+      (maxBoards > 0 ? min(data.number, maxBoards) : data.number));
+  }
+
+
+  static BenchmarkMethodSummary BenchmarkDDSExactBoards(
+    const string& handFile,
+    const int maxBoards)
+  {
+    HandFileData data;
+    LoadHandFile(handFile, data);
+    Check(data.number > 0,
+      "DDS benchmark requires at least one board in the selected hand file");
+
+    BenchmarkMethodSummary summary;
+    summary.method = "dds";
+    summary.handFile = ResolvePath(handFile);
+    summary.boardsTested = BoardsToBenchmark(data, maxBoards);
+    Check(summary.boardsTested > 0,
+      "DDS benchmark selected zero boards to test");
+
+    SetMaxThreads(0);
+    const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+    for (unsigned i = 0; i < summary.boardsTested; i++)
+    {
+      const int score = SolveDDSLeafWorld(data, static_cast<int>(i), 0);
+      if (score != BestScore(data.futList[i]))
+        summary.mismatches++;
+    }
+    const chrono::steady_clock::time_point end = chrono::steady_clock::now();
+    summary.elapsedSeconds = chrono::duration<double>(end - start).count();
+    return summary;
+  }
+
+
+  static BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
+    const string& handFile,
+    const int depth,
+    const int maxBoards)
+  {
+    Check(depth >= 0,
+      "alpha-mu benchmark depth should be non-negative");
+
+    HandFileData data;
+    LoadHandFile(handFile, data);
+    Check(data.number > 0,
+      "alpha-mu benchmark requires at least one board in the selected hand file");
+
+    BenchmarkMethodSummary summary;
+    summary.method = "alpha_mu";
+    summary.handFile = ResolvePath(handFile);
+    summary.boardsTested = BoardsToBenchmark(data, maxBoards);
+    summary.depth = depth;
+    Check(summary.boardsTested > 0,
+      "alpha-mu benchmark selected zero boards to test");
+
+    SetMaxThreads(0);
+    const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+    for (unsigned i = 0; i < summary.boardsTested; i++)
+    {
+      const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[i]);
+      const ParetoFront front = SearchBridgeState(state, depth);
+      const int alphaScore = SingleWorldFrontScore(front, depth,
+        static_cast<int>(i));
+      if (alphaScore != BestScore(data.futList[i]))
+        summary.mismatches++;
+    }
+    const chrono::steady_clock::time_point end = chrono::steady_clock::now();
+    summary.elapsedSeconds = chrono::duration<double>(end - start).count();
+    return summary;
+  }
+
+
+  static void ReportBenchmarkMethodSummary(
+    const BenchmarkMethodSummary& summary)
+  {
+    cout.setf(ios::fixed);
+    cout << setprecision(6);
+    cout << "ALPHA_MU_BENCHMARK method=" << summary.method
+         << " file=" << summary.handFile
+         << " boards=" << summary.boardsTested
+         << " depth=" << summary.depth
+         << " total_seconds=" << summary.elapsedSeconds
+         << " per_board_seconds="
+         << (summary.boardsTested == 0 ? 0.0 :
+             summary.elapsedSeconds / static_cast<double>(summary.boardsTested))
+         << " mismatches=" << summary.mismatches
+         << "\n";
+    Check(summary.mismatches == 0,
+      "benchmark mode should preserve the exact golden FUT score on every tested board");
+  }
+
+
+  static DDSVsAlphaMuComparison CompareDDSAndAlphaMu(
+    const string& handFile,
+    const int maxDepth,
+    const int maxBoards)
+  {
+    Check(maxDepth >= 0,
+      "DDS comparison max depth should be non-negative");
+
+    HandFileData data;
+    LoadHandFile(handFile, data);
+    Check(data.number > 0,
+      "DDS comparison requires at least one board in the selected hand file");
+
+    const unsigned boardsToTest = BoardsToBenchmark(data, maxBoards);
+    Check(boardsToTest > 0,
+      "DDS comparison selected zero boards to test");
+
+    DDSVsAlphaMuComparison summary;
+    summary.handFile = ResolvePath(handFile);
+    summary.boardsTested = boardsToTest;
+
+    SetMaxThreads(0);
+    const chrono::steady_clock::time_point ddsStart =
+      chrono::steady_clock::now();
+    vector<int> ddsScores(boardsToTest, 0);
+    for (unsigned i = 0; i < boardsToTest; i++)
+      ddsScores[i] = SolveDDSLeafWorld(data, static_cast<int>(i), 0);
+    const chrono::steady_clock::time_point ddsEnd =
+      chrono::steady_clock::now();
+
+    summary.ddsElapsedSeconds = chrono::duration<double>(ddsEnd - ddsStart).
+      count();
+
+    for (int depth = 0; depth <= maxDepth; depth++)
+    {
+      DDSVsAlphaMuDepthTiming depthTiming;
+      depthTiming.depth = depth;
+
+      const chrono::steady_clock::time_point alphaStart =
+        chrono::steady_clock::now();
+      for (unsigned i = 0; i < boardsToTest; i++)
+      {
+        const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[i]);
+        const ParetoFront front = SearchBridgeState(state, depth);
+        const int alphaScore = SingleWorldFrontScore(front, depth,
+          static_cast<int>(i));
+        if (alphaScore != ddsScores[i])
+          depthTiming.mismatches++;
+      }
+      const chrono::steady_clock::time_point alphaEnd =
+        chrono::steady_clock::now();
+
+      depthTiming.elapsedSeconds = chrono::duration<double>(
+        alphaEnd - alphaStart).count();
+      summary.alphaMuDepths.push_back(depthTiming);
+    }
+
+    return summary;
+  }
+
+
+  static void ReportDDSVsAlphaMuComparison(
+    const DDSVsAlphaMuComparison& summary)
+  {
+    cout.setf(ios::fixed);
+    cout << setprecision(6);
+    cout << "ALPHA_MU_COMPARE file=" << summary.handFile
+         << " boards=" << summary.boardsTested
+         << " max_depth=" <<
+      (summary.alphaMuDepths.empty() ? 0 : summary.alphaMuDepths.back().depth)
+         << "\n";
+    cout << "ALPHA_MU_COMPARE dds total_seconds=" << summary.ddsElapsedSeconds
+         << " per_board_seconds="
+         << (summary.boardsTested == 0 ? 0.0 :
+             summary.ddsElapsedSeconds / static_cast<double>(summary.boardsTested))
+         << "\n";
+
+    for (unsigned i = 0; i < summary.alphaMuDepths.size(); i++)
+    {
+      const DDSVsAlphaMuDepthTiming& depthTiming = summary.alphaMuDepths[i];
+      const double ratio =
+        (summary.ddsElapsedSeconds <= 0.0 ? 0.0 :
+          depthTiming.elapsedSeconds / summary.ddsElapsedSeconds);
+      cout << "ALPHA_MU_COMPARE depth=" << depthTiming.depth
+           << " total_seconds=" << depthTiming.elapsedSeconds
+           << " per_board_seconds="
+           << (summary.boardsTested == 0 ? 0.0 :
+               depthTiming.elapsedSeconds /
+                 static_cast<double>(summary.boardsTested))
+           << " ratio_vs_dds=" << ratio
+           << " mismatches=" << depthTiming.mismatches
+           << "\n";
+      Check(depthTiming.mismatches == 0,
+        "DDS comparison should preserve the exact single-world score for every alpha-mu depth tested");
+    }
+  }
+
+
+  static void LoadHandFile(
+    const string& fname,
     HandFileData& data)
   {
     const string path = ResolvePath(fname);
@@ -2579,6 +2992,38 @@ namespace
       "possible-world parser should preserve known declarer cards");
     Check(WorldSuitLength(worlds[3], SEAT_WEST, SUIT_SPADES) == 0,
       "possible-world parser should preserve empty suits");
+
+    vector<ParsedWorld> biddingWorlds;
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 AQJ3.KQ2.K98.654 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 KQ32.AJ2.Q98.A54 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 AKQ2.JQ3.Q98.A54 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 AKQJ9.2.9876.543 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+
+    Check(WorldHighCardPoints(biddingWorlds[0], SEAT_EAST) == 15,
+      "bidding-style world generation should count East's high-card points correctly");
+    Check(WorldHasBalancedShape(biddingWorlds[1], SEAT_EAST),
+      "bidding-style world generation should recognize a balanced East hand shape");
+    Check(! WorldHasBalancedShape(biddingWorlds[3], SEAT_EAST),
+      "bidding-style world generation should reject clearly unbalanced hand shapes");
+
+    BridgeInformationState oneNoTrumpInfo;
+    oneNoTrumpInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+    oneNoTrumpInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 15));
+    oneNoTrumpInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 17));
+    WorldGenerationStats oneNoTrumpStats;
+    const WorldMask oneNoTrumpMask = GeneratePossibleWorlds(biddingWorlds,
+      oneNoTrumpInfo, &oneNoTrumpStats);
+    Check(oneNoTrumpMask == WorldMask(4, 0x3U),
+      "1NT-style balanced 15-17 HCP bidding constraints should keep only the balanced medium-strength East worlds");
+    Check(oneNoTrumpStats.afterBiddingCount == 2,
+      "bidding-style HCP and balanced-shape constraints should leave exactly two matching worlds");
 
     BridgeInformationState biddingInfo;
     biddingInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
@@ -3342,6 +3787,47 @@ int main(int argc, char ** argv)
   if (argc >= 2)
   {
     const string mode(argv[1]);
+    if (mode == "benchmark_dds")
+    {
+      Check(argc >= 3,
+        "benchmark_dds mode requires a hand-file path argument");
+
+      const string handFile(argv[2]);
+      const int maxBoards = (argc >= 4 ? atoi(argv[3]) : 0);
+      const BenchmarkMethodSummary summary = BenchmarkDDSExactBoards(
+        handFile, maxBoards);
+      ReportBenchmarkMethodSummary(summary);
+      cout << "alpha_mu_prototype: DDS exact benchmark OK\n";
+      return 0;
+    }
+    if (mode == "benchmark_alpha")
+    {
+      Check(argc >= 3,
+        "benchmark_alpha mode requires a hand-file path argument");
+
+      const string handFile(argv[2]);
+      const int depth = (argc >= 4 ? atoi(argv[3]) : 0);
+      const int maxBoards = (argc >= 5 ? atoi(argv[4]) : 0);
+      const BenchmarkMethodSummary summary = BenchmarkAlphaMuExactBoards(
+        handFile, depth, maxBoards);
+      ReportBenchmarkMethodSummary(summary);
+      cout << "alpha_mu_prototype: alpha-mu exact benchmark OK\n";
+      return 0;
+    }
+    if (mode == "compare_dds")
+    {
+      Check(argc >= 3,
+        "compare_dds mode requires a hand-file path argument");
+
+      const string handFile(argv[2]);
+      const int maxDepth = (argc >= 4 ? atoi(argv[3]) : 1);
+      const int maxBoards = (argc >= 5 ? atoi(argv[4]) : 0);
+      const DDSVsAlphaMuComparison comparison = CompareDDSAndAlphaMu(
+        handFile, maxDepth, maxBoards);
+      ReportDDSVsAlphaMuComparison(comparison);
+      cout << "alpha_mu_prototype: DDS vs alpha-mu comparison OK\n";
+      return 0;
+    }
     if (mode == "bridge_dds")
     {
       TestBridgeMultiTrickDDSLeaf();
