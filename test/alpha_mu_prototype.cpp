@@ -671,6 +671,36 @@ namespace
   };
 
 
+  struct BridgeRootChildReport
+  {
+    BridgeMove move;
+    ParetoFront front;
+    WorldMask validWorlds;
+    WorldMask usefulWorlds;
+
+    explicit BridgeRootChildReport(const unsigned worldCount = 0) :
+      move(),
+      front(worldCount),
+      validWorlds(WorldMask::None(worldCount)),
+      usefulWorlds(WorldMask::None(worldCount))
+    {
+    }
+  };
+
+
+  struct BridgeRootReport
+  {
+    vector<BridgeRootChildReport> children;
+    ParetoFront rootFront;
+
+    explicit BridgeRootReport(const unsigned worldCount = 0) :
+      children(),
+      rootFront(worldCount)
+    {
+    }
+  };
+
+
   struct PlayHistoryEvent
   {
     int player;
@@ -1403,6 +1433,33 @@ namespace
         front = ParetoFront::MinProduct(front, childFront);
     }
     return front;
+  }
+
+
+  static BridgeRootReport AnalyzeBridgeRoot(
+    const BridgeState& state,
+    const int tricksRemaining)
+  {
+    BridgeRootReport report(state.possibleWorlds.count);
+    if (state.possibleWorlds.Empty())
+      return report;
+
+    const vector<BridgeChild> children = ExpandBridgeChildren(state);
+    for (unsigned i = 0; i < children.size(); i++)
+    {
+      BridgeRootChildReport childReport(state.possibleWorlds.count);
+      childReport.move = children[i].move;
+      const int nextDepth = tricksRemaining - BridgeDepthCost(state,
+        children[i].state);
+      childReport.front = SearchBridgeState(children[i].state, nextDepth);
+      childReport.validWorlds = childReport.front.ValidWorlds();
+      childReport.usefulWorlds = childReport.front.UsefulWorlds();
+      report.children.push_back(childReport);
+      report.rootFront = ParetoFront::MaxMerge(report.rootFront,
+        childReport.front);
+    }
+
+    return report;
   }
 
 
@@ -2745,6 +2802,110 @@ namespace
   }
 
 
+  static void TestBridgeRootReportThreeWorldContinuation()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_NORTH;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.trickLeader = SEAT_NORTH;
+    state.leadSuit = -1;
+    state.possibleWorlds = WorldMask(3, 0x7ULL);
+    state.worlds.push_back(ParsePBNWorld("N:2.K.. A.Q.. 3.2.. 4.3.."));
+    state.worlds.push_back(ParsePBNWorld("N:2.Q.. A.J.. 3.2.. 4.3.."));
+    state.worlds.push_back(ParsePBNWorld("N:2.J.. A.T.. 3.2.. 4.3.."));
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(moves.size() == 4,
+      "three-world continuation should expose one merged spade lead plus three world-specific heart leads");
+    Check(moves[0] == BridgeMove(SUIT_SPADES, '2'),
+      "three-world continuation should include the merged spade lead first");
+    Check(moves[1] == BridgeMove(SUIT_HEARTS, 'J') &&
+          moves[2] == BridgeMove(SUIT_HEARTS, 'Q') &&
+          moves[3] == BridgeMove(SUIT_HEARTS, 'K'),
+      "three-world continuation should include the three world-specific heart leads after the shared spade lead");
+
+    const BridgeRootReport report = AnalyzeBridgeRoot(state, 2);
+    Check(report.children.size() == 4,
+      "bridge root reporting should produce one child report per legal root move");
+
+    const ParetoFront rootFront = SearchBridgeState(state, 2);
+    Check(report.rootFront.vectors.size() == rootFront.vectors.size(),
+      "bridge root reporting should reproduce the same root front size as direct search");
+
+    OutcomeVector mergedSpade(3);
+    mergedSpade.valid = WorldMask(3, 0x7ULL);
+    mergedSpade.values[0] = 1;
+    mergedSpade.values[1] = 1;
+    mergedSpade.values[2] = 1;
+
+    OutcomeVector world0Heart(3);
+    world0Heart.valid = WorldMask(3, 0x1ULL);
+    world0Heart.values[0] = 1;
+
+    OutcomeVector world1Heart(3);
+    world1Heart.valid = WorldMask(3, 0x2ULL);
+    world1Heart.values[1] = 1;
+
+    OutcomeVector world2Heart(3);
+    world2Heart.valid = WorldMask(3, 0x4ULL);
+    world2Heart.values[2] = 1;
+
+    Check(FrontContains(report.rootFront, mergedSpade),
+      "bridge root reporting should preserve the merged three-world continuation front [1 1 1]");
+    Check(FrontContains(report.rootFront, world0Heart),
+      "bridge root reporting should preserve the world-0-only continuation front [1 x x]");
+    Check(FrontContains(report.rootFront, world1Heart),
+      "bridge root reporting should preserve the world-1-only continuation front [x 1 x]");
+    Check(FrontContains(report.rootFront, world2Heart),
+      "bridge root reporting should preserve the world-2-only continuation front [x x 1]");
+
+    bool sawMerged = false;
+    bool sawWorld0 = false;
+    bool sawWorld1 = false;
+    bool sawWorld2 = false;
+    for (unsigned i = 0; i < report.children.size(); i++)
+    {
+      const BridgeRootChildReport& child = report.children[i];
+      if (child.move == BridgeMove(SUIT_SPADES, '2'))
+      {
+        sawMerged = true;
+        Check(child.validWorlds == WorldMask(3, 0x7ULL),
+          "the shared spade lead should keep all three worlds valid after the deeper continuation");
+        Check(FrontContains(child.front, mergedSpade),
+          "the shared spade lead should yield the exact merged continuation front [1 1 1]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'K'))
+      {
+        sawWorld0 = true;
+        Check(child.validWorlds == WorldMask(3, 0x1ULL),
+          "the heart-K lead should isolate world 0 only");
+        Check(FrontContains(child.front, world0Heart),
+          "the heart-K lead should yield the world-0-only continuation front [1 x x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'Q'))
+      {
+        sawWorld1 = true;
+        Check(child.validWorlds == WorldMask(3, 0x2ULL),
+          "the heart-Q lead should isolate world 1 only");
+        Check(FrontContains(child.front, world1Heart),
+          "the heart-Q lead should yield the world-1-only continuation front [x 1 x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'J'))
+      {
+        sawWorld2 = true;
+        Check(child.validWorlds == WorldMask(3, 0x4ULL),
+          "the heart-J lead should isolate world 2 only");
+        Check(FrontContains(child.front, world2Heart),
+          "the heart-J lead should yield the world-2-only continuation front [x x 1]");
+      }
+    }
+
+    Check(sawMerged && sawWorld0 && sawWorld1 && sawWorld2,
+      "bridge root reporting should cover the merged branch and all three split branches in the three-world continuation");
+  }
+
+
   static void TestBridgeMultiTrickDDSLeaf()
   {
     SetMaxThreads(0);
@@ -3128,6 +3289,9 @@ int main(int argc, char ** argv)
 
   TestBridgeSearchControl();
   cout << "alpha_mu_prototype: bridge search control OK\n";
+
+  TestBridgeRootReportThreeWorldContinuation();
+  cout << "alpha_mu_prototype: bridge root reporting OK\n";
 
   TestEmptyEntryInteriorFronts();
   cout << "alpha_mu_prototype: empty-entry interior fronts OK\n";

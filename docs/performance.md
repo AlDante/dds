@@ -75,7 +75,7 @@ Default workloads:
 5. `alpha_mu_prototype_default`
 6. `alpha_mu_prototype_bridge_dds`
 
-lThe default requested repeat count is `1` so the routine can be used after every important code change without becoming too disruptive.
+The default requested repeat count is `1` so the routine can be used after every important code change without becoming too disruptive.
 
 To keep reported medians accurate to roughly `0.1 s` or better, all short workloads in the standardized suite are stabilized automatically with:
 
