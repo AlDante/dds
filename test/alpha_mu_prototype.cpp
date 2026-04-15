@@ -736,6 +736,7 @@ namespace
     unsigned candidateWorldCount;
     unsigned afterKnownCardCount;
     unsigned afterBiddingCount;
+    unsigned afterFollowSuitCount;
     unsigned afterPlayHistoryCount;
     unsigned afterCurrentTrickCount;
     unsigned afterSamplingCount;
@@ -747,6 +748,7 @@ namespace
       candidateWorldCount(0),
       afterKnownCardCount(0),
       afterBiddingCount(0),
+      afterFollowSuitCount(0),
       afterPlayHistoryCount(0),
       afterCurrentTrickCount(0),
       afterSamplingCount(0),
@@ -875,8 +877,10 @@ namespace
   {
     vector<WorldConstraint> knownCardConstraints;
     vector<WorldConstraint> biddingConstraints;
+    vector<WorldConstraint> followSuitConstraints;
     vector<PlayHistoryEvent> playHistory;
     vector<PlayHistoryEvent> currentTrickHistory;
+    bool deriveFollowSuitConstraints;
     bool deduplicateEquivalentWorlds;
     unsigned sampleLimit;
     unsigned samplingSeed;
@@ -884,11 +888,77 @@ namespace
     BridgeInformationState() :
       knownCardConstraints(),
       biddingConstraints(),
+      followSuitConstraints(),
       playHistory(),
       currentTrickHistory(),
+      deriveFollowSuitConstraints(true),
       deduplicateEquivalentWorlds(false),
       sampleLimit(0),
       samplingSeed(0)
+    {
+    }
+  };
+
+
+  struct WorldExplanationStep
+  {
+    string stage;
+    bool passed;
+    string detail;
+
+    WorldExplanationStep() :
+      stage(),
+      passed(false),
+      detail()
+    {
+    }
+  };
+
+
+  struct WorldExplanation
+  {
+    unsigned worldIndex;
+    string serializedWorld;
+    bool accepted;
+    string rejectionStage;
+    string rejectionReason;
+    vector<WorldExplanationStep> steps;
+
+    WorldExplanation() :
+      worldIndex(0),
+      serializedWorld(),
+      accepted(true),
+      rejectionStage(),
+      rejectionReason(),
+      steps()
+    {
+    }
+  };
+
+
+  struct WorldGenerationExplanation
+  {
+    vector<WorldConstraint> appliedFollowSuitConstraints;
+    WorldMask finalWorldMask;
+    vector<WorldExplanation> worlds;
+
+    WorldGenerationExplanation() :
+      appliedFollowSuitConstraints(),
+      finalWorldMask(),
+      worlds()
+    {
+    }
+  };
+
+
+  struct HistoryCheckResult
+  {
+    bool ok;
+    string reason;
+
+    HistoryCheckResult() :
+      ok(true),
+      reason()
     {
     }
   };
@@ -1188,6 +1258,279 @@ namespace
     }
 
     return oss.str();
+  }
+
+
+  static string SeatName(const int seat)
+  {
+    switch (seat)
+    {
+      case SEAT_NORTH: return "North";
+      case SEAT_EAST: return "East";
+      case SEAT_SOUTH: return "South";
+      case SEAT_WEST: return "West";
+      default: return "Unknown";
+    }
+  }
+
+
+  static string SuitName(const int suit)
+  {
+    switch (suit)
+    {
+      case SUIT_SPADES: return "spades";
+      case SUIT_HEARTS: return "hearts";
+      case SUIT_DIAMONDS: return "diamonds";
+      case SUIT_CLUBS: return "clubs";
+      default: return "unknown suit";
+    }
+  }
+
+
+  static string CardName(const BridgeMove& move)
+  {
+    ostringstream oss;
+    oss << move.rank << " of " << SuitName(move.suit);
+    return oss.str();
+  }
+
+
+  static bool WorldMatchesConstraint(
+    const ParsedWorld& world,
+    const WorldConstraint& constraint);
+
+
+  static void RemoveCardFromWorld(
+    ParsedWorld& world,
+    const int player,
+    const BridgeMove& move);
+
+
+  static string ConstraintToString(const WorldConstraint& constraint)
+  {
+    ostringstream oss;
+    oss << SeatName(constraint.player) << " ";
+    switch (constraint.kind)
+    {
+      case CONSTRAINT_HAS_CARD:
+        oss << "must hold " << constraint.rank << " of " << SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_NOT_HAS_CARD:
+        oss << "must not hold " << constraint.rank << " of " << SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_VOID_SUIT:
+        oss << "must be void in " << SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_MIN_LENGTH:
+        oss << "must hold at least " << constraint.count << " cards in " <<
+          SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_MAX_LENGTH:
+        oss << "must hold at most " << constraint.count << " cards in " <<
+          SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_MIN_HCP:
+        oss << "must hold at least " << constraint.count << " HCP";
+        break;
+
+      case CONSTRAINT_MAX_HCP:
+        oss << "must hold at most " << constraint.count << " HCP";
+        break;
+
+      case CONSTRAINT_BALANCED:
+        oss << "must have a balanced shape";
+        break;
+
+      default:
+        oss << "must satisfy an unknown constraint";
+        break;
+    }
+    return oss.str();
+  }
+
+
+  static string FirstConstraintFailureReason(
+    const ParsedWorld& world,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      if (! WorldMatchesConstraint(world, constraints[i]))
+        return ConstraintToString(constraints[i]);
+    }
+
+    return "all constraints passed";
+  }
+
+
+  static HistoryCheckResult CheckWorldReplayHistory(
+    const ParsedWorld& world,
+    const vector<PlayHistoryEvent>& history,
+    const string& stageName)
+  {
+    ParsedWorld replay(world);
+    HistoryCheckResult result;
+
+    for (unsigned i = 0; i < history.size(); i++)
+    {
+      const PlayHistoryEvent& event = history[i];
+      if (! WorldHasCard(replay, event.player, event.move.suit, event.move.rank))
+      {
+        ostringstream oss;
+        oss << stageName << " event " << (i + 1) << " requires "
+            << SeatName(event.player) << " to hold " << CardName(event.move);
+        result.ok = false;
+        result.reason = oss.str();
+        return result;
+      }
+
+      if (event.leadSuit >= 0 &&
+          event.move.suit != event.leadSuit &&
+          WorldSuitLength(replay, event.player, event.leadSuit) > 0)
+      {
+        ostringstream oss;
+        oss << stageName << " event " << (i + 1) << " violates follow-suit because "
+            << SeatName(event.player) << " still holds " << SuitName(event.leadSuit);
+        result.ok = false;
+        result.reason = oss.str();
+        return result;
+      }
+
+      RemoveCardFromWorld(replay, event.player, event.move);
+    }
+
+    return result;
+  }
+
+
+  static HistoryCheckResult CheckWorldReplayHistoryAfterHistory(
+    const ParsedWorld& world,
+    const vector<PlayHistoryEvent>& priorHistory,
+    const vector<PlayHistoryEvent>& history,
+    const string& stageName)
+  {
+    ParsedWorld replay(world);
+    HistoryCheckResult result;
+
+    for (unsigned i = 0; i < priorHistory.size(); i++)
+    {
+      const PlayHistoryEvent& event = priorHistory[i];
+      if (! WorldHasCard(replay, event.player, event.move.suit, event.move.rank))
+      {
+        result.ok = false;
+        result.reason = "prior history did not replay";
+        return result;
+      }
+
+      if (event.leadSuit >= 0 &&
+          event.move.suit != event.leadSuit &&
+          WorldSuitLength(replay, event.player, event.leadSuit) > 0)
+      {
+        result.ok = false;
+        result.reason = "prior history did not replay";
+        return result;
+      }
+
+      RemoveCardFromWorld(replay, event.player, event.move);
+    }
+
+    for (unsigned i = 0; i < history.size(); i++)
+    {
+      const PlayHistoryEvent& event = history[i];
+      if (! WorldHasCard(replay, event.player, event.move.suit, event.move.rank))
+      {
+        ostringstream oss;
+        oss << stageName << " event " << (i + 1) << " requires "
+            << SeatName(event.player) << " to hold " << CardName(event.move);
+        result.ok = false;
+        result.reason = oss.str();
+        return result;
+      }
+
+      if (event.leadSuit >= 0 &&
+          event.move.suit != event.leadSuit &&
+          WorldSuitLength(replay, event.player, event.leadSuit) > 0)
+      {
+        ostringstream oss;
+        oss << stageName << " event " << (i + 1) << " violates follow-suit because "
+            << SeatName(event.player) << " still holds " << SuitName(event.leadSuit);
+        result.ok = false;
+        result.reason = oss.str();
+        return result;
+      }
+
+      RemoveCardFromWorld(replay, event.player, event.move);
+    }
+
+    return result;
+  }
+
+
+  static void AppendDerivedFollowSuitConstraints(
+    const vector<PlayHistoryEvent>& history,
+    int playedCount[4][4],
+    vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < history.size(); i++)
+    {
+      const PlayHistoryEvent& event = history[i];
+      if (event.leadSuit >= 0 && event.move.suit != event.leadSuit)
+      {
+        constraints.push_back(WorldConstraint::MaxLength(
+          event.player,
+          event.leadSuit,
+          playedCount[event.player][event.leadSuit]));
+      }
+
+      if (event.move.suit >= 0 && event.move.suit < 4)
+        playedCount[event.player][event.move.suit]++;
+    }
+  }
+
+
+  static vector<WorldConstraint> CollectFollowSuitConstraints(
+    const BridgeInformationState& information)
+  {
+    vector<WorldConstraint> constraints;
+    if (information.deriveFollowSuitConstraints)
+    {
+      int playedCount[4][4];
+      memset(playedCount, 0, sizeof(playedCount));
+      AppendDerivedFollowSuitConstraints(information.playHistory, playedCount,
+        constraints);
+      AppendDerivedFollowSuitConstraints(information.currentTrickHistory,
+        playedCount, constraints);
+    }
+
+    constraints.insert(constraints.end(), information.followSuitConstraints.begin(),
+      information.followSuitConstraints.end());
+    return constraints;
+  }
+
+
+  static void AddWorldExplanationStep(
+    WorldExplanation& explanation,
+    const string& stage,
+    const bool passed,
+    const string& detail)
+  {
+    WorldExplanationStep step;
+    step.stage = stage;
+    step.passed = passed;
+    step.detail = detail;
+    explanation.steps.push_back(step);
+
+    if (! passed && explanation.rejectionStage.empty())
+    {
+      explanation.accepted = false;
+      explanation.rejectionStage = stage;
+      explanation.rejectionReason = detail;
+    }
   }
 
 
@@ -1691,23 +2034,7 @@ namespace
     const ParsedWorld& world,
     const vector<PlayHistoryEvent>& history)
   {
-    ParsedWorld replay(world);
-    for (unsigned i = 0; i < history.size(); i++)
-    {
-      const PlayHistoryEvent& event = history[i];
-      if (! WorldHasCard(replay, event.player, event.move.suit, event.move.rank))
-        return false;
-
-      if (event.leadSuit >= 0 &&
-          event.move.suit != event.leadSuit &&
-          WorldSuitLength(replay, event.player, event.leadSuit) > 0)
-      {
-        return false;
-      }
-
-      RemoveCardFromWorld(replay, event.player, event.move);
-    }
-    return true;
+    return CheckWorldReplayHistory(world, history, "history").ok;
   }
 
 
@@ -1727,6 +2054,31 @@ namespace
 
       if (WorldCanReplayHistory(worlds[i], history))
         mask.bits |= (1ULL << i);
+    }
+    return mask;
+  }
+
+
+  static WorldMask FilterWorldsByHistoryAfterHistory(
+    const vector<ParsedWorld>& worlds,
+    const WorldMask& candidates,
+    const vector<PlayHistoryEvent>& priorHistory,
+    const vector<PlayHistoryEvent>& history)
+  {
+    if (history.empty())
+      return candidates;
+
+    WorldMask mask = WorldMask::None(candidates.count);
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      if (! candidates.Has(i))
+        continue;
+
+      if (CheckWorldReplayHistoryAfterHistory(worlds[i], priorHistory, history,
+            "history").ok)
+      {
+        mask.bits |= (1ULL << i);
+      }
     }
     return mask;
   }
@@ -1810,6 +2162,8 @@ namespace
     const BridgeInformationState& information,
     WorldGenerationStats* stats)
   {
+    const vector<WorldConstraint> followSuitConstraints =
+      CollectFollowSuitConstraints(information);
     WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
     if (stats != NULL)
       stats->candidateWorldCount = mask.PopCount();
@@ -1824,11 +2178,16 @@ namespace
     if (stats != NULL)
       stats->afterBiddingCount = mask.PopCount();
 
+    mask = FilterWorldsByConstraints(worlds, mask, followSuitConstraints);
+    if (stats != NULL)
+      stats->afterFollowSuitCount = mask.PopCount();
+
     mask = FilterWorldsByHistory(worlds, mask, information.playHistory);
     if (stats != NULL)
       stats->afterPlayHistoryCount = mask.PopCount();
 
-    mask = FilterWorldsByHistory(worlds, mask, information.currentTrickHistory);
+    mask = FilterWorldsByHistoryAfterHistory(worlds, mask, information.playHistory,
+      information.currentTrickHistory);
     if (stats != NULL)
       stats->afterCurrentTrickCount = mask.PopCount();
 
@@ -1852,6 +2211,143 @@ namespace
     if (stats != NULL)
       stats->finalWorldCount = mask.PopCount();
     return mask;
+  }
+
+
+  static WorldGenerationExplanation ExplainPossibleWorldGeneration(
+    const vector<ParsedWorld>& worlds,
+    const BridgeInformationState& information)
+  {
+    WorldGenerationExplanation explanation;
+    explanation.appliedFollowSuitConstraints =
+      CollectFollowSuitConstraints(information);
+
+    const WorldMask allMask = WorldMask::All(static_cast<unsigned>(worlds.size()));
+    const WorldMask knownMask = FilterWorldsByConstraints(worlds, allMask,
+      information.knownCardConstraints);
+    const WorldMask biddingMask = FilterWorldsByConstraints(worlds, knownMask,
+      information.biddingConstraints);
+    const WorldMask followSuitMask = FilterWorldsByConstraints(worlds, biddingMask,
+      explanation.appliedFollowSuitConstraints);
+    const WorldMask playHistoryMask = FilterWorldsByHistory(worlds, followSuitMask,
+      information.playHistory);
+    const WorldMask currentTrickMask = FilterWorldsByHistoryAfterHistory(worlds,
+      playHistoryMask, information.playHistory, information.currentTrickHistory);
+
+    WorldMask dedupMask = currentTrickMask;
+    map<string, unsigned> firstSeen;
+    if (information.deduplicateEquivalentWorlds)
+    {
+      unsigned duplicatesRemoved = 0;
+      dedupMask = DeduplicateWorldMask(worlds, currentTrickMask, duplicatesRemoved);
+      for (unsigned i = 0; i < worlds.size(); i++)
+      {
+        if (! currentTrickMask.Has(i))
+          continue;
+
+        const string key = SerializePBNWorld(worlds[i]);
+        if (firstSeen.find(key) == firstSeen.end())
+          firstSeen[key] = i;
+      }
+    }
+
+    unsigned sampledOutWorlds = 0;
+    explanation.finalWorldMask = SampleWorldMaskDeterministically(worlds, dedupMask,
+      information.sampleLimit, information.samplingSeed, sampledOutWorlds);
+
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      WorldExplanation world;
+      world.worldIndex = i;
+      world.serializedWorld = SerializePBNWorld(worlds[i]);
+
+      if (! knownMask.Has(i))
+      {
+        AddWorldExplanationStep(world, "known_cards", false,
+          FirstConstraintFailureReason(worlds[i], information.knownCardConstraints));
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "known_cards", true,
+        "passed known-card constraints");
+
+      if (! biddingMask.Has(i))
+      {
+        AddWorldExplanationStep(world, "bidding", false,
+          FirstConstraintFailureReason(worlds[i], information.biddingConstraints));
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "bidding", true,
+        "passed bidding constraints");
+
+      if (! followSuitMask.Has(i))
+      {
+        AddWorldExplanationStep(world, "follow_suit", false,
+          FirstConstraintFailureReason(worlds[i], explanation.appliedFollowSuitConstraints));
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "follow_suit", true,
+        (explanation.appliedFollowSuitConstraints.empty() ?
+          "no explicit follow-suit implications" :
+          "passed explicit follow-suit implications"));
+
+      if (! playHistoryMask.Has(i))
+      {
+        AddWorldExplanationStep(world, "play_history", false,
+          CheckWorldReplayHistory(worlds[i], information.playHistory,
+            "play-history").reason);
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "play_history", true,
+        "replayed prior tricks legally");
+
+      if (! currentTrickMask.Has(i))
+      {
+        AddWorldExplanationStep(world, "current_trick", false,
+          CheckWorldReplayHistoryAfterHistory(worlds[i], information.playHistory,
+            information.currentTrickHistory, "current-trick").reason);
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "current_trick", true,
+        "replayed the current partial trick legally");
+
+      if (information.deduplicateEquivalentWorlds && ! dedupMask.Has(i))
+      {
+        const string key = SerializePBNWorld(worlds[i]);
+        const unsigned first = firstSeen[key];
+        ostringstream oss;
+        oss << "duplicate of surviving world " << first;
+        AddWorldExplanationStep(world, "deduplication", false, oss.str());
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      if (information.deduplicateEquivalentWorlds)
+        AddWorldExplanationStep(world, "deduplication", true,
+          "kept as the canonical surviving world");
+
+      if (! explanation.finalWorldMask.Has(i))
+      {
+        ostringstream oss;
+        oss << "deterministic sampling seed " << information.samplingSeed
+            << " skipped this world after canonical ordering";
+        AddWorldExplanationStep(world, "sampling", false, oss.str());
+        explanation.worlds.push_back(world);
+        continue;
+      }
+
+      if (information.sampleLimit != 0)
+        AddWorldExplanationStep(world, "sampling", true,
+          "retained by deterministic sampling");
+
+      world.accepted = true;
+      explanation.worlds.push_back(world);
+    }
+
+    return explanation;
   }
 
 
@@ -3124,6 +3620,68 @@ namespace
   }
 
 
+  static void TestFollowSuitImplicationsAndWorldExplanation()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld("N:A... K.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... K9.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... K.J.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:2... K.Q.. A... 3..."));
+
+    BridgeInformationState info;
+    info.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_NORTH, SUIT_SPADES, 'A'));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(worlds, info, &stats);
+    Check(mask == WorldMask(4, 0x1ULL),
+      "explicit follow-suit implications plus detailed replay checks should leave only the one fully legal world");
+    Check(stats.afterFollowSuitCount == 2,
+      "derived follow-suit implications should remove the world where East still has a spare spade before replaying history");
+    Check(stats.afterCurrentTrickCount == 1,
+      "current-trick replay should remove the world that lacks the required discard card after passing follow-suit filtering");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(worlds, info);
+    Check(explanation.appliedFollowSuitConstraints.size() == 1,
+      "follow-suit explanation should expose the single derived spade-length implication from the discard history");
+    Check(explanation.appliedFollowSuitConstraints[0].kind == CONSTRAINT_MAX_LENGTH &&
+          explanation.appliedFollowSuitConstraints[0].player == SEAT_EAST &&
+          explanation.appliedFollowSuitConstraints[0].suit == SUIT_SPADES &&
+          explanation.appliedFollowSuitConstraints[0].count == 1,
+      "follow-suit explanation should derive that East can have held at most one spade before the later discard on a spade lead");
+    Check(explanation.finalWorldMask == WorldMask(4, 0x1ULL),
+      "world-generation explanation should preserve the same final surviving mask as the filtering pipeline");
+
+    Check(explanation.worlds.size() == 4,
+      "world-generation explanation should include every candidate world");
+    Check(explanation.worlds[0].accepted,
+      "the fully legal world should be marked as accepted in the explanation trace");
+    Check(explanation.worlds[0].rejectionStage.empty(),
+      "the accepted world should not record a rejection stage");
+    Check(! explanation.worlds[1].accepted &&
+          explanation.worlds[1].rejectionStage == "follow_suit" &&
+          explanation.worlds[1].rejectionReason.find("at most 1 cards in spades") != string::npos,
+      "the explanation trace should reject world 1 at the explicit follow-suit stage with the derived max-length reason");
+    Check(! explanation.worlds[2].accepted &&
+          explanation.worlds[2].rejectionStage == "current_trick" &&
+          explanation.worlds[2].rejectionReason.find("requires East to hold Q of hearts") != string::npos,
+      "the explanation trace should reject world 2 at the current-trick stage because the required discard card is absent");
+    Check(! explanation.worlds[3].accepted &&
+          explanation.worlds[3].rejectionStage == "known_cards" &&
+          explanation.worlds[3].rejectionReason.find("North must hold A of spades") != string::npos,
+      "the explanation trace should reject world 3 immediately on the known-card requirement");
+  }
+
+
   static void TestDeterministicWorldSampling()
   {
     vector<ParsedWorld> worlds;
@@ -3860,6 +4418,9 @@ int main(int argc, char ** argv)
 
   TestPlayHistoryFiltering();
   cout << "alpha_mu_prototype: play-history filtering OK\n";
+
+  TestFollowSuitImplicationsAndWorldExplanation();
+  cout << "alpha_mu_prototype: follow-suit implications and world explanations OK\n";
 
   TestDeterministicWorldSampling();
   cout << "alpha_mu_prototype: deterministic world sampling OK\n";

@@ -10,8 +10,9 @@ It is meant to validate the core paper semantics before deeper optimization work
 
 - world masks,
 - a first possible-world generator from simple constraints,
-- staged possible-world filtering with explicit known-card, cannot-hold-card, bidding-style (including HCP and balanced-shape), and play-history constraints,
+- staged possible-world filtering with explicit known-card, cannot-hold-card, bidding-style (including HCP and balanced-shape), explicit follow-suit implication, and play-history constraints,
 - deterministic seed-based world downselection after staged filtering,
+- per-world explanation traces showing why each candidate world is accepted or rejected,
 - outcome vectors,
 - Pareto fronts,
 - a Pareto-front transposition table for exact toy-search reuse,
@@ -42,7 +43,7 @@ The runner performs these checks:
 3. an early-cut toy example
 4. useful-world maintenance at a Min node
 5. world cuts for zero and single useful worlds
-6. possible-world generation from staged known-card, cannot-hold-card, bidding-style including HCP/balanced-shape filters, play-history, deduplicated-world filtering, and deterministic downselection
+6. possible-world generation from staged known-card, cannot-hold-card, bidding-style including HCP/balanced-shape filters, explicit follow-suit implications, play-history, deduplicated-world filtering, deterministic downselection, and per-world accept/reject explanations
 7. bridge move generation over those possible worlds
 8. bridge search control with trick completion, winner advancement, and multi-trick continuation
 9. bridge root reporting over a larger three-world, two-trick continuation with mixed merge/split front behavior
@@ -86,7 +87,7 @@ In particular, it does not yet include:
 - full-scale possible-world generation from complete bidding or play histories,
 - broad bridge-search horizons beyond the current small multi-trick prototype.
 
-Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a staged constraint-based possible-world generator with explicit cannot-hold constraints plus HCP/balanced-shape bidding filters, play-history legality filtering, deduplication, and deterministic seed-based downselection, a first bridge move generator, multi-trick bridge search control with bridge-specific trick backup, bridge root reporting over a larger three-world continuation, DDS-backed bridge leaf evaluation, and a Pareto-front transposition table are now present in the prototype.
+Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a staged constraint-based possible-world generator with explicit cannot-hold constraints plus HCP/balanced-shape bidding filters, explicit follow-suit implications derived from discard history, per-world world-generation explanation traces, play-history legality filtering, deduplication, and deterministic seed-based downselection, a first bridge move generator, multi-trick bridge search control with bridge-specific trick backup, bridge root reporting over a larger three-world continuation, DDS-backed bridge leaf evaluation, and a Pareto-front transposition table are now present in the prototype.
 
 The targeted `bridge_dds` mode now checks:
 

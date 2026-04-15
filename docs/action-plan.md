@@ -137,6 +137,8 @@ The prototype also now includes optimistic completion of impossible worlds for c
 
 The prototype also now includes a first possible-world generator from simple bidding-style and play-style constraints over a candidate world pool.
 
+The prototype also now includes an explicit follow-suit-implication stage derived from discard history, plus per-world explanations for why candidate worlds are accepted or rejected during generation.
+
 The prototype also now includes a first bridge move generator over those possible worlds, including legal-move union and world elimination after a play.
 
 The prototype also now includes a first one-trick bridge search controller over those generated move trees, including trick completion, winner advancement, and bridge-specific backup of sparse outcome vectors.
