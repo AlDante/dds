@@ -20,7 +20,7 @@ The prototype already includes:
 - optimistic completion of sparse worlds,
 - prototype transposition-table reuse,
 - staged possible-world filtering,
-- seed-based hidden-seat world construction for post-lead partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement,
+- seed-based hidden-seat world construction for post-lead partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement, a first moderate-size two-defender visible-seed pool backed by deterministic downselection, and a longer multi-trick visible-seed history narrowed by play-derived evidence before sampling,
 - constructor-local bidding pruning for card location, suit length, HCP, and balanced shape,
 - play-history legality filtering,
 - deterministic world downselection,

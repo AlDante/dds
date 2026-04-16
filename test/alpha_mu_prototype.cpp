@@ -5025,6 +5025,264 @@ namespace
   }
 
 
+  static void TestHistoryDerivedConstructionSupportsModeratelyLargerVisibleSeedPools()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT.J96 842.KQ2.KQ2.KQ72 T765.54.654.T");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.hiddenCards.size() == 7,
+      "the moderate visible-seed fixture should infer a seven-card hidden East/West complement from the full deck");
+    Check(unconstrained.worlds.size() == 20,
+      "without constructor-local follow-suit pruning the moderate visible-seed fixture should keep all twenty legal assignments of the six remaining ambiguous hidden cards after East's pinned discard card");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats constrainedStats;
+    const WorldMask constrainedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &constrainedStats);
+    Check(constrainedMask.PopCount() == 10,
+      "the staged filters should narrow the moderate visible-seed pool from twenty worlds to ten once East's second-round spade discard rules out the hidden queen of spades");
+    Check(constrainedStats.afterFollowSuitCount == 10,
+      "follow-suit stats should report the moderate visible-seed narrowing before later stages");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 10,
+      "constructor-local follow-suit pruning should reduce the moderate visible-seed pool to the same ten worlds before later filtering");
+
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(! WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_SPADES, 'Q'),
+        "every world surviving constructor-local pruning in the moderate visible-seed fixture should move the hidden spade queen away from East");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every world surviving constructor-local pruning in the moderate visible-seed fixture should keep East's current-trick heart discard pinned to East");
+    }
+
+    BridgeInformationState sampledA(constrainedInfo);
+    sampledA.sampleLimit = 4;
+    sampledA.samplingSeed = 2;
+    WorldGenerationStats sampledAStats;
+    const WorldMask sampleA = GeneratePossibleWorlds(constrained.worlds,
+      sampledA, &sampledAStats);
+    const WorldMask sampleARepeat = GeneratePossibleWorlds(constrained.worlds,
+      sampledA, NULL);
+
+    BridgeInformationState sampledB(sampledA);
+    sampledB.samplingSeed = 5;
+    WorldGenerationStats sampledBStats;
+    const WorldMask sampleB = GeneratePossibleWorlds(constrained.worlds,
+      sampledB, &sampledBStats);
+
+    Check(sampleA == sampleARepeat,
+      "deterministic sampling over the moderate visible-seed pool should reproduce the same sampled world mask for the same seed");
+    Check(sampleA.PopCount() == 4,
+      "deterministic sampling over the moderate visible-seed pool should cap the surviving worlds at the configured sample limit");
+    Check(sampleB.PopCount() == 4,
+      "deterministic sampling over the moderate visible-seed pool should retain the requested number of worlds for a different seed as well");
+    Check(! (sampleA == sampleB),
+      "deterministic sampling over the moderate visible-seed pool should allow the sampling seed to shift which canonical worlds survive");
+    Check(sampledAStats.afterFollowSuitCount == 10,
+      "sampling should leave the moderate visible-seed post-follow-suit count measurable before downselection");
+    Check(sampledAStats.afterSamplingCount == 4 && sampledAStats.sampledOutWorlds == 6,
+      "sampling stats should report the moderate visible-seed pool shrinking from ten constructor-pruned worlds to four retained worlds");
+    Check(sampledBStats.finalWorldCount == 4,
+      "the final world count for the moderate visible-seed sampled pool should equal the configured sample limit");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(constrained.worlds, sampledA);
+    unsigned acceptedWorlds = 0;
+    unsigned sampledOutWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "sampling")
+        sampledOutWorlds++;
+    }
+    Check(acceptedWorlds == 4 && sampledOutWorlds == 6,
+      "world-generation explanation should show the moderate visible-seed constructor-pruned pool retaining four deterministic samples and rejecting six worlds only at the sampling stage");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesLongerVisibleSeedHistory()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT.J96 842.KQ2.KQ2.KQ72 T765.54.654.T");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '8')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'T')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'T')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, '8')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '6')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '7')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_HEARTS, '5')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.hiddenCards.size() == 7,
+      "the longer visible-seed history fixture should still infer the seven-card hidden East/West complement from the full deck");
+    Check(unconstrained.worlds.size() == 20,
+      "without constructor-local follow-suit pruning the longer visible-seed history fixture should keep the full twenty-world hidden-card pool");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 3,
+      "the staged filters should narrow the longer visible-seed history pool from twenty worlds to three once East's second spade discard and West's second club discard are both enforced");
+    Check(stagedStats.afterFollowSuitCount == 3,
+      "the explicit follow-suit stage should account for the entire longer-history narrowing before replay legality is checked");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 3,
+      "constructor-local follow-suit pruning should reduce the longer visible-seed history pool to the same three worlds before later filtering");
+
+    bool sawEastHeartT = false;
+    bool sawEastDiamond9 = false;
+    bool sawEastDiamond7 = false;
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(WorldHasCard(constrained.worlds[i], SEAT_WEST, SUIT_SPADES, 'Q'),
+        "every world surviving the longer-history constructor pruning should move the hidden spade queen to West after East discards on the second spade lead");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_CLUBS, '5') &&
+            WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_CLUBS, '4'),
+        "every world surviving the longer-history constructor pruning should move both hidden clubs to East after West discards on the second club lead");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every world surviving the longer-history constructor pruning should still pin East's earlier heart discard to East");
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '9'))
+        sawEastDiamond9 = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '7'))
+        sawEastDiamond7 = true;
+    }
+    Check(sawEastHeartT && sawEastDiamond9 && sawEastDiamond7,
+      "the longer-history constructor pruning should still leave a three-way ambiguity over East's last hidden red card after the black-suit deductions are applied");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(3, 0x7ULL),
+      "worlds surviving longer-history constructor pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 3,
+      "world-generation stats should report the constructor-pruned three-world longer-history pool");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtFollowSuit = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "follow_suit")
+        rejectedAtFollowSuit++;
+    }
+    Check(acceptedWorlds == 3 && rejectedAtFollowSuit == 17,
+      "world-generation explanation should show the longer visible-seed history splitting the twenty-world pool into three accepted worlds and seventeen follow-suit rejections");
+  }
+
+
   static void TestDeterministicWorldSampling()
   {
     vector<ParsedWorld> worlds;
@@ -5794,6 +6052,12 @@ int main(int argc, char ** argv)
 
   TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands();
   cout << "alpha_mu_prototype: history-derived visible-seed construction OK\n";
+
+  TestHistoryDerivedConstructionSupportsModeratelyLargerVisibleSeedPools();
+  cout << "alpha_mu_prototype: history-derived moderate visible-seed pools OK\n";
+
+  TestHistoryDerivedConstructionUsesLongerVisibleSeedHistory();
+  cout << "alpha_mu_prototype: history-derived longer visible-seed history OK\n";
 
   TestDeterministicWorldSampling();
   cout << "alpha_mu_prototype: deterministic world sampling OK\n";
