@@ -1554,6 +1554,18 @@ namespace
   }
 
 
+  static vector<WorldConstraint> CollectConstructorConstraints(
+    const BridgeInformationState& information)
+  {
+    vector<WorldConstraint> constraints = information.biddingConstraints;
+    const vector<WorldConstraint> followSuitConstraints =
+      CollectFollowSuitConstraints(information);
+    constraints.insert(constraints.end(), followSuitConstraints.begin(),
+      followSuitConstraints.end());
+    return constraints;
+  }
+
+
   static void AddWorldExplanationStep(
     WorldExplanation& explanation,
     const string& stage,
@@ -1923,7 +1935,7 @@ namespace
   static void ConstructHistoryDerivedWorldsRec(
     const vector<int>& hiddenSeats,
     const vector<HiddenCardCandidate>& hiddenCards,
-    const vector<WorldConstraint>& biddingConstraints,
+    const vector<WorldConstraint>& constructorConstraints,
     const int targetCounts[4],
     int assignedCounts[4],
     ParsedWorld& current,
@@ -1954,11 +1966,11 @@ namespace
       current.suits[seat][candidate.card.suit].push_back(candidate.card.rank);
       assignedCounts[seat]++;
 
-      if (ConstructorBiddingConstraintsPossible(hiddenSeats, biddingConstraints,
+      if (ConstructorBiddingConstraintsPossible(hiddenSeats, constructorConstraints,
             current, hiddenCards, targetCounts, index + 1))
       {
         ConstructHistoryDerivedWorldsRec(hiddenSeats, hiddenCards,
-          biddingConstraints, targetCounts, assignedCounts, current, index + 1,
+          constructorConstraints, targetCounts, assignedCounts, current, index + 1,
           worlds);
       }
 
@@ -1975,6 +1987,8 @@ namespace
   {
     HistoryDerivedConstructionResult result;
     result.visibleSeedWorld = spec.seedWorld;
+    const vector<WorldConstraint> constructorConstraints =
+      CollectConstructorConstraints(information);
 
     const unsigned hiddenSeatMask = SeatMask(spec.hiddenSeats);
     int targetCounts[4];
@@ -2010,7 +2024,7 @@ namespace
     }
 
     ApplyConstructionCardLocationConstraints(spec.hiddenSeats,
-      information.biddingConstraints, result.hiddenCards);
+      constructorConstraints, result.hiddenCards);
 
     sort(result.hiddenCards.begin(), result.hiddenCards.end(),
       [](const HiddenCardCandidate& left, const HiddenCardCandidate& right)
@@ -2028,11 +2042,11 @@ namespace
     int assignedCounts[4];
     memset(assignedCounts, 0, sizeof(assignedCounts));
     if (ConstructorBiddingConstraintsPossible(spec.hiddenSeats,
-          information.biddingConstraints, current, result.hiddenCards,
+          constructorConstraints, current, result.hiddenCards,
           targetCounts, 0U))
     {
       ConstructHistoryDerivedWorldsRec(spec.hiddenSeats, result.hiddenCards,
-        information.biddingConstraints, targetCounts, assignedCounts, current,
+        constructorConstraints, targetCounts, assignedCounts, current,
         0U, result.worlds);
     }
 
@@ -4691,6 +4705,105 @@ namespace
   }
 
 
+  static void TestHistoryDerivedConstructionUsesDerivedFollowSuitLength()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A9... KQ.JT.. 2... J..98.");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 6,
+      "without constructor-local follow-suit pruning the longer post-lead hidden-seat fixture should keep all six legal queen-plus-red-card assignment worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 3,
+      "the later staged filters should narrow the unconstrained longer-history pool to the three worlds where East cannot still hold a hidden spade after discarding on the second spade lead");
+    Check(stagedStats.afterFollowSuitCount == 3,
+      "the explicit follow-suit stage should account for the longer-history narrowing before current-trick replay is checked");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 3,
+      "constructor-local derived follow-suit pruning should reduce the longer post-lead hidden-seat pool to the same three worlds before later filtering");
+
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(! WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_SPADES, 'Q'),
+        "every world surviving constructor-local follow-suit pruning should move the remaining hidden spade queen away from East after the second-round discard");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every world surviving constructor-local follow-suit pruning should still pin East's current-trick heart discard to East");
+    }
+
+    bool sawEastHeartT = false;
+    bool sawEastDiamond9 = false;
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '9'))
+        sawEastDiamond9 = true;
+    }
+    Check(sawEastHeartT && sawEastDiamond9,
+      "constructor-local follow-suit pruning should still leave multiple longer-history red-card assignments unresolved across the surviving worlds");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(3, 0x7ULL),
+      "worlds surviving constructor-local follow-suit pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 3,
+      "world-generation stats should report the constructor-pruned three-world pool for the longer-history fixture");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned rejectedAtFollowSuit = 0;
+    unsigned acceptedWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "follow_suit")
+        rejectedAtFollowSuit++;
+    }
+    Check(acceptedWorlds == 3 && rejectedAtFollowSuit == 3,
+      "world-generation explanation should show the longer-history pool splitting into three accepted worlds and three follow-suit rejections");
+  }
+
+
   static void TestDeterministicWorldSampling()
   {
     vector<ParsedWorld> worlds;
@@ -5454,6 +5567,9 @@ int main(int argc, char ** argv)
 
   TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands();
   cout << "alpha_mu_prototype: history-derived balanced deferral on incomplete hands OK\n";
+
+  TestHistoryDerivedConstructionUsesDerivedFollowSuitLength();
+  cout << "alpha_mu_prototype: history-derived follow-suit construction OK\n";
 
   TestDeterministicWorldSampling();
   cout << "alpha_mu_prototype: deterministic world sampling OK\n";
