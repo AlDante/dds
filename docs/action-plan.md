@@ -139,6 +139,10 @@ The prototype also now includes a first possible-world generator from simple bid
 
 The prototype also now includes an explicit follow-suit-implication stage derived from discard history, plus per-world explanations for why candidate worlds are accepted or rejected during generation.
 
+The prototype also now includes a first seed-based hidden-seat world-construction step from partial-information states, with constructor-local bidding card-location and suit-length pruning before the later full filtering pipeline.
+
+The prototype also now includes constructor-local MinHCP and MaxHCP pruning for those seed-based hidden-seat candidate worlds before the later full bidding filter.
+
 The prototype also now includes a first bridge move generator over those possible worlds, including legal-move union and world elimination after a play.
 
 The prototype also now includes a first one-trick bridge search controller over those generated move trees, including trick completion, winner advancement, and bridge-specific backup of sparse outcome vectors.

@@ -900,6 +900,47 @@ namespace
   };
 
 
+  struct HiddenCardCandidate
+  {
+    BridgeMove card;
+    unsigned allowedSeatsMask;
+
+    HiddenCardCandidate() :
+      card(),
+      allowedSeatsMask(0U)
+    {
+    }
+  };
+
+
+  struct HistoryDerivedWorldSpec
+  {
+    ParsedWorld seedWorld;
+    vector<int> hiddenSeats;
+
+    HistoryDerivedWorldSpec() :
+      seedWorld(),
+      hiddenSeats()
+    {
+    }
+  };
+
+
+  struct HistoryDerivedConstructionResult
+  {
+    ParsedWorld visibleSeedWorld;
+    vector<HiddenCardCandidate> hiddenCards;
+    vector<ParsedWorld> worlds;
+
+    HistoryDerivedConstructionResult() :
+      visibleSeedWorld(),
+      hiddenCards(),
+      worlds()
+    {
+    }
+  };
+
+
   struct WorldExplanationStep
   {
     string stage;
@@ -1531,6 +1572,389 @@ namespace
       explanation.rejectionStage = stage;
       explanation.rejectionReason = detail;
     }
+  }
+
+
+  static unsigned SeatBit(const int seat)
+  {
+    return static_cast<unsigned>(1U << seat);
+  }
+
+
+  static unsigned SeatMask(const vector<int>& seats)
+  {
+    unsigned mask = 0U;
+    for (unsigned i = 0; i < seats.size(); i++)
+      mask |= SeatBit(seats[i]);
+    return mask;
+  }
+
+
+  static bool VectorContainsSeat(
+    const vector<int>& seats,
+    const int seat)
+  {
+    return find(seats.begin(), seats.end(), seat) != seats.end();
+  }
+
+
+  static string CardKey(const BridgeMove& move)
+  {
+    ostringstream oss;
+    oss << move.suit << ":" << move.rank;
+    return oss.str();
+  }
+
+
+  static void SortSuitCards(string& cards)
+  {
+    sort(cards.begin(), cards.end(),
+      [](const char left, const char right)
+      {
+        return RankOrder(left) > RankOrder(right);
+      });
+  }
+
+
+  static void CanonicalizeWorld(ParsedWorld& world)
+  {
+    for (int seat = 0; seat < 4; seat++)
+    {
+      for (int suit = 0; suit < 4; suit++)
+        SortSuitCards(world.suits[seat][suit]);
+    }
+  }
+
+
+  static void CollectPlayedCards(
+    const BridgeInformationState& information,
+    map<string, int>& playedBySeat)
+  {
+    playedBySeat.clear();
+    for (unsigned i = 0; i < information.playHistory.size(); i++)
+      playedBySeat[CardKey(information.playHistory[i].move)] =
+        information.playHistory[i].player;
+
+    for (unsigned i = 0; i < information.currentTrickHistory.size(); i++)
+      playedBySeat[CardKey(information.currentTrickHistory[i].move)] =
+        information.currentTrickHistory[i].player;
+  }
+
+
+  static unsigned CountSeatChoices(const unsigned allowedSeatsMask)
+  {
+    unsigned count = 0U;
+    for (int seat = 0; seat < 4; seat++)
+    {
+      if ((allowedSeatsMask & SeatBit(seat)) != 0U)
+        count++;
+    }
+    return count;
+  }
+
+
+  static void ApplyConstructionCardLocationConstraints(
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints,
+    vector<HiddenCardCandidate>& hiddenCards)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_HAS_CARD &&
+          constraint.kind != CONSTRAINT_NOT_HAS_CARD)
+      {
+        continue;
+      }
+
+      for (unsigned j = 0; j < hiddenCards.size(); j++)
+      {
+        if (hiddenCards[j].card.suit != constraint.suit ||
+            hiddenCards[j].card.rank != constraint.rank)
+        {
+          continue;
+        }
+
+        if (constraint.kind == CONSTRAINT_HAS_CARD)
+          hiddenCards[j].allowedSeatsMask &= SeatBit(constraint.player);
+        else
+          hiddenCards[j].allowedSeatsMask &= ~SeatBit(constraint.player);
+      }
+    }
+  }
+
+
+  static int PotentialRemainingSuitCardsForSeat(
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const unsigned nextIndex,
+    const int seat,
+    const int suit)
+  {
+    int count = 0;
+    for (unsigned i = nextIndex; i < hiddenCards.size(); i++)
+    {
+      if (hiddenCards[i].card.suit == suit &&
+          (hiddenCards[i].allowedSeatsMask & SeatBit(seat)) != 0U)
+      {
+        count++;
+      }
+    }
+    return count;
+  }
+
+
+  static int PotentialRemainingHighCardPointsForSeat(
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const unsigned nextIndex,
+    const int seat)
+  {
+    int points = 0;
+    for (unsigned i = nextIndex; i < hiddenCards.size(); i++)
+    {
+      if ((hiddenCards[i].allowedSeatsMask & SeatBit(seat)) != 0U)
+        points += HonorPointValue(hiddenCards[i].card.rank);
+    }
+    return points;
+  }
+
+
+  static bool ConstructorLengthConstraintsPossible(
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints,
+    const ParsedWorld& current,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const unsigned nextIndex)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_VOID_SUIT &&
+          constraint.kind != CONSTRAINT_MIN_LENGTH &&
+          constraint.kind != CONSTRAINT_MAX_LENGTH)
+      {
+        continue;
+      }
+
+      const int currentLength = WorldSuitLength(current, constraint.player,
+        constraint.suit);
+      if (constraint.kind == CONSTRAINT_VOID_SUIT)
+      {
+        if (currentLength > 0)
+          return false;
+        continue;
+      }
+
+      if (constraint.kind == CONSTRAINT_MAX_LENGTH)
+      {
+        if (currentLength > constraint.count)
+          return false;
+        continue;
+      }
+
+      const int remaining = PotentialRemainingSuitCardsForSeat(hiddenCards,
+        nextIndex, constraint.player, constraint.suit);
+      if (currentLength + remaining < constraint.count)
+        return false;
+    }
+
+    return true;
+  }
+
+
+  static bool ConstructorHCPConstraintsPossible(
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints,
+    const ParsedWorld& current,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const unsigned nextIndex)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_MIN_HCP &&
+          constraint.kind != CONSTRAINT_MAX_HCP)
+      {
+        continue;
+      }
+
+      const int currentHCP = WorldHighCardPoints(current, constraint.player);
+      if (constraint.kind == CONSTRAINT_MAX_HCP)
+      {
+        if (currentHCP > constraint.count)
+          return false;
+        continue;
+      }
+
+      const int remainingHCP = PotentialRemainingHighCardPointsForSeat(hiddenCards,
+        nextIndex, constraint.player);
+      if (currentHCP + remainingHCP < constraint.count)
+        return false;
+    }
+
+    return true;
+  }
+
+
+  static bool ConstructorBiddingConstraintsPossible(
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints,
+    const ParsedWorld& current,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const unsigned nextIndex)
+  {
+    return ConstructorLengthConstraintsPossible(hiddenSeats, constraints, current,
+      hiddenCards, nextIndex) &&
+      ConstructorHCPConstraintsPossible(hiddenSeats, constraints, current,
+        hiddenCards, nextIndex);
+  }
+
+
+  static bool CanAssignHiddenCard(
+    const HiddenCardCandidate& candidate,
+    const int seat,
+    const int targetCounts[4],
+    const int assignedCounts[4])
+  {
+    if ((candidate.allowedSeatsMask & SeatBit(seat)) == 0U)
+      return false;
+
+    if (assignedCounts[seat] >= targetCounts[seat])
+      return false;
+
+    return true;
+  }
+
+
+  static void ConstructHistoryDerivedWorldsRec(
+    const vector<int>& hiddenSeats,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const vector<WorldConstraint>& biddingConstraints,
+    const int targetCounts[4],
+    int assignedCounts[4],
+    ParsedWorld& current,
+    const unsigned index,
+    vector<ParsedWorld>& worlds)
+  {
+    if (index == hiddenCards.size())
+    {
+      for (unsigned i = 0; i < hiddenSeats.size(); i++)
+      {
+        if (assignedCounts[hiddenSeats[i]] != targetCounts[hiddenSeats[i]])
+          return;
+      }
+
+      ParsedWorld world(current);
+      CanonicalizeWorld(world);
+      worlds.push_back(world);
+      return;
+    }
+
+    const HiddenCardCandidate& candidate = hiddenCards[index];
+    for (unsigned i = 0; i < hiddenSeats.size(); i++)
+    {
+      const int seat = hiddenSeats[i];
+      if (! CanAssignHiddenCard(candidate, seat, targetCounts, assignedCounts))
+        continue;
+
+      current.suits[seat][candidate.card.suit].push_back(candidate.card.rank);
+      assignedCounts[seat]++;
+
+      if (ConstructorBiddingConstraintsPossible(hiddenSeats, biddingConstraints,
+            current, hiddenCards, index + 1))
+      {
+        ConstructHistoryDerivedWorldsRec(hiddenSeats, hiddenCards,
+          biddingConstraints, targetCounts, assignedCounts, current, index + 1,
+          worlds);
+      }
+
+      assignedCounts[seat]--;
+      current.suits[seat][candidate.card.suit].erase(
+        current.suits[seat][candidate.card.suit].size() - 1U, 1U);
+    }
+  }
+
+
+  static HistoryDerivedConstructionResult ConstructCandidateWorldsFromHistory(
+    const HistoryDerivedWorldSpec& spec,
+    const BridgeInformationState& information)
+  {
+    HistoryDerivedConstructionResult result;
+    result.visibleSeedWorld = spec.seedWorld;
+
+    const unsigned hiddenSeatMask = SeatMask(spec.hiddenSeats);
+    int targetCounts[4];
+    memset(targetCounts, 0, sizeof(targetCounts));
+
+    for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+    {
+      const int seat = spec.hiddenSeats[i];
+      for (int suit = 0; suit < 4; suit++)
+      {
+        const string cards = result.visibleSeedWorld.suits[seat][suit];
+        targetCounts[seat] += static_cast<int>(cards.size());
+        for (unsigned j = 0; j < cards.size(); j++)
+        {
+          HiddenCardCandidate candidate;
+          candidate.card = BridgeMove(suit, cards[j]);
+          candidate.allowedSeatsMask = hiddenSeatMask;
+          result.hiddenCards.push_back(candidate);
+        }
+
+        result.visibleSeedWorld.suits[seat][suit].clear();
+      }
+    }
+
+    map<string, int> playedBySeat;
+    CollectPlayedCards(information, playedBySeat);
+    for (unsigned i = 0; i < result.hiddenCards.size(); i++)
+    {
+      const string key = CardKey(result.hiddenCards[i].card);
+      map<string, int>::const_iterator it = playedBySeat.find(key);
+      if (it != playedBySeat.end() && VectorContainsSeat(spec.hiddenSeats, it->second))
+        result.hiddenCards[i].allowedSeatsMask = SeatBit(it->second);
+    }
+
+    ApplyConstructionCardLocationConstraints(spec.hiddenSeats,
+      information.biddingConstraints, result.hiddenCards);
+
+    sort(result.hiddenCards.begin(), result.hiddenCards.end(),
+      [](const HiddenCardCandidate& left, const HiddenCardCandidate& right)
+      {
+        const unsigned leftChoices = CountSeatChoices(left.allowedSeatsMask);
+        const unsigned rightChoices = CountSeatChoices(right.allowedSeatsMask);
+        if (leftChoices != rightChoices)
+          return leftChoices < rightChoices;
+        if (left.card.suit != right.card.suit)
+          return left.card.suit < right.card.suit;
+        return RankOrder(left.card.rank) > RankOrder(right.card.rank);
+      });
+
+    ParsedWorld current(result.visibleSeedWorld);
+    int assignedCounts[4];
+    memset(assignedCounts, 0, sizeof(assignedCounts));
+    if (ConstructorBiddingConstraintsPossible(spec.hiddenSeats,
+          information.biddingConstraints, current, result.hiddenCards, 0U))
+    {
+      ConstructHistoryDerivedWorldsRec(spec.hiddenSeats, result.hiddenCards,
+        information.biddingConstraints, targetCounts, assignedCounts, current,
+        0U, result.worlds);
+    }
+
+    sort(result.worlds.begin(), result.worlds.end(),
+      [](const ParsedWorld& left, const ParsedWorld& right)
+      {
+        return SerializePBNWorld(left) < SerializePBNWorld(right);
+      });
+    return result;
   }
 
 
@@ -3682,6 +4106,334 @@ namespace
   }
 
 
+  static void TestHistoryDerivedCandidateWorldConstruction()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+    Check(constructed.hiddenCards.size() == 4,
+      "history-derived construction should collect all hidden East/West cards into a candidate pool");
+    Check(constructed.worlds.size() == 2,
+      "history-derived construction should use played-card ownership to reduce the hidden-seat candidate pool to the two heart-swap worlds");
+    Check(constructed.visibleSeedWorld.suits[SEAT_EAST][SUIT_SPADES].empty() &&
+          constructed.visibleSeedWorld.suits[SEAT_WEST][SUIT_HEARTS].empty(),
+      "history-derived construction should clear hidden-seat cards from the visible partial-information seed");
+
+    bool sawEastHeartQ = false;
+    bool sawEastHeartT = false;
+    for (unsigned i = 0; i < constructed.worlds.size(); i++)
+    {
+      Check(WorldHasCard(constructed.worlds[i], SEAT_EAST, SUIT_SPADES, 'K'),
+        "history-derived construction should pin East's played spade to East in every constructed world");
+      Check(WorldHasCard(constructed.worlds[i], SEAT_WEST, SUIT_SPADES, 'J'),
+        "history-derived construction should pin West's played spade to West in every constructed world");
+      if (WorldHasCard(constructed.worlds[i], SEAT_EAST, SUIT_HEARTS, 'Q'))
+        sawEastHeartQ = true;
+      if (WorldHasCard(constructed.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+    }
+    Check(sawEastHeartQ && sawEastHeartT,
+      "history-derived construction should leave the unplayed heart ownership unresolved across the two constructed worlds");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
+    Check(mask == WorldMask(2, 0x1ULL),
+      "the staged filtering pipeline should narrow the constructed candidate worlds to the one matching the known heart location");
+    Check(stats.candidateWorldCount == 2,
+      "world-generation stats should report the history-derived constructed candidate count");
+    Check(stats.afterKnownCardCount == 1,
+      "the known-card filter should remove the alternative heart-swap world after construction");
+    Check(stats.afterPlayHistoryCount == 1,
+      "the surviving constructed world should replay the recorded trick history legally");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(constructed.worlds, info);
+    Check(explanation.worlds.size() == 2,
+      "world-generation explanation should cover each history-derived candidate world");
+    Check(explanation.worlds[0].accepted,
+      "the first history-derived candidate world should survive when it matches the known heart location");
+    Check(! explanation.worlds[1].accepted &&
+          explanation.worlds[1].rejectionStage == "known_cards",
+      "the second history-derived candidate world should be rejected at the known-card stage when the hidden heart is swapped");
+  }
+
+
+  static void TestHistoryDerivedConstructionRespectsCurrentTrick()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_HEARTS, '9')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_HEARTS,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+    Check(constructed.worlds.size() == 1,
+      "history-derived construction should use current-trick ownership as well as prior play to resolve the remaining hidden heart location");
+    Check(WorldHasCard(constructed.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constructed.worlds[0], SEAT_WEST, SUIT_HEARTS, 'T'),
+      "history-derived construction should pin the current-trick heart to East and leave West with the other hidden heart");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the uniquely constructed world should survive both play-history and current-trick replay filtering");
+    Check(stats.afterCurrentTrickCount == 1,
+      "current-trick replay should confirm the uniquely constructed world after seed-based hidden-seat construction");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingCardLocation()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.biddingConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+    Check(constructed.worlds.size() == 1,
+      "constructor-local bidding card-location pruning should collapse the hidden-seat pool to the one world where East holds the bid-implied heart queen");
+    Check(WorldHasCard(constructed.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constructed.worlds[0], SEAT_WEST, SUIT_HEARTS, 'T'),
+      "constructor-local bidding card-location pruning should assign the constrained heart queen to East before later filtering");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local bidding card-location pruning should also survive the later staged filters");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingLength()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.QT.. 2... J..98.");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 6,
+      "without constructor-local bidding length pruning the hidden-seat pool should keep all six legal heart-versus-diamond assignment worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_HEARTS, 2));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local bidding length pruning should collapse the hidden-seat pool to the one world where East keeps both bid-implied hearts");
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(WorldSuitLength(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS) >= 2,
+        "every world surviving constructor-local bidding length pruning should satisfy the East heart-length lower bound immediately");
+    }
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "worlds surviving constructor-local bidding length pruning should also survive the later staged filters unchanged");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned worlds for the hidden-seat length-bounded case");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingMinHCP()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local HCP pruning the hidden-seat pool should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 5));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local MinHCP pruning should keep only the world where East receives enough honor strength");
+    Check(WorldHighCardPoints(constrained.worlds[0], SEAT_EAST) >= 5,
+      "the world surviving constructor-local MinHCP pruning should satisfy East's minimum honor-point bound immediately");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q'),
+      "constructor-local MinHCP pruning should keep the world where East receives the hidden heart queen");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local MinHCP pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned MinHCP survivor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingMaxHCP()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local HCP pruning the hidden-seat pool should keep both legal heart-swap worlds for the MaxHCP case as well");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 3));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local MaxHCP pruning should keep only the world where East stays under the honor-point cap");
+    Check(WorldHighCardPoints(constrained.worlds[0], SEAT_EAST) <= 3,
+      "the world surviving constructor-local MaxHCP pruning should satisfy East's maximum honor-point bound immediately");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'T'),
+      "constructor-local MaxHCP pruning should keep the world where East does not receive the hidden heart queen");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local MaxHCP pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned MaxHCP survivor");
+  }
+
+
   static void TestDeterministicWorldSampling()
   {
     vector<ParsedWorld> worlds;
@@ -4421,6 +5173,24 @@ int main(int argc, char ** argv)
 
   TestFollowSuitImplicationsAndWorldExplanation();
   cout << "alpha_mu_prototype: follow-suit implications and world explanations OK\n";
+
+  TestHistoryDerivedCandidateWorldConstruction();
+  cout << "alpha_mu_prototype: history-derived candidate world construction OK\n";
+
+  TestHistoryDerivedConstructionRespectsCurrentTrick();
+  cout << "alpha_mu_prototype: history-derived current-trick construction OK\n";
+
+  TestHistoryDerivedConstructionUsesBiddingCardLocation();
+  cout << "alpha_mu_prototype: history-derived bidding card-location construction OK\n";
+
+  TestHistoryDerivedConstructionUsesBiddingLength();
+  cout << "alpha_mu_prototype: history-derived bidding length construction OK\n";
+
+  TestHistoryDerivedConstructionUsesBiddingMinHCP();
+  cout << "alpha_mu_prototype: history-derived bidding MinHCP construction OK\n";
+
+  TestHistoryDerivedConstructionUsesBiddingMaxHCP();
+  cout << "alpha_mu_prototype: history-derived bidding MaxHCP construction OK\n";
 
   TestDeterministicWorldSampling();
   cout << "alpha_mu_prototype: deterministic world sampling OK\n";
