@@ -166,3 +166,16 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 | --- | ---: | ---: | ---: |
 | `alpha_mu_prototype_list10_depth2` | 10 | 653.456 | 65.346 |
 
+## 2026-04-16 19:19:08 — commit `b12ad9e`
+
+- Output log: `test/build/list10_alpha_mu_depth2_20260416-190836.log`
+- Status sidecar: `test/build/list10_alpha_mu_depth2_20260416-190836.log.status.json`
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Checkpoint interval: `30 s`
+- Heartbeat interval: `30 s`
+
+| Workload | Boards | Total (s) | Per board (s) |
+| --- | ---: | ---: | ---: |
+| `alpha_mu_prototype_list10_depth2` | 10 | 631.195 | 63.120 |
+
