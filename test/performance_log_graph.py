@@ -22,6 +22,9 @@ BENCHMARK_ROW_RE = re.compile(
     r"^\| `(?P<name>[^`]+)` \| (?P<boards>\d+) \| (?P<total>[0-9]+(?:\.[0-9]+)?) \| "
     r"(?P<per_board>[0-9]+(?:\.[0-9]+)?) \|$"
 )
+PER_BOARD_TIMINGS_RE = re.compile(
+    r"^- Per-board timings for `(?P<name>[^`]+)` \(s\): `(?P<values>[0-9., ]+)`$"
+)
 GRAPH_OUTLIERS_RE = re.compile(r"^- Graph outliers: (?P<workloads>.+)$")
 BACKTICK_NAME_RE = re.compile(r"`([^`]+)`")
 
@@ -33,6 +36,7 @@ class PerformanceEntry:
     dirty: bool
     total_workloads: dict[str, float]
     per_board_workloads: dict[str, float]
+    per_board_samples: dict[str, tuple[float, ...]]
     graph_outliers: frozenset[str]
 
 
@@ -47,14 +51,15 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
     current_dirty = False
     current_total_workloads: dict[str, float] = {}
     current_per_board_workloads: dict[str, float] = {}
+    current_per_board_samples: dict[str, tuple[float, ...]] = {}
     current_graph_outliers: set[str] = set()
 
     def flush_current() -> None:
         nonlocal current_timestamp, current_commit, current_dirty
-        nonlocal current_total_workloads, current_per_board_workloads, current_graph_outliers
+        nonlocal current_total_workloads, current_per_board_workloads, current_per_board_samples, current_graph_outliers
         if current_timestamp is None or current_commit is None:
             return
-        if current_total_workloads or current_per_board_workloads:
+        if current_total_workloads or current_per_board_workloads or current_per_board_samples:
             entries.append(
                 PerformanceEntry(
                     timestamp=current_timestamp,
@@ -62,6 +67,7 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
                     dirty=current_dirty,
                     total_workloads=dict(current_total_workloads),
                     per_board_workloads=dict(current_per_board_workloads),
+                    per_board_samples=dict(current_per_board_samples),
                     graph_outliers=frozenset(current_graph_outliers),
                 )
             )
@@ -70,6 +76,7 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
         current_dirty = False
         current_total_workloads = {}
         current_per_board_workloads = {}
+        current_per_board_samples = {}
         current_graph_outliers = set()
 
     for raw_line in log_path.read_text(encoding="utf-8").splitlines():
@@ -94,6 +101,16 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
             current_per_board_workloads[name] = float(benchmark_match.group("per_board"))
             continue
 
+        per_board_match = PER_BOARD_TIMINGS_RE.match(line)
+        if per_board_match and current_timestamp is not None:
+            values = tuple(
+                float(part.strip())
+                for part in per_board_match.group("values").split(",")
+                if part.strip()
+            )
+            current_per_board_samples[per_board_match.group("name")] = values
+            continue
+
         outlier_match = GRAPH_OUTLIERS_RE.match(line)
         if outlier_match and current_timestamp is not None:
             current_graph_outliers.update(BACKTICK_NAME_RE.findall(outlier_match.group("workloads")))
@@ -110,6 +127,17 @@ def format_seconds_label(value: float) -> str:
     if value >= 1:
         return f"{value:.1f} s"
     return f"{value:.2f} s"
+
+
+def median_value(values: list[float]) -> float:
+    ordered = sorted(values)
+    count = len(ordered)
+    if count == 0:
+        raise ValueError("median_value requires at least one value")
+    middle = count // 2
+    if count % 2 == 1:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
 def svg_text(x: float, y: float, text: str, **attrs: str | float) -> str:
@@ -171,7 +199,10 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
         raise ValueError(f"No performance entries found in {log_path}")
 
     total_workload_names = sorted({name for entry in entries for name in entry.total_workloads})
-    per_board_workload_names = sorted({name for entry in entries for name in entry.per_board_workloads})
+    per_board_workload_names = sorted(
+        {name for entry in entries for name in entry.per_board_workloads} |
+        {name for entry in entries for name in entry.per_board_samples}
+    )
     workload_names = sorted(set(total_workload_names) | set(per_board_workload_names))
     if not total_workload_names:
         raise ValueError(f"No workload rows found in {log_path}")
@@ -350,6 +381,174 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
                 svg_parts.append(svg_line(point_x - 4.0, point_y - 4.0, point_x + 4.0, point_y + 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
                 svg_parts.append(svg_line(point_x - 4.0, point_y + 4.0, point_x + 4.0, point_y - 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
 
+    def per_board_samples_for_entry(entry: PerformanceEntry) -> dict[str, tuple[float, ...]]:
+        samples: dict[str, tuple[float, ...]] = {}
+        names = set(entry.per_board_workloads) | set(entry.per_board_samples)
+        for name in names:
+            if name in entry.per_board_samples and entry.per_board_samples[name]:
+                samples[name] = entry.per_board_samples[name]
+            else:
+                scalar = entry.per_board_workloads.get(name)
+                if scalar is not None and scalar > 0.0:
+                    samples[name] = (scalar,)
+        return samples
+
+    def render_per_board_panel(plot_top: float) -> None:
+        plot_left = left_margin
+        plot_right = left_margin + plot_width
+        plot_bottom = plot_top + panel_height
+        all_samples = [
+            sample
+            for entry in entries
+            for values in per_board_samples_for_entry(entry).values()
+            for sample in values
+            if sample > 0.0
+        ]
+
+        svg_parts.append(
+            f'<rect x="{plot_left:.2f}" y="{plot_top:.2f}" width="{plot_width:.2f}" height="{panel_height:.2f}" fill="#fcfcfd" stroke="#d1d5db" stroke-width="1" />'
+        )
+        svg_parts.append(
+            svg_text(
+                plot_left + 12,
+                plot_top + 24,
+                "Per-board runtime for board-counted benchmarks",
+                font_size="16",
+                font_weight="700",
+                fill="#111827",
+            )
+        )
+
+        if not all_samples:
+            svg_parts.append(
+                svg_text(
+                    plot_left + plot_width / 2.0,
+                    plot_top + panel_height / 2.0,
+                    "No board-counted benchmark entries recorded yet.",
+                    text_anchor="middle",
+                    font_size="14",
+                    fill="#6b7280",
+                )
+            )
+            return
+
+        y_min = 10 ** math.floor(math.log10(min(all_samples) / 1.15))
+        y_max = 10 ** math.ceil(math.log10(max(all_samples) * 1.15))
+        ticks = generate_tick_values(y_min, y_max)
+
+        def y_position(value: float) -> float:
+            ratio = (math.log10(value) - math.log10(y_min)) / (math.log10(y_max) - math.log10(y_min))
+            return plot_top + panel_height - ratio * panel_height
+
+        for tick in ticks:
+            y = y_position(tick)
+            svg_parts.append(svg_line(plot_left, y, plot_right, y, stroke="#e5e7eb", stroke_width="1"))
+            svg_parts.append(
+                svg_text(
+                    plot_left - 14,
+                    y + 5,
+                    format_seconds_label(tick),
+                    text_anchor="end",
+                    font_size="13",
+                    fill="#374151",
+                )
+            )
+
+        svg_parts.append(svg_line(plot_left, plot_top, plot_left, plot_bottom, stroke="#6b7280", stroke_width="1.5"))
+        svg_parts.append(svg_line(plot_left, plot_bottom, plot_right, plot_bottom, stroke="#6b7280", stroke_width="1.5"))
+        svg_parts.append(
+            svg_text(
+                34,
+                plot_top + panel_height / 2.0,
+                "Per-board time (seconds, log scale)",
+                transform=f"rotate(-90 34 {plot_top + panel_height / 2.0:.2f})",
+                font_size="14",
+                fill="#374151",
+            )
+        )
+
+        for index, entry in enumerate(entries):
+            x = x_position(index)
+            svg_parts.append(svg_line(x, plot_top, x, plot_bottom, stroke="#f3f4f6", stroke_width="1"))
+            label = f"{entry.commit} {entry.timestamp[11:16]}"
+            svg_parts.append(
+                f'<text x="{x:.2f}" y="{plot_bottom + 26:.2f}" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 {x:.2f} {plot_bottom + 26:.2f})">{html.escape(label)}</text>'
+            )
+
+        for workload_name in workload_names:
+            color = color_by_workload[workload_name]
+            median_points: list[tuple[float, float]] = []
+            for index, entry in enumerate(entries):
+                samples = per_board_samples_for_entry(entry).get(workload_name)
+                if samples is None:
+                    continue
+                x = x_position(index)
+                sample_list = [sample for sample in samples if sample > 0.0]
+                if not sample_list:
+                    continue
+
+                is_outlier = workload_name in entry.graph_outliers
+                min_sample = min(sample_list)
+                max_sample = max(sample_list)
+                median_sample = median_value(sample_list)
+                whisker_y1 = y_position(min_sample)
+                whisker_y2 = y_position(max_sample)
+                median_y = y_position(median_sample)
+
+                if len(sample_list) > 1:
+                    svg_parts.append(
+                        svg_line(
+                            x,
+                            whisker_y1,
+                            x,
+                            whisker_y2,
+                            stroke=color,
+                            stroke_width="1.5",
+                            stroke_opacity="0.45",
+                            stroke_dasharray=("4 3" if is_outlier else ""),
+                        )
+                    )
+                    svg_parts.append(svg_line(x - 5.0, whisker_y1, x + 5.0, whisker_y1, stroke=color, stroke_width="1.5", stroke_opacity="0.45"))
+                    svg_parts.append(svg_line(x - 5.0, whisker_y2, x + 5.0, whisker_y2, stroke=color, stroke_width="1.5", stroke_opacity="0.45"))
+
+                count = len(sample_list)
+                for sample_index, sample in enumerate(sample_list):
+                    offset = 0.0
+                    if count > 1:
+                        offset = (sample_index - (count - 1) / 2.0) * min(10.0 / max(count - 1, 1), 1.8)
+                    svg_parts.append(
+                        svg_circle(
+                            x + offset,
+                            y_position(sample),
+                            2.2,
+                            fill=color,
+                            fill_opacity=("0.28" if not is_outlier else "0.0"),
+                            stroke=color,
+                            stroke_opacity="0.45",
+                            stroke_width="0.8",
+                        )
+                    )
+
+                if is_outlier:
+                    svg_parts.append(svg_circle(x, median_y, 6.0, fill="#ffffff", stroke=color, stroke_width="2.5"))
+                    svg_parts.append(svg_line(x - 4.0, median_y - 4.0, x + 4.0, median_y + 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
+                    svg_parts.append(svg_line(x - 4.0, median_y + 4.0, x + 4.0, median_y - 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
+                else:
+                    median_points.append((x, median_y))
+                    svg_parts.append(svg_circle(x, median_y, 4.5, fill=color, stroke="#ffffff", stroke_width="1.5"))
+
+            if len(median_points) >= 2:
+                svg_parts.append(
+                    svg_polyline(
+                        median_points,
+                        fill="none",
+                        stroke=color,
+                        stroke_width="3",
+                        stroke_linecap="round",
+                        stroke_linejoin="round",
+                    )
+                )
+
     render_panel(
         "Cumulative runtime by workload",
         lambda entry: entry.total_workloads,
@@ -359,14 +558,7 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
         False,
     )
 
-    render_panel(
-        "Per-board runtime for board-counted benchmarks",
-        lambda entry: entry.per_board_workloads,
-        top_margin + panel_height + panel_gap,
-        "Per-board time (seconds, log scale)",
-        "No board-counted benchmark entries recorded yet.",
-        True,
-    )
+    render_per_board_panel(top_margin + panel_height + panel_gap)
 
     plot_bottom = top_margin + 2.0 * panel_height + panel_gap
     plot_right = left_margin + plot_width
@@ -398,6 +590,18 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
     svg_parts.append(svg_line(legend_x + 10, marker_row_y - 9, legend_x + 18, marker_row_y - 1, stroke="#6b7280", stroke_width="1.8", stroke_linecap="round"))
     svg_parts.append(svg_line(legend_x + 10, marker_row_y - 1, legend_x + 18, marker_row_y - 9, stroke="#6b7280", stroke_width="1.8", stroke_linecap="round"))
     svg_parts.append(svg_text(legend_x + 40, marker_row_y, "Flagged outlier / non-comparable measurement", font_size="13", fill="#111827"))
+    marker_row_y += 24.0
+    svg_parts.append(svg_circle(legend_x + 14, marker_row_y - 5, 4.5, fill="#6b7280", stroke="#ffffff", stroke_width="1.5"))
+    svg_parts.append(svg_text(legend_x + 40, marker_row_y, "Median per-board runtime", font_size="13", fill="#111827"))
+    marker_row_y += 24.0
+    svg_parts.append(svg_line(legend_x + 14, marker_row_y - 13, legend_x + 14, marker_row_y + 3, stroke="#6b7280", stroke_width="1.5", stroke_opacity="0.45"))
+    svg_parts.append(svg_line(legend_x + 9, marker_row_y - 13, legend_x + 19, marker_row_y - 13, stroke="#6b7280", stroke_width="1.5", stroke_opacity="0.45"))
+    svg_parts.append(svg_line(legend_x + 9, marker_row_y + 3, legend_x + 19, marker_row_y + 3, stroke="#6b7280", stroke_width="1.5", stroke_opacity="0.45"))
+    svg_parts.append(svg_text(legend_x + 40, marker_row_y, "Min/max range from recorded board times", font_size="13", fill="#111827"))
+    marker_row_y += 24.0
+    svg_parts.append(svg_circle(legend_x + 11, marker_row_y - 5, 2.2, fill="#6b7280", fill_opacity="0.28", stroke="#6b7280", stroke_opacity="0.45", stroke_width="0.8"))
+    svg_parts.append(svg_circle(legend_x + 17, marker_row_y - 2, 2.2, fill="#6b7280", fill_opacity="0.28", stroke="#6b7280", stroke_opacity="0.45", stroke_width="0.8"))
+    svg_parts.append(svg_text(legend_x + 40, marker_row_y, "Individual board timings when recorded", font_size="13", fill="#111827"))
 
     latest_entry = entries[-1]
     summary_y = legend_y + 26.0 * (len(workload_names) + 4)
@@ -433,6 +637,17 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
                 fill="#374151",
             )
         )
+        latest_samples = sum(len(values) for values in latest_entry.per_board_samples.values())
+        if latest_samples > 0:
+            svg_parts.append(
+                svg_text(
+                    legend_x,
+                    summary_y + 90,
+                    f"Recorded individual board timings: {latest_samples}",
+                    font_size="13",
+                    fill="#374151",
+                )
+            )
 
     svg_parts.append("</svg>")
 

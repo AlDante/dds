@@ -1062,6 +1062,7 @@ namespace
     int depth;
     double elapsedSeconds;
     unsigned mismatches;
+    vector<double> perBoardSeconds;
 
     BenchmarkMethodSummary() :
       method(),
@@ -1069,7 +1070,8 @@ namespace
       boardsTested(0),
       depth(0),
       elapsedSeconds(0.0),
-      mismatches(0)
+      mismatches(0),
+      perBoardSeconds()
     {
     }
   };
@@ -3521,6 +3523,13 @@ namespace
     const double elapsedSeconds);
 
 
+  static void ReportBenchmarkBoardTiming(
+    const BenchmarkMethodSummary& summary,
+    const unsigned boardNumber,
+    const double boardElapsedSeconds,
+    const double totalElapsedSeconds);
+
+
   static BenchmarkMethodSummary BenchmarkDDSExactBoards(
     const string& handFile,
     const int maxBoards)
@@ -3543,14 +3552,21 @@ namespace
     double lastCheckpoint = 0.0;
     for (unsigned i = 0; i < summary.boardsTested; i++)
     {
+      const chrono::steady_clock::time_point boardStart =
+        chrono::steady_clock::now();
       const int score = SolveDDSLeafWorld(data, static_cast<int>(i), 0);
       if (score != BestScore(data.futList[i]))
         summary.mismatches++;
 
+      const double boardElapsed = chrono::duration<double>(
+        chrono::steady_clock::now() - boardStart).count();
+      summary.perBoardSeconds.push_back(boardElapsed);
+      const double elapsed = chrono::duration<double>(
+        chrono::steady_clock::now() - start).count();
+      ReportBenchmarkBoardTiming(summary, i + 1, boardElapsed, elapsed);
+
       if (checkpointSeconds > 0.0)
       {
-        const double elapsed = chrono::duration<double>(
-          chrono::steady_clock::now() - start).count();
         if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
             (i + 1 == summary.boardsTested))
         {
@@ -3592,6 +3608,8 @@ namespace
     double lastCheckpoint = 0.0;
     for (unsigned i = 0; i < summary.boardsTested; i++)
     {
+      const chrono::steady_clock::time_point boardStart =
+        chrono::steady_clock::now();
       const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[i]);
       const ParetoFront front = SearchBridgeState(state, depth);
       const int alphaScore = SingleWorldFrontScore(front, depth,
@@ -3599,10 +3617,15 @@ namespace
       if (alphaScore != BestScore(data.futList[i]))
         summary.mismatches++;
 
+      const double boardElapsed = chrono::duration<double>(
+        chrono::steady_clock::now() - boardStart).count();
+      summary.perBoardSeconds.push_back(boardElapsed);
+      const double elapsed = chrono::duration<double>(
+        chrono::steady_clock::now() - start).count();
+      ReportBenchmarkBoardTiming(summary, i + 1, boardElapsed, elapsed);
+
       if (checkpointSeconds > 0.0)
       {
-        const double elapsed = chrono::duration<double>(
-          chrono::steady_clock::now() - start).count();
         if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
             (i + 1 == summary.boardsTested))
         {
@@ -3620,6 +3643,10 @@ namespace
   static void ReportBenchmarkMethodSummary(
     const BenchmarkMethodSummary& summary)
   {
+    double sumPerBoard = 0.0;
+    for (unsigned i = 0; i < summary.perBoardSeconds.size(); i++)
+      sumPerBoard += summary.perBoardSeconds[i];
+
     cout.setf(ios::fixed);
     cout << setprecision(6);
     cout << "ALPHA_MU_BENCHMARK method=" << summary.method
@@ -3628,8 +3655,10 @@ namespace
          << " depth=" << summary.depth
          << " total_seconds=" << summary.elapsedSeconds
          << " per_board_seconds="
-         << (summary.boardsTested == 0 ? 0.0 :
-             summary.elapsedSeconds / static_cast<double>(summary.boardsTested))
+         << (summary.perBoardSeconds.empty() ?
+             (summary.boardsTested == 0 ? 0.0 :
+               summary.elapsedSeconds / static_cast<double>(summary.boardsTested)) :
+             sumPerBoard / static_cast<double>(summary.perBoardSeconds.size()))
          << " mismatches=" << summary.mismatches
          << "\n";
     Check(summary.mismatches == 0,
@@ -3661,6 +3690,26 @@ namespace
          << " total_boards=" << summary.boardsTested
          << " depth=" << summary.depth
          << " elapsed_seconds=" << elapsedSeconds
+         << " mismatches=" << summary.mismatches
+         << endl;
+  }
+
+
+  static void ReportBenchmarkBoardTiming(
+    const BenchmarkMethodSummary& summary,
+    const unsigned boardNumber,
+    const double boardElapsedSeconds,
+    const double totalElapsedSeconds)
+  {
+    cout.setf(ios::fixed);
+    cout << setprecision(6);
+    cout << "ALPHA_MU_BENCHMARK_BOARD method=" << summary.method
+         << " file=" << summary.handFile
+         << " board=" << boardNumber
+         << " total_boards=" << summary.boardsTested
+         << " depth=" << summary.depth
+         << " board_seconds=" << boardElapsedSeconds
+         << " elapsed_seconds=" << totalElapsedSeconds
          << " mismatches=" << summary.mismatches
          << endl;
   }

@@ -6,7 +6,7 @@ Each entry links to a timestamped result bundle under `test/build/performance_ru
 
 ![Standardized performance trend graph](performance-log.svg)
 
-_The graph uses two aligned logarithmic panels: cumulative runtime at the top and per-board runtime at the bottom for entries that record board counts._
+_The graph uses two aligned logarithmic panels: cumulative runtime at the top and per-board runtime at the bottom for entries that record board counts. Where explicit board timings are recorded, the lower panel shows individual board samples plus the median trend; older entries without board lists fall back to their recorded per-board average._
 
 _Entries that include a `Timing stabilization` section use warmup runs plus adaptive repeat counts for short workloads so the reported medians are stable to about `0.1 s` or better._
 
@@ -178,4 +178,19 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 | Workload | Boards | Total (s) | Per board (s) |
 | --- | ---: | ---: | ---: |
 | `alpha_mu_prototype_list10_depth2` | 10 | 631.195 | 63.120 |
+
+## 2026-04-16 20:38:05 — commit `8b27edf` (dirty)
+
+- Output log: `test/build/list10_alpha_mu_depth2_20260416-202717.log`
+- Status sidecar: `test/build/list10_alpha_mu_depth2_20260416-202717.log.status.json`
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Checkpoint interval: `30 s`
+- Heartbeat interval: `30 s`
+
+| Workload | Boards | Total (s) | Per board (s) |
+| --- | ---: | ---: | ---: |
+| `alpha_mu_prototype_list10_depth2` | 10 | 647.090 | 64.709 |
+
+- Per-board timings for `alpha_mu_prototype_list10_depth2` (s): `33.676, 424.807, 18.545, 33.332, 14.847, 29.519, 9.362, 50.346, 18.946, 13.711`
 

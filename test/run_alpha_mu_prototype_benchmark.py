@@ -138,6 +138,8 @@ def main() -> int:
         "checkpoint_seconds": args.checkpoint_seconds,
         "heartbeat_seconds": args.heartbeat_seconds,
         "last_checkpoint_line": "",
+        "benchmark_summary_line": "",
+        "per_board_seconds": [],
         "last_output_line": "",
         "elapsed_seconds": 0.0,
         "returncode": None,
@@ -176,6 +178,21 @@ def main() -> int:
         status["last_output_line"] = item.rstrip("\n")
         if item.startswith("ALPHA_MU_BENCHMARK_CHECKPOINT "):
             status["last_checkpoint_line"] = item.rstrip("\n")
+        elif item.startswith("ALPHA_MU_BENCHMARK_BOARD "):
+            fields: dict[str, str] = {}
+            for token in item.strip().split()[1:]:
+                if "=" not in token:
+                    continue
+                key, value = token.split("=", 1)
+                fields[key] = value
+            board_value = fields.get("board_seconds")
+            if board_value is not None:
+                try:
+                    status["per_board_seconds"].append(float(board_value))
+                except ValueError:
+                    pass
+        elif item.startswith("ALPHA_MU_BENCHMARK "):
+            status["benchmark_summary_line"] = item.rstrip("\n")
         write_status(status_path, status)
 
     returncode = proc.wait()
