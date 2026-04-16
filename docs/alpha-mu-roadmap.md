@@ -20,6 +20,8 @@ The prototype already includes:
 - optimistic completion of sparse worlds,
 - prototype transposition-table reuse,
 - staged possible-world filtering,
+- seed-based hidden-seat world construction for post-lead partial-information states,
+- constructor-local bidding pruning for card location, suit length, HCP, and balanced shape,
 - play-history legality filtering,
 - deterministic world downselection,
 - bridge move generation,
@@ -78,12 +80,15 @@ Make alpha-mu inputs much less artificial by improving realistic world generatio
 - add richer bidding-derived constraints,
 - add richer play-derived constraints,
 - support more realistic candidate-world construction from actual histories,
+- support longer post-lead histories and moderately larger ambiguous two-defender world pools,
+- defer full remaining East/West construction to a capped or sampled path until the smaller-history construction cases are benchmark-backed,
 - and add regressions starting from realistic partial-information states rather than mainly hand-curated world pools.
 
 ### Deliverables
 
 - richer information-state construction,
 - more realistic world-pool generation,
+- longer-history post-lead fixtures with measured candidate-count narrowing,
 - and tests showing that bidding/play evidence meaningfully narrows candidate worlds.
 
 ### Completion signal
@@ -101,6 +106,7 @@ Broaden bridge continuation search behavior beyond the current first family of s
 - add more three-world continuation families,
 - add deeper mixed merge/split shapes,
 - add more partial-trick to next-trick continuation cases,
+- prefer longer post-lead continuation families before scaling to very large world sets at the same horizon,
 - extend root reporting with clearer chosen-move, front, surviving-world, and cut summaries,
 - and test continuation behavior beyond the current small showcase depth.
 
@@ -146,8 +152,10 @@ Make alpha-mu practically scalable enough for more meaningful runs.
 ### Main work
 
 - measure where time goes in world generation, front operations, branching, DDS leaf calls, and repeated subtrees,
+- record constructor candidate counts and checkpoint progress for long-running timing jobs,
 - improve pruning and cut effectiveness where measurements justify it,
 - improve caching and reuse,
+- evaluate bridge-state transposition reuse and Zobrist-style state keying only after instrumentation shows repeated-state caching is worth the added complexity,
 - tune data representations only after measurement,
 - and add benchmark suites that distinguish shallow exact comparisons, searched-prefix comparisons, and realistic partial-information cases.
 

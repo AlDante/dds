@@ -1804,17 +1804,103 @@ namespace
   }
 
 
+  static bool PartialSeatCanStillReachBalancedShape(
+    const ParsedWorld& current,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const unsigned nextIndex,
+    const int seat,
+    const int targetCount)
+  {
+    if (targetCount != 13)
+      return true;
+
+    int currentLengths[4];
+    int maxLengths[4];
+    for (int suit = 0; suit < 4; suit++)
+    {
+      currentLengths[suit] = WorldSuitLength(current, seat, suit);
+      maxLengths[suit] = currentLengths[suit] +
+        PotentialRemainingSuitCardsForSeat(hiddenCards, nextIndex, seat, suit);
+    }
+
+    const int balancedPatterns[3][4] = {
+      { 5, 3, 3, 2 },
+      { 4, 4, 3, 2 },
+      { 4, 3, 3, 3 }
+    };
+
+    for (int patternIndex = 0; patternIndex < 3; patternIndex++)
+    {
+      vector<int> pattern(
+        balancedPatterns[patternIndex],
+        balancedPatterns[patternIndex] + 4);
+      sort(pattern.begin(), pattern.end());
+      do
+      {
+        bool fits = true;
+        for (int suit = 0; suit < 4; suit++)
+        {
+          const int targetLength = pattern[static_cast<unsigned>(suit)];
+          if (currentLengths[suit] > targetLength ||
+              maxLengths[suit] < targetLength)
+          {
+            fits = false;
+            break;
+          }
+        }
+
+        if (fits)
+          return true;
+      }
+      while (next_permutation(pattern.begin(), pattern.end()));
+    }
+
+    return false;
+  }
+
+
+  static bool ConstructorBalancedConstraintsPossible(
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints,
+    const ParsedWorld& current,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const int targetCounts[4],
+    const unsigned nextIndex)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_BALANCED)
+        continue;
+
+      if (! PartialSeatCanStillReachBalancedShape(current, hiddenCards,
+            nextIndex, constraint.player, targetCounts[constraint.player]))
+      {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+
   static bool ConstructorBiddingConstraintsPossible(
     const vector<int>& hiddenSeats,
     const vector<WorldConstraint>& constraints,
     const ParsedWorld& current,
     const vector<HiddenCardCandidate>& hiddenCards,
+    const int targetCounts[4],
     const unsigned nextIndex)
   {
     return ConstructorLengthConstraintsPossible(hiddenSeats, constraints, current,
       hiddenCards, nextIndex) &&
       ConstructorHCPConstraintsPossible(hiddenSeats, constraints, current,
-        hiddenCards, nextIndex);
+        hiddenCards, nextIndex) &&
+      ConstructorBalancedConstraintsPossible(hiddenSeats, constraints, current,
+        hiddenCards, targetCounts, nextIndex);
   }
 
 
@@ -1869,7 +1955,7 @@ namespace
       assignedCounts[seat]++;
 
       if (ConstructorBiddingConstraintsPossible(hiddenSeats, biddingConstraints,
-            current, hiddenCards, index + 1))
+            current, hiddenCards, targetCounts, index + 1))
       {
         ConstructHistoryDerivedWorldsRec(hiddenSeats, hiddenCards,
           biddingConstraints, targetCounts, assignedCounts, current, index + 1,
@@ -1942,7 +2028,8 @@ namespace
     int assignedCounts[4];
     memset(assignedCounts, 0, sizeof(assignedCounts));
     if (ConstructorBiddingConstraintsPossible(spec.hiddenSeats,
-          information.biddingConstraints, current, result.hiddenCards, 0U))
+          information.biddingConstraints, current, result.hiddenCards,
+          targetCounts, 0U))
     {
       ConstructHistoryDerivedWorldsRec(spec.hiddenSeats, result.hiddenCards,
         information.biddingConstraints, targetCounts, assignedCounts, current,
@@ -3313,6 +3400,15 @@ namespace
   }
 
 
+  static double BenchmarkCheckpointIntervalSeconds();
+
+
+  static void ReportBenchmarkCheckpoint(
+    const BenchmarkMethodSummary& summary,
+    const unsigned completedBoards,
+    const double elapsedSeconds);
+
+
   static BenchmarkMethodSummary BenchmarkDDSExactBoards(
     const string& handFile,
     const int maxBoards)
@@ -3330,12 +3426,26 @@ namespace
       "DDS benchmark selected zero boards to test");
 
     SetMaxThreads(0);
+    const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+    double lastCheckpoint = 0.0;
     for (unsigned i = 0; i < summary.boardsTested; i++)
     {
       const int score = SolveDDSLeafWorld(data, static_cast<int>(i), 0);
       if (score != BestScore(data.futList[i]))
         summary.mismatches++;
+
+      if (checkpointSeconds > 0.0)
+      {
+        const double elapsed = chrono::duration<double>(
+          chrono::steady_clock::now() - start).count();
+        if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
+            (i + 1 == summary.boardsTested))
+        {
+          ReportBenchmarkCheckpoint(summary, i + 1, elapsed);
+          lastCheckpoint = elapsed;
+        }
+      }
     }
     const chrono::steady_clock::time_point end = chrono::steady_clock::now();
     summary.elapsedSeconds = chrono::duration<double>(end - start).count();
@@ -3365,7 +3475,9 @@ namespace
       "alpha-mu benchmark selected zero boards to test");
 
     SetMaxThreads(0);
+    const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+    double lastCheckpoint = 0.0;
     for (unsigned i = 0; i < summary.boardsTested; i++)
     {
       const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[i]);
@@ -3374,6 +3486,18 @@ namespace
         static_cast<int>(i));
       if (alphaScore != BestScore(data.futList[i]))
         summary.mismatches++;
+
+      if (checkpointSeconds > 0.0)
+      {
+        const double elapsed = chrono::duration<double>(
+          chrono::steady_clock::now() - start).count();
+        if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
+            (i + 1 == summary.boardsTested))
+        {
+          ReportBenchmarkCheckpoint(summary, i + 1, elapsed);
+          lastCheckpoint = elapsed;
+        }
+      }
     }
     const chrono::steady_clock::time_point end = chrono::steady_clock::now();
     summary.elapsedSeconds = chrono::duration<double>(end - start).count();
@@ -3398,6 +3522,35 @@ namespace
          << "\n";
     Check(summary.mismatches == 0,
       "benchmark mode should preserve the exact golden FUT score on every tested board");
+  }
+
+
+  static double BenchmarkCheckpointIntervalSeconds()
+  {
+    const char * value = getenv("DDS_ALPHA_MU_BENCHMARK_CHECKPOINT_SECONDS");
+    if (value == NULL || *value == '\0')
+      return 0.0;
+
+    const double parsed = atof(value);
+    return (parsed > 0.0 ? parsed : 0.0);
+  }
+
+
+  static void ReportBenchmarkCheckpoint(
+    const BenchmarkMethodSummary& summary,
+    const unsigned completedBoards,
+    const double elapsedSeconds)
+  {
+    cout.setf(ios::fixed);
+    cout << setprecision(6);
+    cout << "ALPHA_MU_BENCHMARK_CHECKPOINT method=" << summary.method
+         << " file=" << summary.handFile
+         << " completed_boards=" << completedBoards
+         << " total_boards=" << summary.boardsTested
+         << " depth=" << summary.depth
+         << " elapsed_seconds=" << elapsedSeconds
+         << " mismatches=" << summary.mismatches
+         << endl;
   }
 
 
@@ -4434,6 +4587,110 @@ namespace
   }
 
 
+  static void TestHistoryDerivedConstructionUsesBiddingBalancedShape()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:A3.AKT7.AKT7.A32 QJ98.QJ98.QJ9.QJ K2.65432.65432.K T7654..8.T987654");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    const auto addHasCards =
+      [&](const int seat, const int suit, const string& ranks)
+      {
+        for (unsigned i = 0; i < ranks.size(); i++)
+        {
+          unconstrainedInfo.biddingConstraints.push_back(
+            WorldConstraint::HasCard(seat, suit, ranks[i]));
+        }
+      };
+
+    addHasCards(SEAT_EAST, SUIT_SPADES, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_HEARTS, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_DIAMONDS, "QJ9");
+    addHasCards(SEAT_EAST, SUIT_CLUBS, "Q");
+    addHasCards(SEAT_WEST, SUIT_SPADES, "7654");
+    addHasCards(SEAT_WEST, SUIT_DIAMONDS, "8");
+    addHasCards(SEAT_WEST, SUIT_CLUBS, "T987654");
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local balanced pruning the full hidden-hand fixture should keep the two legal ambiguous spade-versus-club worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local balanced pruning should keep only the world where East can still reach a balanced 13-card shape");
+    Check(WorldHasBalancedShape(constrained.worlds[0], SEAT_EAST),
+      "the world surviving constructor-local balanced pruning should give East a balanced full-hand shape");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_CLUBS, 'J'),
+      "constructor-local balanced pruning should keep the world where East receives the ambiguous club instead of the ambiguous spade");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local balanced pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned balanced-shape survivor");
+  }
+
+
+  static void TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without balanced constraints the short hidden-seat fixture should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 2,
+      "constructor-local balanced pruning should defer on incomplete hidden hands instead of pruning the short toy fixture early");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(2, 0x0ULL),
+      "the later full bidding filter should still reject the incomplete short hidden-hand worlds for a balanced-shape requirement");
+    Check(stats.afterBiddingCount == 0,
+      "later bidding-stage filtering should reject every incomplete short hidden-hand world under a balanced-shape requirement");
+  }
+
+
   static void TestDeterministicWorldSampling()
   {
     vector<ParsedWorld> worlds;
@@ -5191,6 +5448,12 @@ int main(int argc, char ** argv)
 
   TestHistoryDerivedConstructionUsesBiddingMaxHCP();
   cout << "alpha_mu_prototype: history-derived bidding MaxHCP construction OK\n";
+
+  TestHistoryDerivedConstructionUsesBiddingBalancedShape();
+  cout << "alpha_mu_prototype: history-derived bidding balanced construction OK\n";
+
+  TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands();
+  cout << "alpha_mu_prototype: history-derived balanced deferral on incomplete hands OK\n";
 
   TestDeterministicWorldSampling();
   cout << "alpha_mu_prototype: deterministic world sampling OK\n";

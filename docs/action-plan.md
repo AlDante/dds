@@ -143,6 +143,8 @@ The prototype also now includes a first seed-based hidden-seat world-constructio
 
 The prototype also now includes constructor-local MinHCP and MaxHCP pruning for those seed-based hidden-seat candidate worlds before the later full bidding filter.
 
+The prototype also now includes conservative constructor-local balanced-shape pruning for full hidden hands, while still deferring incomplete toy hidden-hand cases to the later full bidding filter.
+
 The prototype also now includes a first bridge move generator over those possible worlds, including legal-move union and world elimination after a play.
 
 The prototype also now includes a first one-trick bridge search controller over those generated move trees, including trick completion, winner advancement, and bridge-specific backup of sparse outcome vectors.
@@ -195,7 +197,10 @@ Implement the next realistic-world step:
 1. represent bidding constraints, play-history constraints, known cards, and follow-suit implications explicitly,
 2. extend world generation from simple filtered candidate pools to realistic history-derived worlds,
 3. make world sampling reproducible and measurable,
-4. add regression cases that explain why each world is accepted or rejected.
+4. add regression cases that explain why each world is accepted or rejected,
+5. extend post-lead construction from tiny East/West card swaps to longer post-lead histories with richer defender-side ambiguity,
+6. grow from narrow hidden-card pools to moderately larger ambiguous defender pools before attempting full remaining East/West construction,
+7. treat capped or sampled full remaining East/West construction as a later Stage-1 candidate once the smaller-history construction path is benchmark-backed.
 
 ### Cycle B — larger bridge continuations
 
@@ -205,7 +210,8 @@ Extend the bridge search controller from the current small continuation model to
 2. support multiple sparse-front shapes after continuation,
 3. support mixed merge/split behavior across multiple tricks,
 4. verify correct empty-trick and partial-trick transitions at larger horizons,
-5. report root move, front, and useful-world counts.
+5. report root move, front, and useful-world counts,
+6. prefer longer post-lead continuation families before attempting much broader world counts at the same search horizon.
 
 ### Cycle C — complete the missing paper motifs
 
@@ -241,11 +247,15 @@ Keep the alpha-mu code outside the core DDS recursion while doing this.
 Add benchmark accounting for:
 
 - world generation cost,
+- world-construction candidate counts before and after constructor-local pruning,
 - front sizes and dominance reductions,
 - TT hit/miss counts,
 - cut counts by type,
 - DDS leaf-call counts,
-- elapsed time split by stage.
+- elapsed time split by stage,
+- and checkpoint output for long-running timing jobs so partial progress survives interrupted runs.
+
+Possible later optimization candidates after those measurements include bridge-state transposition reuse for the continuation search and, if that proves worthwhile, Zobrist-style state keying for the bridge alpha-mu state.
 
 Do this before adding further performance work.
 

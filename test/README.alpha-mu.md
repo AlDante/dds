@@ -8,6 +8,7 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 
 - `test/alpha_mu_benchmark.py`
 - `test/alpha_mu_dds_compare.py`
+- `test/run_alpha_mu_prototype_benchmark.py`
 - `test/alpha_mu_prototype.cpp`
 - `test/README.alpha-mu-prototype.md`
 
@@ -107,4 +108,12 @@ The repository also now contains a separate first alpha-mu prototype runner:
 Unlike the benchmark runner, the prototype is not a DDS root-policy measurement tool. It is a separate semantics-oriented test component for Pareto fronts, toy alpha-mu search, and a DDS-backed leaf-evaluation demo.
 
 The new `test/alpha_mu_dds_compare.py` runner sits between the two: it uses the prototype's exact one-world bridge benchmark modes to compare original DDS solve speed against alpha-mu solve speed on the same boards, while also checking score agreement at each measured alpha-mu depth.
+
+For longer single benchmark runs, `test/run_alpha_mu_prototype_benchmark.py` streams output live, preserves machine-readable `ALPHA_MU_BENCHMARK_CHECKPOINT ...` lines in the log, and updates a `.status.json` sidecar so interrupted runs still leave partial progress behind.
+
+Example depth-2 baseline run from the repository root:
+
+```zsh
+python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list1.txt --depth 2 --checkpoint-seconds 30
+```
 
