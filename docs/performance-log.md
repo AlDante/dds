@@ -6,7 +6,7 @@ Each entry links to a timestamped result bundle under `test/build/performance_ru
 
 ![Standardized performance trend graph](performance-log.svg)
 
-_The graph plots median elapsed seconds per workload on a logarithmic Y-axis so both long DDS regression runs and fast benchmark checks remain visible._
+_The graph uses two aligned logarithmic panels: cumulative runtime at the top and per-board runtime at the bottom for entries that record board counts._
 
 _Entries that include a `Timing stabilization` section use warmup runs plus adaptive repeat counts for short workloads so the reported medians are stable to about `0.1 s` or better._
 
@@ -152,3 +152,17 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 | `play_analysis_benchmark` | 0.106 | 0.108 | 0.098 | 0.131 |
 | `alpha_mu_prototype_default` | 0.147 | 0.147 | 0.139 | 0.154 |
 | `alpha_mu_prototype_bridge_dds` | 0.449 | 0.448 | 0.437 | 0.458 |
+
+## 2026-04-16 17:10:55 — commit `e11ce28` (dirty)
+
+- Output log: `test/build/alpha_mu_depth2_list10.log`
+- Status sidecar: `test/build/alpha_mu_depth2_list10.log.status.json`
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Checkpoint interval: `30 s`
+- Heartbeat interval: `30 s`
+
+| Workload | Boards | Total (s) | Per board (s) |
+| --- | ---: | ---: | ---: |
+| `alpha_mu_prototype_list10_depth2` | 10 | 653.456 | 65.346 |
+

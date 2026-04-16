@@ -14,9 +14,13 @@ ENTRY_RE = re.compile(
     r"^## (?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) — commit `(?P<commit>[0-9a-f]+)`(?P<dirty> \(dirty\))?$"
 )
 
-WORKLOAD_ROW_RE = re.compile(
+LEGACY_WORKLOAD_ROW_RE = re.compile(
     r"^\| `(?P<name>[^`]+)` \| (?P<median>[0-9]+(?:\.[0-9]+)?) \| "
     r"(?P<mean>[0-9]+(?:\.[0-9]+)?) \| (?P<min>[0-9]+(?:\.[0-9]+)?) \| (?P<max>[0-9]+(?:\.[0-9]+)?) \|$"
+)
+BENCHMARK_ROW_RE = re.compile(
+    r"^\| `(?P<name>[^`]+)` \| (?P<boards>\d+) \| (?P<total>[0-9]+(?:\.[0-9]+)?) \| "
+    r"(?P<per_board>[0-9]+(?:\.[0-9]+)?) \|$"
 )
 GRAPH_OUTLIERS_RE = re.compile(r"^- Graph outliers: (?P<workloads>.+)$")
 BACKTICK_NAME_RE = re.compile(r"`([^`]+)`")
@@ -27,7 +31,8 @@ class PerformanceEntry:
     timestamp: str
     commit: str
     dirty: bool
-    workloads: dict[str, float]
+    total_workloads: dict[str, float]
+    per_board_workloads: dict[str, float]
     graph_outliers: frozenset[str]
 
 
@@ -40,27 +45,31 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
     current_timestamp: str | None = None
     current_commit: str | None = None
     current_dirty = False
-    current_workloads: dict[str, float] = {}
+    current_total_workloads: dict[str, float] = {}
+    current_per_board_workloads: dict[str, float] = {}
     current_graph_outliers: set[str] = set()
 
     def flush_current() -> None:
-        nonlocal current_timestamp, current_commit, current_dirty, current_workloads, current_graph_outliers
+        nonlocal current_timestamp, current_commit, current_dirty
+        nonlocal current_total_workloads, current_per_board_workloads, current_graph_outliers
         if current_timestamp is None or current_commit is None:
             return
-        if current_workloads:
+        if current_total_workloads or current_per_board_workloads:
             entries.append(
                 PerformanceEntry(
                     timestamp=current_timestamp,
                     commit=current_commit,
                     dirty=current_dirty,
-                    workloads=dict(current_workloads),
+                    total_workloads=dict(current_total_workloads),
+                    per_board_workloads=dict(current_per_board_workloads),
                     graph_outliers=frozenset(current_graph_outliers),
                 )
             )
         current_timestamp = None
         current_commit = None
         current_dirty = False
-        current_workloads = {}
+        current_total_workloads = {}
+        current_per_board_workloads = {}
         current_graph_outliers = set()
 
     for raw_line in log_path.read_text(encoding="utf-8").splitlines():
@@ -73,9 +82,16 @@ def parse_performance_log(log_path: Path) -> list[PerformanceEntry]:
             current_dirty = entry_match.group("dirty") is not None
             continue
 
-        row_match = WORKLOAD_ROW_RE.match(line)
+        row_match = LEGACY_WORKLOAD_ROW_RE.match(line)
         if row_match and current_timestamp is not None:
-            current_workloads[row_match.group("name")] = float(row_match.group("median"))
+            current_total_workloads[row_match.group("name")] = float(row_match.group("median"))
+            continue
+
+        benchmark_match = BENCHMARK_ROW_RE.match(line)
+        if benchmark_match and current_timestamp is not None:
+            name = benchmark_match.group("name")
+            current_total_workloads[name] = float(benchmark_match.group("total"))
+            current_per_board_workloads[name] = float(benchmark_match.group("per_board"))
             continue
 
         outlier_match = GRAPH_OUTLIERS_RE.match(line)
@@ -154,34 +170,26 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
     if not entries:
         raise ValueError(f"No performance entries found in {log_path}")
 
-    workload_names = sorted({name for entry in entries for name in entry.workloads})
-    if not workload_names:
+    total_workload_names = sorted({name for entry in entries for name in entry.total_workloads})
+    per_board_workload_names = sorted({name for entry in entries for name in entry.per_board_workloads})
+    workload_names = sorted(set(total_workload_names) | set(per_board_workload_names))
+    if not total_workload_names:
         raise ValueError(f"No workload rows found in {log_path}")
 
     width = 1320
-    height = 860
+    height = 1100
     left_margin = 110.0
     right_margin = 280.0
     top_margin = 120.0
     bottom_margin = 190.0
     plot_width = width - left_margin - right_margin
-    plot_height = height - top_margin - bottom_margin
-
-    all_values = [value for entry in entries for value in entry.workloads.values() if value > 0.0]
-    min_value = min(all_values)
-    max_value = max(all_values)
-    y_min = 10 ** math.floor(math.log10(min_value / 1.15))
-    y_max = 10 ** math.ceil(math.log10(max_value * 1.15))
-    ticks = generate_tick_values(y_min, y_max)
+    panel_gap = 110.0
+    panel_height = (height - top_margin - bottom_margin - panel_gap) / 2.0
 
     def x_position(index: int) -> float:
         if len(entries) == 1:
             return left_margin + plot_width / 2.0
         return left_margin + (plot_width * index) / (len(entries) - 1)
-
-    def y_position(value: float) -> float:
-        ratio = (math.log10(value) - math.log10(y_min)) / (math.log10(y_max) - math.log10(y_min))
-        return top_margin + plot_height - ratio * plot_height
 
     colors = [
         "#4C78A8",
@@ -203,7 +211,7 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
     )
     svg_parts.append("<title id=\"title\">DDS standardized performance trend</title>")
     svg_parts.append(
-        "<desc id=\"desc\">Median elapsed seconds per workload across recorded standardized performance runs on a logarithmic y-axis.</desc>"
+        "<desc id=\"desc\">Recorded performance entries showing cumulative runtime and per-board runtime across standardized runs and standalone alpha-mu baselines.</desc>"
     )
     svg_parts.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="#ffffff" />')
 
@@ -212,7 +220,7 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
         svg_text(
             left_margin,
             78,
-            "Median elapsed seconds per workload entry from docs/performance-log.md (logarithmic y-axis).",
+            "Top panel: cumulative runtime. Bottom panel: per-board runtime for entries that record board counts.",
             font_size="15",
             fill="#4b5563",
         )
@@ -227,95 +235,154 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
         )
     )
 
-    plot_left = left_margin
-    plot_right = left_margin + plot_width
-    plot_top = top_margin
-    plot_bottom = top_margin + plot_height
+    def render_panel(
+        title: str,
+        series_getter,
+        plot_top: float,
+        y_axis_label: str,
+        empty_message: str,
+        show_x_labels: bool,
+    ) -> None:
+        plot_left = left_margin
+        plot_right = left_margin + plot_width
+        plot_bottom = plot_top + panel_height
+        values = [
+            value
+            for entry in entries
+            for value in series_getter(entry).values()
+            if value > 0.0
+        ]
 
-    svg_parts.append(
-        f'<rect x="{plot_left:.2f}" y="{plot_top:.2f}" width="{plot_width:.2f}" height="{plot_height:.2f}" fill="#fcfcfd" stroke="#d1d5db" stroke-width="1" />'
-    )
+        svg_parts.append(
+            f'<rect x="{plot_left:.2f}" y="{plot_top:.2f}" width="{plot_width:.2f}" height="{panel_height:.2f}" fill="#fcfcfd" stroke="#d1d5db" stroke-width="1" />'
+        )
+        svg_parts.append(
+            svg_text(plot_left + 12, plot_top + 24, title, font_size="16", font_weight="700", fill="#111827")
+        )
 
-    for tick in ticks:
-        y = y_position(tick)
-        svg_parts.append(svg_line(plot_left, y, plot_right, y, stroke="#e5e7eb", stroke_width="1"))
+        if not values:
+            svg_parts.append(
+                svg_text(
+                    plot_left + plot_width / 2.0,
+                    plot_top + panel_height / 2.0,
+                    empty_message,
+                    text_anchor="middle",
+                    font_size="14",
+                    fill="#6b7280",
+                )
+            )
+            return
+
+        y_min = 10 ** math.floor(math.log10(min(values) / 1.15))
+        y_max = 10 ** math.ceil(math.log10(max(values) * 1.15))
+        ticks = generate_tick_values(y_min, y_max)
+
+        def y_position(value: float) -> float:
+            ratio = (math.log10(value) - math.log10(y_min)) / (math.log10(y_max) - math.log10(y_min))
+            return plot_top + panel_height - ratio * panel_height
+
+        for tick in ticks:
+            y = y_position(tick)
+            svg_parts.append(svg_line(plot_left, y, plot_right, y, stroke="#e5e7eb", stroke_width="1"))
+            svg_parts.append(
+                svg_text(
+                    plot_left - 14,
+                    y + 5,
+                    format_seconds_label(tick),
+                    text_anchor="end",
+                    font_size="13",
+                    fill="#374151",
+                )
+            )
+
+        svg_parts.append(svg_line(plot_left, plot_top, plot_left, plot_bottom, stroke="#6b7280", stroke_width="1.5"))
+        svg_parts.append(svg_line(plot_left, plot_bottom, plot_right, plot_bottom, stroke="#6b7280", stroke_width="1.5"))
         svg_parts.append(
             svg_text(
-                plot_left - 14,
-                y + 5,
-                format_seconds_label(tick),
-                text_anchor="end",
-                font_size="13",
+                34,
+                plot_top + panel_height / 2.0,
+                y_axis_label,
+                transform=f"rotate(-90 34 {plot_top + panel_height / 2.0:.2f})",
+                font_size="14",
                 fill="#374151",
             )
         )
 
-    svg_parts.append(svg_line(plot_left, plot_top, plot_left, plot_bottom, stroke="#6b7280", stroke_width="1.5"))
-    svg_parts.append(svg_line(plot_left, plot_bottom, plot_right, plot_bottom, stroke="#6b7280", stroke_width="1.5"))
-    svg_parts.append(
-        svg_text(
-            34,
-            plot_top + plot_height / 2.0,
-            "Median runtime (seconds, log scale)",
-            transform=f"rotate(-90 34 {plot_top + plot_height / 2.0:.2f})",
-            font_size="14",
-            fill="#374151",
-        )
+        for index, entry in enumerate(entries):
+            x = x_position(index)
+            svg_parts.append(svg_line(x, plot_top, x, plot_bottom, stroke="#f3f4f6", stroke_width="1"))
+            if show_x_labels:
+                label = f"{entry.commit} {entry.timestamp[11:16]}"
+                svg_parts.append(
+                    f'<text x="{x:.2f}" y="{plot_bottom + 26:.2f}" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 {x:.2f} {plot_bottom + 26:.2f})">{html.escape(label)}</text>'
+                )
+
+        for workload_name in workload_names:
+            points: list[tuple[float, float]] = []
+            outlier_points: list[tuple[float, float]] = []
+            for index, entry in enumerate(entries):
+                value = series_getter(entry).get(workload_name)
+                if value is None or value <= 0.0:
+                    continue
+                point = (x_position(index), y_position(value))
+                if workload_name in entry.graph_outliers:
+                    outlier_points.append(point)
+                else:
+                    points.append(point)
+            if not points and not outlier_points:
+                continue
+            color = color_by_workload[workload_name]
+            if len(points) >= 2:
+                svg_parts.append(
+                    svg_polyline(
+                        points,
+                        fill="none",
+                        stroke=color,
+                        stroke_width="3",
+                        stroke_linecap="round",
+                        stroke_linejoin="round",
+                    )
+                )
+            for point_x, point_y in points:
+                svg_parts.append(svg_circle(point_x, point_y, 4.5, fill=color, stroke="#ffffff", stroke_width="1.5"))
+            for point_x, point_y in outlier_points:
+                svg_parts.append(svg_circle(point_x, point_y, 6.0, fill="#ffffff", stroke=color, stroke_width="2.5"))
+                svg_parts.append(svg_line(point_x - 4.0, point_y - 4.0, point_x + 4.0, point_y + 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
+                svg_parts.append(svg_line(point_x - 4.0, point_y + 4.0, point_x + 4.0, point_y - 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
+
+    render_panel(
+        "Cumulative runtime by workload",
+        lambda entry: entry.total_workloads,
+        top_margin,
+        "Cumulative time (seconds, log scale)",
+        "No cumulative runtime data recorded yet.",
+        False,
     )
 
-    for index, entry in enumerate(entries):
-        x = x_position(index)
-        svg_parts.append(svg_line(x, plot_top, x, plot_bottom, stroke="#f3f4f6", stroke_width="1"))
-        label = f"{entry.commit} {entry.timestamp[11:16]}"
-        svg_parts.append(
-            f'<text x="{x:.2f}" y="{plot_bottom + 26:.2f}" text-anchor="end" font-size="12" fill="#374151" transform="rotate(-35 {x:.2f} {plot_bottom + 26:.2f})">{html.escape(label)}</text>'
-        )
+    render_panel(
+        "Per-board runtime for board-counted benchmarks",
+        lambda entry: entry.per_board_workloads,
+        top_margin + panel_height + panel_gap,
+        "Per-board time (seconds, log scale)",
+        "No board-counted benchmark entries recorded yet.",
+        True,
+    )
+
+    plot_bottom = top_margin + 2.0 * panel_height + panel_gap
+    plot_right = left_margin + plot_width
     svg_parts.append(
         svg_text(
-            plot_left + plot_width / 2.0,
+            left_margin + plot_width / 2.0,
             height - 36,
-            "Commit/time of recorded standardized run",
+            "Commit/time of recorded performance entry",
             text_anchor="middle",
             font_size="14",
             fill="#374151",
         )
     )
 
-    for workload_name in workload_names:
-        points: list[tuple[float, float]] = []
-        outlier_points: list[tuple[float, float]] = []
-        for index, entry in enumerate(entries):
-            value = entry.workloads.get(workload_name)
-            if value is None or value <= 0.0:
-                continue
-            point = (x_position(index), y_position(value))
-            if workload_name in entry.graph_outliers:
-                outlier_points.append(point)
-            else:
-                points.append(point)
-        if not points and not outlier_points:
-            continue
-        color = color_by_workload[workload_name]
-        if len(points) >= 2:
-            svg_parts.append(
-                svg_polyline(
-                    points,
-                    fill="none",
-                    stroke=color,
-                    stroke_width="3",
-                    stroke_linecap="round",
-                    stroke_linejoin="round",
-                )
-            )
-        for point_x, point_y in points:
-            svg_parts.append(svg_circle(point_x, point_y, 4.5, fill=color, stroke="#ffffff", stroke_width="1.5"))
-        for point_x, point_y in outlier_points:
-            svg_parts.append(svg_circle(point_x, point_y, 6.0, fill="#ffffff", stroke=color, stroke_width="2.5"))
-            svg_parts.append(svg_line(point_x - 4.0, point_y - 4.0, point_x + 4.0, point_y + 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
-            svg_parts.append(svg_line(point_x - 4.0, point_y + 4.0, point_x + 4.0, point_y - 4.0, stroke=color, stroke_width="2.0", stroke_linecap="round"))
-
     legend_x = plot_right + 28.0
-    legend_y = plot_top + 20.0
+    legend_y = top_margin + 20.0
     svg_parts.append(svg_text(legend_x, legend_y, "Workloads", font_size="16", font_weight="700", fill="#111827"))
     for legend_index, workload_name in enumerate(workload_names, start=1):
         row_y = legend_y + 26.0 * legend_index
@@ -344,6 +411,28 @@ def render_performance_log_graph(log_path: Path, output_path: Path) -> dict[str,
             fill="#374151",
         )
     )
+    latest_total_names = sorted(latest_entry.total_workloads)
+    latest_per_board_names = sorted(latest_entry.per_board_workloads)
+    if latest_total_names:
+        svg_parts.append(
+            svg_text(
+                legend_x,
+                summary_y + 46,
+                f"Cumulative series: {', '.join(latest_total_names[:3])}{' ...' if len(latest_total_names) > 3 else ''}",
+                font_size="13",
+                fill="#374151",
+            )
+        )
+    if latest_per_board_names:
+        svg_parts.append(
+            svg_text(
+                legend_x,
+                summary_y + 68,
+                f"Per-board series: {', '.join(latest_per_board_names[:3])}{' ...' if len(latest_per_board_names) > 3 else ''}",
+                font_size="13",
+                fill="#374151",
+            )
+        )
 
     svg_parts.append("</svg>")
 
