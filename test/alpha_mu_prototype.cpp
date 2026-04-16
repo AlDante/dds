@@ -917,10 +917,12 @@ namespace
   {
     ParsedWorld seedWorld;
     vector<int> hiddenSeats;
+    bool inferHiddenCardsFromVisibleHands;
 
     HistoryDerivedWorldSpec() :
       seedWorld(),
-      hiddenSeats()
+      hiddenSeats(),
+      inferHiddenCardsFromVisibleHands(false)
     {
     }
   };
@@ -1276,6 +1278,17 @@ namespace
       for (int suit = 0; suit < 4; suit++)
         count += static_cast<unsigned>(world.suits[player][suit].size());
     }
+    return count;
+  }
+
+
+  static unsigned WorldSeatCardCount(
+    const ParsedWorld& world,
+    const int player)
+  {
+    unsigned count = 0;
+    for (int suit = 0; suit < 4; suit++)
+      count += static_cast<unsigned>(world.suits[player][suit].size());
     return count;
   }
 
@@ -1665,6 +1678,95 @@ namespace
   }
 
 
+  static int FindCardSeatInWorld(
+    const ParsedWorld& world,
+    const int suit,
+    const char rank)
+  {
+    int foundSeat = -1;
+    for (int seat = 0; seat < 4; seat++)
+    {
+      if (! WorldHasCard(world, seat, suit, rank))
+        continue;
+
+      Check(foundSeat < 0,
+        "history-derived visible-seed construction should not contain duplicate cards");
+      foundSeat = seat;
+    }
+    return foundSeat;
+  }
+
+
+  static void CollectSeedHiddenCards(
+    const HistoryDerivedWorldSpec& spec,
+    HistoryDerivedConstructionResult& result,
+    const unsigned hiddenSeatMask,
+    int targetCounts[4])
+  {
+    for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+    {
+      const int seat = spec.hiddenSeats[i];
+      for (int suit = 0; suit < 4; suit++)
+      {
+        const string cards = result.visibleSeedWorld.suits[seat][suit];
+        targetCounts[seat] += static_cast<int>(cards.size());
+        for (unsigned j = 0; j < cards.size(); j++)
+        {
+          HiddenCardCandidate candidate;
+          candidate.card = BridgeMove(suit, cards[j]);
+          candidate.allowedSeatsMask = hiddenSeatMask;
+          result.hiddenCards.push_back(candidate);
+        }
+
+        result.visibleSeedWorld.suits[seat][suit].clear();
+      }
+    }
+  }
+
+
+  static void CollectInferredHiddenCardsFromVisibleHands(
+    const HistoryDerivedWorldSpec& spec,
+    HistoryDerivedConstructionResult& result,
+    const unsigned hiddenSeatMask,
+    int targetCounts[4],
+    int finalSeatCounts[4])
+  {
+    const string ranks = "AKQJT98765432";
+    for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+    {
+      const int seat = spec.hiddenSeats[i];
+      const unsigned knownCount = WorldSeatCardCount(result.visibleSeedWorld, seat);
+      Check(knownCount <= 13U,
+        "history-derived visible-seed construction should not specify more than thirteen cards on a hidden seat");
+      targetCounts[seat] = 13 - static_cast<int>(knownCount);
+      finalSeatCounts[seat] = 13;
+    }
+
+    unsigned inferredCount = 0U;
+    for (int suit = 0; suit < 4; suit++)
+    {
+      for (unsigned i = 0; i < ranks.size(); i++)
+      {
+        if (FindCardSeatInWorld(result.visibleSeedWorld, suit, ranks[i]) >= 0)
+          continue;
+
+        HiddenCardCandidate candidate;
+        candidate.card = BridgeMove(suit, ranks[i]);
+        candidate.allowedSeatsMask = hiddenSeatMask;
+        result.hiddenCards.push_back(candidate);
+        inferredCount++;
+      }
+    }
+
+    unsigned expectedCount = 0U;
+    for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+      expectedCount += static_cast<unsigned>(targetCounts[spec.hiddenSeats[i]]);
+
+    Check(expectedCount == inferredCount,
+      "history-derived visible-seed construction should infer exactly the hidden-seat complement of the visible cards");
+  }
+
+
   static void ApplyConstructionCardLocationConstraints(
     const vector<int>& hiddenSeats,
     const vector<WorldConstraint>& constraints,
@@ -1876,7 +1978,7 @@ namespace
     const vector<WorldConstraint>& constraints,
     const ParsedWorld& current,
     const vector<HiddenCardCandidate>& hiddenCards,
-    const int targetCounts[4],
+    const int finalSeatCounts[4],
     const unsigned nextIndex)
   {
     for (unsigned i = 0; i < constraints.size(); i++)
@@ -1889,7 +1991,7 @@ namespace
         continue;
 
       if (! PartialSeatCanStillReachBalancedShape(current, hiddenCards,
-            nextIndex, constraint.player, targetCounts[constraint.player]))
+            nextIndex, constraint.player, finalSeatCounts[constraint.player]))
       {
         return false;
       }
@@ -1904,7 +2006,7 @@ namespace
     const vector<WorldConstraint>& constraints,
     const ParsedWorld& current,
     const vector<HiddenCardCandidate>& hiddenCards,
-    const int targetCounts[4],
+    const int finalSeatCounts[4],
     const unsigned nextIndex)
   {
     return ConstructorLengthConstraintsPossible(hiddenSeats, constraints, current,
@@ -1912,7 +2014,7 @@ namespace
       ConstructorHCPConstraintsPossible(hiddenSeats, constraints, current,
         hiddenCards, nextIndex) &&
       ConstructorBalancedConstraintsPossible(hiddenSeats, constraints, current,
-        hiddenCards, targetCounts, nextIndex);
+        hiddenCards, finalSeatCounts, nextIndex);
   }
 
 
@@ -1937,6 +2039,7 @@ namespace
     const vector<HiddenCardCandidate>& hiddenCards,
     const vector<WorldConstraint>& constructorConstraints,
     const int targetCounts[4],
+    const int finalSeatCounts[4],
     int assignedCounts[4],
     ParsedWorld& current,
     const unsigned index,
@@ -1967,11 +2070,11 @@ namespace
       assignedCounts[seat]++;
 
       if (ConstructorBiddingConstraintsPossible(hiddenSeats, constructorConstraints,
-            current, hiddenCards, targetCounts, index + 1))
+            current, hiddenCards, finalSeatCounts, index + 1))
       {
         ConstructHistoryDerivedWorldsRec(hiddenSeats, hiddenCards,
-          constructorConstraints, targetCounts, assignedCounts, current, index + 1,
-          worlds);
+          constructorConstraints, targetCounts, finalSeatCounts, assignedCounts,
+          current, index + 1, worlds);
       }
 
       assignedCounts[seat]--;
@@ -1993,24 +2096,19 @@ namespace
     const unsigned hiddenSeatMask = SeatMask(spec.hiddenSeats);
     int targetCounts[4];
     memset(targetCounts, 0, sizeof(targetCounts));
+    int finalSeatCounts[4];
+    memset(finalSeatCounts, 0, sizeof(finalSeatCounts));
 
-    for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+    if (spec.inferHiddenCardsFromVisibleHands)
     {
-      const int seat = spec.hiddenSeats[i];
-      for (int suit = 0; suit < 4; suit++)
-      {
-        const string cards = result.visibleSeedWorld.suits[seat][suit];
-        targetCounts[seat] += static_cast<int>(cards.size());
-        for (unsigned j = 0; j < cards.size(); j++)
-        {
-          HiddenCardCandidate candidate;
-          candidate.card = BridgeMove(suit, cards[j]);
-          candidate.allowedSeatsMask = hiddenSeatMask;
-          result.hiddenCards.push_back(candidate);
-        }
-
-        result.visibleSeedWorld.suits[seat][suit].clear();
-      }
+      CollectInferredHiddenCardsFromVisibleHands(spec, result, hiddenSeatMask,
+        targetCounts, finalSeatCounts);
+    }
+    else
+    {
+      CollectSeedHiddenCards(spec, result, hiddenSeatMask, targetCounts);
+      for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+        finalSeatCounts[spec.hiddenSeats[i]] = targetCounts[spec.hiddenSeats[i]];
     }
 
     map<string, int> playedBySeat;
@@ -2043,11 +2141,11 @@ namespace
     memset(assignedCounts, 0, sizeof(assignedCounts));
     if (ConstructorBiddingConstraintsPossible(spec.hiddenSeats,
           constructorConstraints, current, result.hiddenCards,
-          targetCounts, 0U))
+          finalSeatCounts, 0U))
     {
       ConstructHistoryDerivedWorldsRec(spec.hiddenSeats, result.hiddenCards,
-        constructorConstraints, targetCounts, assignedCounts, current,
-        0U, result.worlds);
+        constructorConstraints, targetCounts, finalSeatCounts, assignedCounts,
+        current, 0U, result.worlds);
     }
 
     sort(result.worlds.begin(), result.worlds.end(),
@@ -4804,6 +4902,129 @@ namespace
   }
 
 
+  static void TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT7.J96 842.KQ2.KQ2.KQ72 T765.54.654.T4");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.hiddenCards.size() == 5,
+      "visible-seed history-derived construction should infer the five-card hidden East/West complement from the full deck");
+    Check(unconstrained.worlds.size() == 6,
+      "without derived follow-suit pruning the visible-seed longer-history fixture should keep all six legal allocations of the remaining four ambiguous hidden cards");
+    Check(unconstrained.visibleSeedWorld.suits[SEAT_EAST][SUIT_SPADES] == "J" &&
+          unconstrained.visibleSeedWorld.suits[SEAT_WEST][SUIT_CLUBS] == "T4",
+      "visible-seed construction should preserve already-known hidden-seat cards instead of clearing them like curated full hidden hands");
+
+    bool sawHiddenSpadeQ = false;
+    bool sawPinnedHeartJ = false;
+    bool sawHiddenClub5 = false;
+    for (unsigned i = 0; i < unconstrained.hiddenCards.size(); i++)
+    {
+      if (unconstrained.hiddenCards[i].card == BridgeMove(SUIT_SPADES, 'Q'))
+        sawHiddenSpadeQ = true;
+      if (unconstrained.hiddenCards[i].card == BridgeMove(SUIT_HEARTS, 'J') &&
+          unconstrained.hiddenCards[i].allowedSeatsMask == SeatBit(SEAT_EAST))
+      {
+        sawPinnedHeartJ = true;
+      }
+      if (unconstrained.hiddenCards[i].card == BridgeMove(SUIT_CLUBS, '5'))
+        sawHiddenClub5 = true;
+    }
+    Check(sawHiddenSpadeQ && sawPinnedHeartJ && sawHiddenClub5,
+      "visible-seed construction should infer the missing hidden-card complement and still pin current-trick ownership for cards already shown by play history");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 3,
+      "later staged filtering should narrow the visible-seed longer-history pool to the three worlds where East cannot still hold the hidden spade queen after discarding on the second spade lead");
+    Check(stagedStats.afterFollowSuitCount == 3,
+      "the explicit follow-suit stage should report the visible-seed longer-history narrowing before current-trick replay is checked");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 3,
+      "constructor-local visible-seed follow-suit pruning should reduce the inferred hidden-card pool to the same three worlds before later filtering");
+
+    bool sawEastHeartT = false;
+    bool sawEastDiamond9 = false;
+    bool sawEastClub5 = false;
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(! WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_SPADES, 'Q'),
+        "every visible-seed world surviving constructor-local follow-suit pruning should move the hidden spade queen away from East after the second-round discard");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every visible-seed world surviving constructor-local follow-suit pruning should still pin East's current-trick heart discard to East");
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '9'))
+        sawEastDiamond9 = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_CLUBS, '5'))
+        sawEastClub5 = true;
+    }
+    Check(sawEastHeartT && sawEastDiamond9 && sawEastClub5,
+      "visible-seed construction should still leave multiple longer-history red-and-club assignments unresolved across the surviving inferred worlds");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(3, 0x7ULL),
+      "visible-seed worlds surviving constructor-local follow-suit pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 3,
+      "world-generation stats should report the constructor-pruned three-world inferred visible-seed pool for the longer-history fixture");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned rejectedAtFollowSuit = 0;
+    unsigned acceptedWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "follow_suit")
+        rejectedAtFollowSuit++;
+    }
+    Check(acceptedWorlds == 3 && rejectedAtFollowSuit == 3,
+      "world-generation explanation should show the inferred visible-seed longer-history pool splitting into three accepted worlds and three follow-suit rejections");
+  }
+
+
   static void TestDeterministicWorldSampling()
   {
     vector<ParsedWorld> worlds;
@@ -5570,6 +5791,9 @@ int main(int argc, char ** argv)
 
   TestHistoryDerivedConstructionUsesDerivedFollowSuitLength();
   cout << "alpha_mu_prototype: history-derived follow-suit construction OK\n";
+
+  TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands();
+  cout << "alpha_mu_prototype: history-derived visible-seed construction OK\n";
 
   TestDeterministicWorldSampling();
   cout << "alpha_mu_prototype: deterministic world sampling OK\n";
