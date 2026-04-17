@@ -609,7 +609,11 @@ namespace
     CONSTRAINT_MAX_LENGTH = 4,
     CONSTRAINT_MIN_HCP = 5,
     CONSTRAINT_MAX_HCP = 6,
-    CONSTRAINT_BALANCED = 7
+    CONSTRAINT_BALANCED = 7,
+    CONSTRAINT_PARTNERSHIP_MIN_LENGTH = 8,
+    CONSTRAINT_PARTNERSHIP_MIN_HCP = 9,
+    CONSTRAINT_PARTNERSHIP_MAX_HCP = 10,
+    CONSTRAINT_PARTNERSHIP_MAX_LENGTH = 11
   };
 
 
@@ -871,6 +875,54 @@ namespace
       c.player = playerArg;
       return c;
     }
+
+    static WorldConstraint PartnershipMinLength(
+      const int playerArg,
+      const int suitArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_PARTNERSHIP_MIN_LENGTH;
+      c.player = playerArg;
+      c.suit = suitArg;
+      c.count = countArg;
+      return c;
+    }
+
+    static WorldConstraint PartnershipMaxLength(
+      const int playerArg,
+      const int suitArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_PARTNERSHIP_MAX_LENGTH;
+      c.player = playerArg;
+      c.suit = suitArg;
+      c.count = countArg;
+      return c;
+    }
+
+    static WorldConstraint PartnershipMinHCP(
+      const int playerArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_PARTNERSHIP_MIN_HCP;
+      c.player = playerArg;
+      c.count = countArg;
+      return c;
+    }
+
+    static WorldConstraint PartnershipMaxHCP(
+      const int playerArg,
+      const int countArg)
+    {
+      WorldConstraint c;
+      c.kind = CONSTRAINT_PARTNERSHIP_MAX_HCP;
+      c.player = playerArg;
+      c.count = countArg;
+      return c;
+    }
   };
 
 
@@ -944,6 +996,25 @@ namespace
   };
 
 
+  struct HistoryDerivedConstructionStats
+  {
+    unsigned rawAssignmentCount;
+    unsigned afterOwnershipCount;
+    unsigned afterCardLocationCount;
+    unsigned afterConstructorConstraintCount;
+    unsigned finalWorldCount;
+
+    HistoryDerivedConstructionStats() :
+      rawAssignmentCount(0),
+      afterOwnershipCount(0),
+      afterCardLocationCount(0),
+      afterConstructorConstraintCount(0),
+      finalWorldCount(0)
+    {
+    }
+  };
+
+
   struct WorldExplanationStep
   {
     string stage;
@@ -989,6 +1060,21 @@ namespace
     WorldGenerationExplanation() :
       appliedFollowSuitConstraints(),
       finalWorldMask(),
+      worlds()
+    {
+    }
+  };
+
+
+  struct HistoryDerivedConstructionExplanation
+  {
+    HistoryDerivedConstructionStats stats;
+    vector<WorldConstraint> constructorConstraints;
+    vector<WorldExplanation> worlds;
+
+    HistoryDerivedConstructionExplanation() :
+      stats(),
+      constructorConstraints(),
       worlds()
     {
     }
@@ -1378,6 +1464,32 @@ namespace
   }
 
 
+  static int PartnerSeat(const int seat)
+  {
+    switch (seat)
+    {
+      case SEAT_NORTH: return SEAT_SOUTH;
+      case SEAT_EAST: return SEAT_WEST;
+      case SEAT_SOUTH: return SEAT_NORTH;
+      case SEAT_WEST: return SEAT_EAST;
+      default:
+        throw runtime_error("Unknown seat for partnership");
+    }
+  }
+
+
+  static string PartnershipName(const int seat)
+  {
+    const int partner = PartnerSeat(seat);
+    if ((seat == SEAT_NORTH && partner == SEAT_SOUTH) ||
+        (seat == SEAT_SOUTH && partner == SEAT_NORTH))
+    {
+      return "North/South";
+    }
+    return "East/West";
+  }
+
+
   static string CardName(const BridgeMove& move)
   {
     ostringstream oss;
@@ -1435,6 +1547,28 @@ namespace
 
       case CONSTRAINT_BALANCED:
         oss << "must have a balanced shape";
+        break;
+
+      case CONSTRAINT_PARTNERSHIP_MIN_LENGTH:
+        oss << PartnershipName(constraint.player) << " partnership must hold at least "
+            << constraint.count << " cards in " << SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_PARTNERSHIP_MAX_LENGTH:
+        oss << PartnershipName(constraint.player) << " partnership must hold at most "
+            << constraint.count << " cards in " << SuitName(constraint.suit);
+        break;
+
+      case CONSTRAINT_PARTNERSHIP_MIN_HCP:
+        oss << PartnershipName(constraint.player)
+            << " partnership must hold at least " << constraint.count
+            << " HCP";
+        break;
+
+      case CONSTRAINT_PARTNERSHIP_MAX_HCP:
+        oss << PartnershipName(constraint.player)
+            << " partnership must hold at most " << constraint.count
+            << " HCP";
         break;
 
       default:
@@ -1607,7 +1741,9 @@ namespace
   static vector<WorldConstraint> CollectConstructorConstraints(
     const BridgeInformationState& information)
   {
-    vector<WorldConstraint> constraints = information.biddingConstraints;
+    vector<WorldConstraint> constraints = information.knownCardConstraints;
+    constraints.insert(constraints.end(), information.biddingConstraints.begin(),
+      information.biddingConstraints.end());
     const vector<WorldConstraint> followSuitConstraints =
       CollectFollowSuitConstraints(information);
     constraints.insert(constraints.end(), followSuitConstraints.begin(),
@@ -1657,6 +1793,23 @@ namespace
     const int seat)
   {
     return find(seats.begin(), seats.end(), seat) != seats.end();
+  }
+
+
+  static bool ConstructorConstraintTouchesHiddenSeats(
+    const vector<int>& hiddenSeats,
+    const WorldConstraint& constraint)
+  {
+    if (constraint.kind == CONSTRAINT_PARTNERSHIP_MIN_LENGTH ||
+        constraint.kind == CONSTRAINT_PARTNERSHIP_MAX_LENGTH ||
+        constraint.kind == CONSTRAINT_PARTNERSHIP_MIN_HCP ||
+        constraint.kind == CONSTRAINT_PARTNERSHIP_MAX_HCP)
+    {
+      return VectorContainsSeat(hiddenSeats, constraint.player) ||
+        VectorContainsSeat(hiddenSeats, PartnerSeat(constraint.player));
+    }
+
+    return VectorContainsSeat(hiddenSeats, constraint.player);
   }
 
 
@@ -1804,6 +1957,81 @@ namespace
   }
 
 
+  static void ApplyConstructionPlayedCardOwnership(
+    const vector<int>& hiddenSeats,
+    const BridgeInformationState& information,
+    vector<HiddenCardCandidate>& hiddenCards)
+  {
+    map<string, int> playedBySeat;
+    CollectPlayedCards(information, playedBySeat);
+    for (unsigned i = 0; i < hiddenCards.size(); i++)
+    {
+      const string key = CardKey(hiddenCards[i].card);
+      map<string, int>::const_iterator it = playedBySeat.find(key);
+      if (it != playedBySeat.end() && VectorContainsSeat(hiddenSeats, it->second))
+        hiddenCards[i].allowedSeatsMask = SeatBit(it->second);
+    }
+  }
+
+
+  static void SortHiddenCardCandidates(
+    vector<HiddenCardCandidate>& hiddenCards)
+  {
+    sort(hiddenCards.begin(), hiddenCards.end(),
+      [](const HiddenCardCandidate& left, const HiddenCardCandidate& right)
+      {
+        const unsigned leftChoices = CountSeatChoices(left.allowedSeatsMask);
+        const unsigned rightChoices = CountSeatChoices(right.allowedSeatsMask);
+        if (leftChoices != rightChoices)
+          return leftChoices < rightChoices;
+        if (left.card.suit != right.card.suit)
+          return left.card.suit < right.card.suit;
+        return RankOrder(left.card.rank) > RankOrder(right.card.rank);
+      });
+  }
+
+
+  static void SortConstructedWorlds(
+    vector<ParsedWorld>& worlds)
+  {
+    sort(worlds.begin(), worlds.end(),
+      [](const ParsedWorld& left, const ParsedWorld& right)
+      {
+        return SerializePBNWorld(left) < SerializePBNWorld(right);
+      });
+  }
+
+
+  static void PrepareHistoryDerivedConstruction(
+    const HistoryDerivedWorldSpec& spec,
+    const BridgeInformationState& information,
+    HistoryDerivedConstructionResult& result,
+    vector<WorldConstraint>& constructorConstraints,
+    int targetCounts[4],
+    int finalSeatCounts[4])
+  {
+    result = HistoryDerivedConstructionResult();
+    result.visibleSeedWorld = spec.seedWorld;
+    constructorConstraints = CollectConstructorConstraints(information);
+
+    const unsigned hiddenSeatMask = SeatMask(spec.hiddenSeats);
+    memset(targetCounts, 0, sizeof(int) * 4U);
+    memset(finalSeatCounts, 0, sizeof(int) * 4U);
+
+    if (spec.inferHiddenCardsFromVisibleHands)
+    {
+      CollectInferredHiddenCardsFromVisibleHands(spec, result, hiddenSeatMask,
+        targetCounts, finalSeatCounts);
+    }
+    else
+    {
+      CollectSeedHiddenCards(spec, result, hiddenSeatMask, targetCounts);
+      for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
+        finalSeatCounts[spec.hiddenSeats[i]] = targetCounts[spec.hiddenSeats[i]];
+    }
+  }
+
+
   static void ApplyConstructionCardLocationConstraints(
     const vector<int>& hiddenSeats,
     const vector<WorldConstraint>& constraints,
@@ -1812,7 +2040,7 @@ namespace
     for (unsigned i = 0; i < constraints.size(); i++)
     {
       const WorldConstraint& constraint = constraints[i];
-      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
         continue;
 
       if (constraint.kind != CONSTRAINT_HAS_CARD &&
@@ -1882,13 +2110,37 @@ namespace
     for (unsigned i = 0; i < constraints.size(); i++)
     {
       const WorldConstraint& constraint = constraints[i];
-      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
         continue;
 
       if (constraint.kind != CONSTRAINT_VOID_SUIT &&
           constraint.kind != CONSTRAINT_MIN_LENGTH &&
-          constraint.kind != CONSTRAINT_MAX_LENGTH)
+          constraint.kind != CONSTRAINT_MAX_LENGTH &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MIN_LENGTH &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MAX_LENGTH)
       {
+        continue;
+      }
+
+      if (constraint.kind == CONSTRAINT_PARTNERSHIP_MIN_LENGTH ||
+          constraint.kind == CONSTRAINT_PARTNERSHIP_MAX_LENGTH)
+      {
+        const int partner = PartnerSeat(constraint.player);
+        const int currentLength = WorldSuitLength(current, constraint.player,
+          constraint.suit) + WorldSuitLength(current, partner, constraint.suit);
+        if (constraint.kind == CONSTRAINT_PARTNERSHIP_MAX_LENGTH)
+        {
+          if (currentLength > constraint.count)
+            return false;
+          continue;
+        }
+
+        const int remaining = PotentialRemainingSuitCardsForSeat(hiddenCards,
+          nextIndex, constraint.player, constraint.suit) +
+          PotentialRemainingSuitCardsForSeat(hiddenCards, nextIndex, partner,
+            constraint.suit);
+        if (currentLength + remaining < constraint.count)
+          return false;
         continue;
       }
 
@@ -1928,12 +2180,37 @@ namespace
     for (unsigned i = 0; i < constraints.size(); i++)
     {
       const WorldConstraint& constraint = constraints[i];
-      if (! VectorContainsSeat(hiddenSeats, constraint.player))
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
         continue;
 
       if (constraint.kind != CONSTRAINT_MIN_HCP &&
-          constraint.kind != CONSTRAINT_MAX_HCP)
+          constraint.kind != CONSTRAINT_MAX_HCP &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MIN_HCP &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MAX_HCP)
       {
+        continue;
+      }
+
+      if (constraint.kind == CONSTRAINT_PARTNERSHIP_MIN_HCP ||
+          constraint.kind == CONSTRAINT_PARTNERSHIP_MAX_HCP)
+      {
+        const int partner = PartnerSeat(constraint.player);
+        const int currentHCP = WorldHighCardPoints(current, constraint.player) +
+          WorldHighCardPoints(current, partner);
+        if (constraint.kind == CONSTRAINT_PARTNERSHIP_MAX_HCP)
+        {
+          if (currentHCP > constraint.count)
+            return false;
+          continue;
+        }
+
+        const int remainingHCP =
+          PotentialRemainingHighCardPointsForSeat(hiddenCards, nextIndex,
+            constraint.player) +
+          PotentialRemainingHighCardPointsForSeat(hiddenCards, nextIndex,
+            partner);
+        if (currentHCP + remainingHCP < constraint.count)
+          return false;
         continue;
       }
 
@@ -2121,57 +2398,228 @@ namespace
   }
 
 
+  static void EnumerateHistoryDerivedWorldsRec(
+    const vector<int>& hiddenSeats,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const int targetCounts[4],
+    int assignedCounts[4],
+    ParsedWorld& current,
+    const unsigned index,
+    vector<ParsedWorld>& worlds)
+  {
+    if (index == hiddenCards.size())
+    {
+      for (unsigned i = 0; i < hiddenSeats.size(); i++)
+      {
+        if (assignedCounts[hiddenSeats[i]] != targetCounts[hiddenSeats[i]])
+          return;
+      }
+
+      ParsedWorld world(current);
+      CanonicalizeWorld(world);
+      worlds.push_back(world);
+      return;
+    }
+
+    const HiddenCardCandidate& candidate = hiddenCards[index];
+    for (unsigned i = 0; i < hiddenSeats.size(); i++)
+    {
+      const int seat = hiddenSeats[i];
+      if (! CanAssignHiddenCard(candidate, seat, targetCounts, assignedCounts))
+        continue;
+
+      current.suits[seat][candidate.card.suit].push_back(candidate.card.rank);
+      assignedCounts[seat]++;
+      EnumerateHistoryDerivedWorldsRec(hiddenSeats, hiddenCards, targetCounts,
+        assignedCounts, current, index + 1U, worlds);
+      assignedCounts[seat]--;
+      current.suits[seat][candidate.card.suit].erase(
+        current.suits[seat][candidate.card.suit].size() - 1U, 1U);
+    }
+  }
+
+
+  static vector<ParsedWorld> EnumerateHistoryDerivedWorlds(
+    const vector<int>& hiddenSeats,
+    const vector<HiddenCardCandidate>& hiddenCards,
+    const int targetCounts[4],
+    const ParsedWorld& visibleSeedWorld)
+  {
+    vector<ParsedWorld> worlds;
+    ParsedWorld current(visibleSeedWorld);
+    int assignedCounts[4];
+    memset(assignedCounts, 0, sizeof(assignedCounts));
+    EnumerateHistoryDerivedWorldsRec(hiddenSeats, hiddenCards, targetCounts,
+      assignedCounts, current, 0U, worlds);
+    SortConstructedWorlds(worlds);
+    return worlds;
+  }
+
+
+  static bool WorldMatchesConstructorLengthConstraints(
+    const ParsedWorld& world,
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_VOID_SUIT &&
+          constraint.kind != CONSTRAINT_MIN_LENGTH &&
+          constraint.kind != CONSTRAINT_MAX_LENGTH &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MIN_LENGTH &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MAX_LENGTH)
+      {
+        continue;
+      }
+
+      if (! WorldMatchesConstraint(world, constraint))
+        return false;
+    }
+    return true;
+  }
+
+
+  static bool WorldMatchesConstructorHCPConstraints(
+    const ParsedWorld& world,
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_MIN_HCP &&
+          constraint.kind != CONSTRAINT_MAX_HCP &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MIN_HCP &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MAX_HCP)
+      {
+        continue;
+      }
+
+      if (! WorldMatchesConstraint(world, constraint))
+        return false;
+    }
+    return true;
+  }
+
+
+  static bool WorldMatchesConstructorBalancedConstraints(
+    const ParsedWorld& world,
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_BALANCED)
+        continue;
+
+      if (! WorldMatchesConstraint(world, constraint))
+        return false;
+    }
+    return true;
+  }
+
+
+  static string FirstConstructorLengthFailureReason(
+    const ParsedWorld& world,
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_VOID_SUIT &&
+          constraint.kind != CONSTRAINT_MIN_LENGTH &&
+          constraint.kind != CONSTRAINT_MAX_LENGTH &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MIN_LENGTH &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MAX_LENGTH)
+      {
+        continue;
+      }
+
+      if (! WorldMatchesConstraint(world, constraint))
+        return ConstraintToString(constraint);
+    }
+    return "all constructor-local length constraints passed";
+  }
+
+
+  static string FirstConstructorHCPFailureReason(
+    const ParsedWorld& world,
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_MIN_HCP &&
+          constraint.kind != CONSTRAINT_MAX_HCP &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MIN_HCP &&
+          constraint.kind != CONSTRAINT_PARTNERSHIP_MAX_HCP)
+      {
+        continue;
+      }
+
+      if (! WorldMatchesConstraint(world, constraint))
+        return ConstraintToString(constraint);
+    }
+    return "all constructor-local HCP constraints passed";
+  }
+
+
+  static string FirstConstructorBalancedFailureReason(
+    const ParsedWorld& world,
+    const vector<int>& hiddenSeats,
+    const vector<WorldConstraint>& constraints)
+  {
+    for (unsigned i = 0; i < constraints.size(); i++)
+    {
+      const WorldConstraint& constraint = constraints[i];
+      if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
+        continue;
+
+      if (constraint.kind != CONSTRAINT_BALANCED)
+        continue;
+
+      if (! WorldMatchesConstraint(world, constraint))
+        return ConstraintToString(constraint);
+    }
+    return "all constructor-local balanced-shape constraints passed";
+  }
+
+
   static HistoryDerivedConstructionResult ConstructCandidateWorldsFromHistory(
     const HistoryDerivedWorldSpec& spec,
     const BridgeInformationState& information)
   {
     HistoryDerivedConstructionResult result;
-    result.visibleSeedWorld = spec.seedWorld;
-    const vector<WorldConstraint> constructorConstraints =
-      CollectConstructorConstraints(information);
-
-    const unsigned hiddenSeatMask = SeatMask(spec.hiddenSeats);
+    vector<WorldConstraint> constructorConstraints;
     int targetCounts[4];
-    memset(targetCounts, 0, sizeof(targetCounts));
     int finalSeatCounts[4];
-    memset(finalSeatCounts, 0, sizeof(finalSeatCounts));
+    PrepareHistoryDerivedConstruction(spec, information, result,
+      constructorConstraints, targetCounts, finalSeatCounts);
 
-    if (spec.inferHiddenCardsFromVisibleHands)
-    {
-      CollectInferredHiddenCardsFromVisibleHands(spec, result, hiddenSeatMask,
-        targetCounts, finalSeatCounts);
-    }
-    else
-    {
-      CollectSeedHiddenCards(spec, result, hiddenSeatMask, targetCounts);
-      for (unsigned i = 0; i < spec.hiddenSeats.size(); i++)
-        finalSeatCounts[spec.hiddenSeats[i]] = targetCounts[spec.hiddenSeats[i]];
-    }
-
-    map<string, int> playedBySeat;
-    CollectPlayedCards(information, playedBySeat);
-    for (unsigned i = 0; i < result.hiddenCards.size(); i++)
-    {
-      const string key = CardKey(result.hiddenCards[i].card);
-      map<string, int>::const_iterator it = playedBySeat.find(key);
-      if (it != playedBySeat.end() && VectorContainsSeat(spec.hiddenSeats, it->second))
-        result.hiddenCards[i].allowedSeatsMask = SeatBit(it->second);
-    }
-
+    ApplyConstructionPlayedCardOwnership(spec.hiddenSeats, information,
+      result.hiddenCards);
     ApplyConstructionCardLocationConstraints(spec.hiddenSeats,
       constructorConstraints, result.hiddenCards);
-
-    sort(result.hiddenCards.begin(), result.hiddenCards.end(),
-      [](const HiddenCardCandidate& left, const HiddenCardCandidate& right)
-      {
-        const unsigned leftChoices = CountSeatChoices(left.allowedSeatsMask);
-        const unsigned rightChoices = CountSeatChoices(right.allowedSeatsMask);
-        if (leftChoices != rightChoices)
-          return leftChoices < rightChoices;
-        if (left.card.suit != right.card.suit)
-          return left.card.suit < right.card.suit;
-        return RankOrder(left.card.rank) > RankOrder(right.card.rank);
-      });
+    SortHiddenCardCandidates(result.hiddenCards);
 
     ParsedWorld current(result.visibleSeedWorld);
     int assignedCounts[4];
@@ -2184,13 +2632,98 @@ namespace
         constructorConstraints, targetCounts, finalSeatCounts, assignedCounts,
         current, 0U, result.worlds);
     }
-
-    sort(result.worlds.begin(), result.worlds.end(),
-      [](const ParsedWorld& left, const ParsedWorld& right)
-      {
-        return SerializePBNWorld(left) < SerializePBNWorld(right);
-      });
+    SortConstructedWorlds(result.worlds);
     return result;
+  }
+
+
+  static HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction(
+    const HistoryDerivedWorldSpec& spec,
+    const BridgeInformationState& information)
+  {
+    HistoryDerivedConstructionExplanation explanation;
+    HistoryDerivedConstructionResult prepared;
+    int targetCounts[4];
+    int finalSeatCounts[4];
+    PrepareHistoryDerivedConstruction(spec, information, prepared,
+      explanation.constructorConstraints, targetCounts, finalSeatCounts);
+
+    SortHiddenCardCandidates(prepared.hiddenCards);
+    const vector<ParsedWorld> rawWorlds = EnumerateHistoryDerivedWorlds(
+      spec.hiddenSeats, prepared.hiddenCards, targetCounts,
+      prepared.visibleSeedWorld);
+    explanation.stats.rawAssignmentCount = static_cast<unsigned>(rawWorlds.size());
+
+    vector<HiddenCardCandidate> ownershipHiddenCards = prepared.hiddenCards;
+    ApplyConstructionPlayedCardOwnership(spec.hiddenSeats, information,
+      ownershipHiddenCards);
+    SortHiddenCardCandidates(ownershipHiddenCards);
+    const vector<ParsedWorld> ownershipWorlds = EnumerateHistoryDerivedWorlds(
+      spec.hiddenSeats, ownershipHiddenCards, targetCounts,
+      prepared.visibleSeedWorld);
+    explanation.stats.afterOwnershipCount = static_cast<unsigned>(ownershipWorlds.size());
+
+    vector<HiddenCardCandidate> cardLocationHiddenCards = ownershipHiddenCards;
+    ApplyConstructionCardLocationConstraints(spec.hiddenSeats,
+      explanation.constructorConstraints, cardLocationHiddenCards);
+    SortHiddenCardCandidates(cardLocationHiddenCards);
+    const vector<ParsedWorld> cardLocationWorlds = EnumerateHistoryDerivedWorlds(
+      spec.hiddenSeats, cardLocationHiddenCards, targetCounts,
+      prepared.visibleSeedWorld);
+    explanation.stats.afterCardLocationCount =
+      static_cast<unsigned>(cardLocationWorlds.size());
+
+    unsigned acceptedWorlds = 0U;
+    for (unsigned i = 0; i < cardLocationWorlds.size(); i++)
+    {
+      WorldExplanation world;
+      world.worldIndex = i;
+      world.serializedWorld = SerializePBNWorld(cardLocationWorlds[i]);
+
+      if (! WorldMatchesConstructorLengthConstraints(cardLocationWorlds[i],
+            spec.hiddenSeats, explanation.constructorConstraints))
+      {
+        AddWorldExplanationStep(world, "constructor_length", false,
+          FirstConstructorLengthFailureReason(cardLocationWorlds[i],
+            spec.hiddenSeats, explanation.constructorConstraints));
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "constructor_length", true,
+        "passed constructor-local length constraints");
+
+      if (! WorldMatchesConstructorHCPConstraints(cardLocationWorlds[i],
+            spec.hiddenSeats, explanation.constructorConstraints))
+      {
+        AddWorldExplanationStep(world, "constructor_hcp", false,
+          FirstConstructorHCPFailureReason(cardLocationWorlds[i],
+            spec.hiddenSeats, explanation.constructorConstraints));
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "constructor_hcp", true,
+        "passed constructor-local HCP constraints");
+
+      if (! WorldMatchesConstructorBalancedConstraints(cardLocationWorlds[i],
+            spec.hiddenSeats, explanation.constructorConstraints))
+      {
+        AddWorldExplanationStep(world, "constructor_balanced", false,
+          FirstConstructorBalancedFailureReason(cardLocationWorlds[i],
+            spec.hiddenSeats, explanation.constructorConstraints));
+        explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "constructor_balanced", true,
+        "passed constructor-local balanced-shape constraints");
+
+      world.accepted = true;
+      explanation.worlds.push_back(world);
+      acceptedWorlds++;
+    }
+
+    explanation.stats.afterConstructorConstraintCount = acceptedWorlds;
+    explanation.stats.finalWorldCount = acceptedWorlds;
+    return explanation;
   }
 
 
@@ -2665,6 +3198,26 @@ namespace
 
       case CONSTRAINT_BALANCED:
         return WorldHasBalancedShape(world, constraint.player);
+
+      case CONSTRAINT_PARTNERSHIP_MIN_LENGTH:
+        return WorldSuitLength(world, constraint.player, constraint.suit) +
+          WorldSuitLength(world, PartnerSeat(constraint.player),
+            constraint.suit) >= constraint.count;
+
+      case CONSTRAINT_PARTNERSHIP_MAX_LENGTH:
+        return WorldSuitLength(world, constraint.player, constraint.suit) +
+          WorldSuitLength(world, PartnerSeat(constraint.player),
+            constraint.suit) <= constraint.count;
+
+      case CONSTRAINT_PARTNERSHIP_MIN_HCP:
+        return WorldHighCardPoints(world, constraint.player) +
+          WorldHighCardPoints(world, PartnerSeat(constraint.player)) >=
+          constraint.count;
+
+      case CONSTRAINT_PARTNERSHIP_MAX_HCP:
+        return WorldHighCardPoints(world, constraint.player) +
+          WorldHighCardPoints(world, PartnerSeat(constraint.player)) <=
+          constraint.count;
 
       default:
         throw runtime_error("Unknown world constraint kind");
@@ -4469,6 +5022,107 @@ namespace
     Check(biddingStats.afterBiddingCount == 2,
       "world-generation stats should record the post-bidding surviving worlds");
 
+    vector<ParsedWorld> partnershipWorlds;
+    partnershipWorlds.push_back(ParsePBNWorld(
+      "N:AKQ.JT9.AKQ.JT9 765.98765.JT9.87 JT98.AKQ.432.AKQ 43.432.8765.5432"));
+    partnershipWorlds.push_back(ParsePBNWorld(
+      "N:AKQ.JT9.AKQ.JT9 7654.8765.JT9.87 JT98.AKQ.432.AKQ 32.432.8765.5432"));
+    partnershipWorlds.push_back(ParsePBNWorld(
+      "N:AKQ.JT9.AKQ.JT9 76543.87.JT9.876 JT98.AKQ.432.AKQ 2.432.8765.65432"));
+
+    BridgeInformationState partnershipInfo;
+    partnershipInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 8));
+    WorldGenerationStats partnershipStats;
+    const WorldMask partnershipMask = GeneratePossibleWorlds(partnershipWorlds,
+      partnershipInfo, &partnershipStats);
+    Check(partnershipMask == WorldMask(3, 0x1U),
+      "partnership-fit bidding constraints should keep only worlds where East/West have the required combined heart length");
+    Check(partnershipStats.afterBiddingCount == 1,
+      "partnership-fit bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation partnershipExplanation =
+      ExplainPossibleWorldGeneration(partnershipWorlds, partnershipInfo);
+    Check(partnershipExplanation.worlds.size() == 3,
+      "partnership-fit explanation should cover every candidate world");
+    Check(partnershipExplanation.worlds[0].accepted,
+      "the world meeting the partnership heart-fit constraint should survive the explanation pipeline");
+    Check(! partnershipExplanation.worlds[1].accepted &&
+          partnershipExplanation.worlds[1].rejectionStage == "bidding" &&
+          partnershipExplanation.worlds[1].rejectionReason.find("East/West partnership must hold at least 8 cards in hearts") != string::npos,
+      "partnership-fit explanation should reject short East/West heart fits at the bidding stage");
+
+    vector<ParsedWorld> partnershipRangeWorlds;
+    partnershipRangeWorlds.push_back(ParsePBNWorld(
+      "N:T... .K.. 9... J..."));
+    partnershipRangeWorlds.push_back(ParsePBNWorld(
+      "N:T... .K.. 9... J.Q.."));
+    partnershipRangeWorlds.push_back(ParsePBNWorld(
+      "N:T... .KJ.. 9... J.Q.."));
+
+    BridgeInformationState partnershipRangeInfo;
+    partnershipRangeInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 2));
+    partnershipRangeInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxLength(SEAT_EAST, SUIT_HEARTS, 2));
+    WorldGenerationStats partnershipRangeStats;
+    const WorldMask partnershipRangeMask = GeneratePossibleWorlds(
+      partnershipRangeWorlds, partnershipRangeInfo, &partnershipRangeStats);
+    Check(partnershipRangeMask == WorldMask(3, 0x2U),
+      "partnership length-range bidding constraints should keep only worlds where East/West stay inside the exact combined heart-fit target");
+    Check(partnershipRangeStats.afterBiddingCount == 1,
+      "partnership length-range bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation partnershipRangeExplanation =
+      ExplainPossibleWorldGeneration(partnershipRangeWorlds,
+        partnershipRangeInfo);
+    Check(! partnershipRangeExplanation.worlds[0].accepted &&
+          partnershipRangeExplanation.worlds[0].rejectionStage == "bidding" &&
+          partnershipRangeExplanation.worlds[0].rejectionReason.find("East/West partnership must hold at least 2 cards in hearts") != string::npos,
+      "partnership length-range explanation should reject worlds below the combined fit floor at the bidding stage");
+    Check(partnershipRangeExplanation.worlds[1].accepted,
+      "the world meeting the exact partnership heart-fit target should survive the explanation pipeline");
+    Check(! partnershipRangeExplanation.worlds[2].accepted &&
+          partnershipRangeExplanation.worlds[2].rejectionStage == "bidding" &&
+          partnershipRangeExplanation.worlds[2].rejectionReason.find("East/West partnership must hold at most 2 cards in hearts") != string::npos,
+      "partnership length-range explanation should reject worlds above the combined fit ceiling at the bidding stage");
+
+    vector<ParsedWorld> partnershipHcpWorlds;
+    partnershipHcpWorlds.push_back(ParsePBNWorld(
+      "N:T... K... 9... Q..."));
+    partnershipHcpWorlds.push_back(ParsePBNWorld(
+      "N:T... Q... 9... J..."));
+    partnershipHcpWorlds.push_back(ParsePBNWorld(
+      "N:T... A... 9... K..."));
+
+    BridgeInformationState partnershipHcpInfo;
+    partnershipHcpInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinHCP(SEAT_EAST, 5));
+    partnershipHcpInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxHCP(SEAT_EAST, 5));
+    WorldGenerationStats partnershipHcpStats;
+    const WorldMask partnershipHcpMask = GeneratePossibleWorlds(
+      partnershipHcpWorlds, partnershipHcpInfo, &partnershipHcpStats);
+    Check(partnershipHcpMask == WorldMask(3, 0x1U),
+      "partnership HCP-range bidding constraints should keep only worlds where East/West stay inside the combined HCP range");
+    Check(partnershipHcpStats.afterBiddingCount == 1,
+      "partnership HCP-range bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation partnershipHcpExplanation =
+      ExplainPossibleWorldGeneration(partnershipHcpWorlds, partnershipHcpInfo);
+    Check(partnershipHcpExplanation.worlds.size() == 3,
+      "partnership HCP-range explanation should cover every candidate world");
+    Check(partnershipHcpExplanation.worlds[0].accepted,
+      "the world meeting the partnership HCP range should survive the explanation pipeline");
+    Check(! partnershipHcpExplanation.worlds[1].accepted &&
+          partnershipHcpExplanation.worlds[1].rejectionStage == "bidding" &&
+          partnershipHcpExplanation.worlds[1].rejectionReason.find("East/West partnership must hold at least 5 HCP") != string::npos,
+      "partnership HCP-range explanation should reject worlds below the combined HCP floor at the bidding stage");
+    Check(! partnershipHcpExplanation.worlds[2].accepted &&
+          partnershipHcpExplanation.worlds[2].rejectionStage == "bidding" &&
+          partnershipHcpExplanation.worlds[2].rejectionReason.find("East/West partnership must hold at most 5 HCP") != string::npos,
+      "partnership HCP-range explanation should reject worlds above the combined HCP ceiling at the bidding stage");
+
     BridgeInformationState playInfo;
     playInfo.knownCardConstraints.push_back(
       WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
@@ -4641,8 +5295,6 @@ namespace
       SEAT_WEST,
       SUIT_SPADES,
       BridgeMove(SUIT_SPADES, 'J')));
-    info.knownCardConstraints.push_back(
-      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
 
     const HistoryDerivedConstructionResult constructed =
       ConstructCandidateWorldsFromHistory(spec, info);
@@ -4672,24 +5324,438 @@ namespace
 
     WorldGenerationStats stats;
     const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
-    Check(mask == WorldMask(2, 0x1ULL),
-      "the staged filtering pipeline should narrow the constructed candidate worlds to the one matching the known heart location");
+    Check(mask == WorldMask(2, 0x3ULL),
+      "without extra hidden-card location evidence the staged filtering pipeline should keep both history-derived heart-swap worlds");
     Check(stats.candidateWorldCount == 2,
       "world-generation stats should report the history-derived constructed candidate count");
-    Check(stats.afterKnownCardCount == 1,
-      "the known-card filter should remove the alternative heart-swap world after construction");
-    Check(stats.afterPlayHistoryCount == 1,
-      "the surviving constructed world should replay the recorded trick history legally");
+    Check(stats.afterKnownCardCount == 2,
+      "without explicit hidden-seat known-card constraints the known-card stage should leave both constructed heart-swap worlds intact");
+    Check(stats.afterPlayHistoryCount == 2,
+      "both constructed heart-swap worlds should replay the recorded trick history legally");
 
     const WorldGenerationExplanation explanation =
       ExplainPossibleWorldGeneration(constructed.worlds, info);
     Check(explanation.worlds.size() == 2,
       "world-generation explanation should cover each history-derived candidate world");
     Check(explanation.worlds[0].accepted,
-      "the first history-derived candidate world should survive when it matches the known heart location");
-    Check(! explanation.worlds[1].accepted &&
-          explanation.worlds[1].rejectionStage == "known_cards",
-      "the second history-derived candidate world should be rejected at the known-card stage when the hidden heart is swapped");
+      "the first history-derived candidate world should survive when no extra hidden-card evidence distinguishes the heart swap");
+    Check(explanation.worlds[1].accepted,
+      "the second history-derived candidate world should also survive when no extra hidden-card evidence distinguishes the heart swap");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesKnownCardLocation()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local known-card pruning the hidden-seat pool should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local known-card pruning should collapse the hidden-seat pool to the one world where East holds the known heart queen");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constrained.worlds[0], SEAT_WEST, SUIT_HEARTS, 'T'),
+      "constructor-local known-card pruning should assign the required hidden heart queen to East before later filtering");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local known-card pruning should also survive the later staged filters");
+    Check(stats.afterKnownCardCount == 1,
+      "later known-card filtering should see only the constructor-pruned known-card survivor");
+    Check(stats.afterPlayHistoryCount == 1,
+      "the constructor-pruned known-card survivor should still replay the recorded trick history legally");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesKnownCardExclusion()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local known-card exclusion pruning the hidden-seat pool should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.knownCardConstraints.push_back(
+      WorldConstraint::NotHasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local known-card exclusion pruning should collapse the hidden-seat pool to the one world where East cannot still hold the heart queen");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'T') &&
+          WorldHasCard(constrained.worlds[0], SEAT_WEST, SUIT_HEARTS, 'Q'),
+      "constructor-local known-card exclusion pruning should remove the forbidden hidden heart-queen assignment before later filtering");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local known-card exclusion pruning should also survive the later staged filters");
+    Check(stats.afterKnownCardCount == 1,
+      "later known-card filtering should see only the constructor-pruned exclusion survivor");
+    Check(stats.afterPlayHistoryCount == 1,
+      "the constructor-pruned exclusion survivor should still replay the recorded trick history legally");
+  }
+
+
+  static void TestHistoryDerivedConstructionExplanationTracksCardLocationNarrowing()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, info);
+    Check(explanation.stats.rawAssignmentCount == 6,
+      "constructor-local explanation should report the full six-world hidden-card assignment pool before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 2,
+      "constructor-local explanation should report ownership pinning reducing the heart-swap fixture from six worlds to two");
+    Check(explanation.stats.afterCardLocationCount == 1,
+      "constructor-local explanation should report known-card location pruning collapsing the heart-swap fixture to one world before later constructor checks");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local explanation should report one final surviving world after card-location narrowing leaves nothing further to prune");
+    Check(explanation.worlds.size() == 1 && explanation.worlds[0].accepted,
+      "constructor-local explanation should include the lone surviving known-card world as accepted");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesPartnershipHCPRange()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_SOUTH);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local partnership HCP pruning the East-versus-South heart-honor swap should keep both legal worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinHCP(SEAT_EAST, 6));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxHCP(SEAT_EAST, 6));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local partnership HCP-range pruning should keep only the world where East/West reach the exact combined HCP target");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          ! WorldHasCard(constrained.worlds[0], SEAT_SOUTH, SUIT_HEARTS, 'Q'),
+      "constructor-local partnership HCP-range pruning should keep the world where East receives the hidden heart queen and East/West reach six combined HCP");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local partnership HCP-range pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned partnership-HCP survivor");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorHcp = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_hcp" &&
+               explanation.worlds[i].rejectionReason.find("East/West partnership must hold at least 6 HCP") != string::npos)
+      {
+        rejectedAtConstructorHcp++;
+      }
+    }
+    Check(explanation.stats.rawAssignmentCount == 6,
+      "constructor-local partnership HCP explanation should report the six raw East/South hidden-card assignments before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 2 &&
+          explanation.stats.afterCardLocationCount == 2,
+      "constructor-local partnership HCP explanation should report ownership pinning reducing the pool to the two heart-honor swap worlds before HCP pruning");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local partnership HCP explanation should report the two ownership-consistent worlds collapsing to one after constructor HCP pruning");
+    Check(acceptedWorlds == 1 && rejectedAtConstructorHcp == 1,
+      "constructor-local partnership HCP explanation should show one surviving world and one constructor_hcp rejection at the partnership HCP floor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesPartnershipLengthRange()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.Q.. 2..8. J.T9..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_SOUTH);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local partnership length pruning the East-versus-South heart swap should keep both legal worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 2));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxLength(SEAT_EAST, SUIT_HEARTS, 2));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local partnership length-range pruning should keep only the world where East/West reach the exact combined heart-fit target");
+    Check(! WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constrained.worlds[0], SEAT_SOUTH, SUIT_HEARTS, 'Q'),
+      "constructor-local partnership length-range pruning should keep the world where East does not receive the extra hidden heart and East/West stay at exactly two hearts");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local partnership length-range pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned partnership-length survivor");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorLength = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length" &&
+               explanation.worlds[i].rejectionReason.find("East/West partnership must hold at most 2 cards in hearts") != string::npos)
+      {
+        rejectedAtConstructorLength++;
+      }
+    }
+    Check(explanation.stats.rawAssignmentCount == 6,
+      "constructor-local partnership length explanation should report the six raw East/South hidden-card assignments before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 2 &&
+          explanation.stats.afterCardLocationCount == 2,
+      "constructor-local partnership length explanation should report ownership pinning reducing the pool to the two heart-versus-diamond swap worlds before length pruning");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local partnership length explanation should report the two ownership-consistent worlds collapsing to one after constructor length pruning");
+    Check(acceptedWorlds == 1 && rejectedAtConstructorLength == 1,
+      "constructor-local partnership length explanation should show one surviving world and one constructor_length rejection at the partnership fit ceiling");
+  }
+
+
+  static void TestHistoryDerivedConstructionExplanationTracksFollowSuitRejections()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT.J96 842.KQ2.KQ2.KQ72 T765.54.654.T");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState info;
+    info.deriveFollowSuitConstraints = true;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '8')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'T')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'J')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'T')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, '8')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '6')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '7')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_HEARTS, '5')));
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, info);
+    Check(explanation.stats.rawAssignmentCount == 35,
+      "constructor-local explanation should report the full thirty-five-world visible-seed assignment pool before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 20,
+      "constructor-local explanation should report ownership pinning reducing the visible-seed pool from thirty-five worlds to twenty");
+    Check(explanation.stats.afterCardLocationCount == 20,
+      "constructor-local explanation should preserve the twenty ownership-consistent visible-seed worlds when no extra card-location constraints are present");
+    Check(explanation.stats.afterConstructorConstraintCount == 3 &&
+          explanation.stats.finalWorldCount == 3,
+      "constructor-local explanation should report the longer visible-seed history narrowing from twenty worlds to three before later staged filtering");
+
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorLength = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length")
+        rejectedAtConstructorLength++;
+    }
+    Check(explanation.worlds.size() == 20,
+      "constructor-local explanation should enumerate every visible-seed world that survives ownership and card-location narrowing");
+    Check(acceptedWorlds == 3 && rejectedAtConstructorLength == 17,
+      "constructor-local explanation should show the longer visible-seed history splitting twenty ownership-consistent worlds into three survivors and seventeen constructor-length rejections");
+    Check(explanation.worlds[0].steps[0].stage == "constructor_length",
+      "constructor-local explanation should begin with the constructor-length stage for visible-seed follow-suit pruning");
   }
 
 
@@ -6273,6 +7339,24 @@ int main(int argc, char ** argv)
 
   TestHistoryDerivedCandidateWorldConstruction();
   cout << "alpha_mu_prototype: history-derived candidate world construction OK\n";
+
+  TestHistoryDerivedConstructionUsesKnownCardLocation();
+  cout << "alpha_mu_prototype: history-derived known-card construction OK\n";
+
+  TestHistoryDerivedConstructionUsesKnownCardExclusion();
+  cout << "alpha_mu_prototype: history-derived known-card exclusion construction OK\n";
+
+  TestHistoryDerivedConstructionExplanationTracksCardLocationNarrowing();
+  cout << "alpha_mu_prototype: history-derived construction explanation accounting OK\n";
+
+  TestHistoryDerivedConstructionUsesPartnershipHCPRange();
+  cout << "alpha_mu_prototype: history-derived partnership HCP construction OK\n";
+
+  TestHistoryDerivedConstructionUsesPartnershipLengthRange();
+  cout << "alpha_mu_prototype: history-derived partnership length construction OK\n";
+
+  TestHistoryDerivedConstructionExplanationTracksFollowSuitRejections();
+  cout << "alpha_mu_prototype: history-derived construction explanation pruning OK\n";
 
   TestHistoryDerivedConstructionRespectsCurrentTrick();
   cout << "alpha_mu_prototype: history-derived current-trick construction OK\n";

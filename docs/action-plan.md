@@ -135,13 +135,15 @@ The sixth optimization-paper step is also now present in the prototype: leaf-par
 
 The prototype also now includes optimistic completion of impossible worlds for cross-state comparison, following the later discussion in the optimization paper.
 
-The prototype also now includes a first possible-world generator from simple bidding-style and play-style constraints over a candidate world pool.
+The prototype also now includes a first possible-world generator from simple bidding-style and play-style constraints over a candidate world pool, including first partnership suit-length range and partnership HCP-range bidding constraints.
 
 The prototype also now includes an explicit follow-suit-implication stage derived from discard history, plus per-world explanations for why candidate worlds are accepted or rejected during generation.
 
-The prototype also now includes a first seed-based hidden-seat world-construction step from partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement, plus a first moderate-size ambiguous two-defender visible-seed pool with deterministic downselection after staged filtering and a longer multi-trick visible-seed history whose broader pool is narrowed by play-derived follow-suit evidence before sampling, with constructor-local bidding card-location and suit-length pruning before the later full filtering pipeline.
+The prototype also now includes a first seed-based hidden-seat world-construction step from partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement, plus a first moderate-size ambiguous two-defender visible-seed pool with deterministic downselection after staged filtering and a longer multi-trick visible-seed history whose broader pool is narrowed by play-derived follow-suit evidence before sampling, with constructor-local explicit known-card and bidding card-location pruning plus suit-length and partnership suit-length range pruning before the later full filtering pipeline.
 
-The prototype also now includes constructor-local MinHCP and MaxHCP pruning for those seed-based hidden-seat candidate worlds before the later full bidding filter.
+The prototype also now includes constructor-local accounting and explanation traces for that seed-based hidden-seat construction, including stable counts before ownership pinning, after ownership pinning, after constructor-local card-location pruning, and after later constructor-local length/HCP/balanced narrowing.
+
+The prototype also now includes constructor-local MinHCP and MaxHCP pruning for those seed-based hidden-seat candidate worlds before the later full bidding filter, along with a first constructor-local partnership HCP-range pruning path when one partner is hidden and the other remains visible.
 
 The prototype also now includes conservative constructor-local balanced-shape pruning for full hidden hands, while still deferring incomplete toy hidden-hand cases to the later full bidding filter.
 
