@@ -1001,6 +1001,9 @@ namespace
     unsigned rawAssignmentCount;
     unsigned afterOwnershipCount;
     unsigned afterCardLocationCount;
+    unsigned afterConstructorLengthCount;
+    unsigned afterConstructorHCPCount;
+    unsigned afterConstructorBalancedCount;
     unsigned afterConstructorConstraintCount;
     unsigned finalWorldCount;
 
@@ -1008,6 +1011,9 @@ namespace
       rawAssignmentCount(0),
       afterOwnershipCount(0),
       afterCardLocationCount(0),
+      afterConstructorLengthCount(0),
+      afterConstructorHCPCount(0),
+      afterConstructorBalancedCount(0),
       afterConstructorConstraintCount(0),
       finalWorldCount(0)
     {
@@ -2673,6 +2679,9 @@ namespace
     explanation.stats.afterCardLocationCount =
       static_cast<unsigned>(cardLocationWorlds.size());
 
+    unsigned lengthAcceptedWorlds = 0U;
+    unsigned hcpAcceptedWorlds = 0U;
+    unsigned balancedAcceptedWorlds = 0U;
     unsigned acceptedWorlds = 0U;
     for (unsigned i = 0; i < cardLocationWorlds.size(); i++)
     {
@@ -2689,6 +2698,7 @@ namespace
         explanation.worlds.push_back(world);
         continue;
       }
+      lengthAcceptedWorlds++;
       AddWorldExplanationStep(world, "constructor_length", true,
         "passed constructor-local length constraints");
 
@@ -2701,6 +2711,7 @@ namespace
         explanation.worlds.push_back(world);
         continue;
       }
+      hcpAcceptedWorlds++;
       AddWorldExplanationStep(world, "constructor_hcp", true,
         "passed constructor-local HCP constraints");
 
@@ -2713,6 +2724,7 @@ namespace
         explanation.worlds.push_back(world);
         continue;
       }
+      balancedAcceptedWorlds++;
       AddWorldExplanationStep(world, "constructor_balanced", true,
         "passed constructor-local balanced-shape constraints");
 
@@ -2721,6 +2733,9 @@ namespace
       acceptedWorlds++;
     }
 
+    explanation.stats.afterConstructorLengthCount = lengthAcceptedWorlds;
+    explanation.stats.afterConstructorHCPCount = hcpAcceptedWorlds;
+    explanation.stats.afterConstructorBalancedCount = balancedAcceptedWorlds;
     explanation.stats.afterConstructorConstraintCount = acceptedWorlds;
     explanation.stats.finalWorldCount = acceptedWorlds;
     return explanation;
@@ -5487,6 +5502,10 @@ namespace
       "constructor-local explanation should report ownership pinning reducing the heart-swap fixture from six worlds to two");
     Check(explanation.stats.afterCardLocationCount == 1,
       "constructor-local explanation should report known-card location pruning collapsing the heart-swap fixture to one world before later constructor checks");
+    Check(explanation.stats.afterConstructorLengthCount == 1 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local explanation should preserve the lone known-card survivor through length, HCP, and balanced constructor stages when no later constructor pruning applies");
     Check(explanation.stats.afterConstructorConstraintCount == 1 &&
           explanation.stats.finalWorldCount == 1,
       "constructor-local explanation should report one final surviving world after card-location narrowing leaves nothing further to prune");
@@ -5566,6 +5585,10 @@ namespace
     Check(explanation.stats.afterOwnershipCount == 2 &&
           explanation.stats.afterCardLocationCount == 2,
       "constructor-local partnership HCP explanation should report ownership pinning reducing the pool to the two heart-honor swap worlds before HCP pruning");
+    Check(explanation.stats.afterConstructorLengthCount == 2 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local partnership HCP explanation should keep both ownership-consistent worlds through length pruning, then narrow to one at the HCP stage");
     Check(explanation.stats.afterConstructorConstraintCount == 1 &&
           explanation.stats.finalWorldCount == 1,
       "constructor-local partnership HCP explanation should report the two ownership-consistent worlds collapsing to one after constructor HCP pruning");
@@ -5645,11 +5668,84 @@ namespace
     Check(explanation.stats.afterOwnershipCount == 2 &&
           explanation.stats.afterCardLocationCount == 2,
       "constructor-local partnership length explanation should report ownership pinning reducing the pool to the two heart-versus-diamond swap worlds before length pruning");
+    Check(explanation.stats.afterConstructorLengthCount == 1 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local partnership length explanation should narrow to one world at the length stage and preserve that survivor through later constructor stages");
     Check(explanation.stats.afterConstructorConstraintCount == 1 &&
           explanation.stats.finalWorldCount == 1,
       "constructor-local partnership length explanation should report the two ownership-consistent worlds collapsing to one after constructor length pruning");
     Check(acceptedWorlds == 1 && rejectedAtConstructorLength == 1,
       "constructor-local partnership length explanation should show one surviving world and one constructor_length rejection at the partnership fit ceiling");
+  }
+
+
+  static void TestHistoryDerivedConstructionExplanationTracksPartnershipRangeStageCounts()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.Q.Q. 2..8. J...");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_SOUTH);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 1));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxLength(SEAT_EAST, SUIT_HEARTS, 1));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinHCP(SEAT_EAST, 6));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxHCP(SEAT_EAST, 6));
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, info);
+    Check(explanation.stats.rawAssignmentCount == 10,
+      "constructor-stage accounting should report the full ten raw East/South hidden-card assignments before ownership evidence is applied in the mixed partnership-range fixture");
+    Check(explanation.stats.afterOwnershipCount == 3,
+      "constructor-stage accounting should report ownership pinning reducing the mixed partnership-range fixture to three candidate worlds");
+    Check(explanation.stats.afterCardLocationCount == 3,
+      "constructor-stage accounting should preserve all three ownership-consistent worlds before partnership-range pruning when no extra card-location evidence applies");
+    Check(explanation.stats.afterConstructorLengthCount == 2,
+      "constructor-stage accounting should show partnership length-range pruning reducing the mixed fixture from three worlds to two");
+    Check(explanation.stats.afterConstructorHCPCount == 1,
+      "constructor-stage accounting should show partnership HCP-range pruning reducing the mixed fixture from two worlds to one");
+    Check(explanation.stats.afterConstructorBalancedCount == 1 &&
+          explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-stage accounting should preserve the lone mixed partnership-range survivor through the balanced and final constructor checkpoints");
+
+    unsigned rejectedAtLength = 0;
+    unsigned rejectedAtHcp = 0;
+    unsigned acceptedWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length")
+        rejectedAtLength++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_hcp")
+        rejectedAtHcp++;
+    }
+    Check(explanation.worlds.size() == 3,
+      "constructor-stage accounting should enumerate the three ownership-consistent worlds in the mixed partnership-range fixture");
+    Check(acceptedWorlds == 1 && rejectedAtLength == 1 && rejectedAtHcp == 1,
+      "constructor-stage accounting should show one world rejected at partnership length, one at partnership HCP, and one final survivor in the mixed fixture");
   }
 
 
@@ -7354,6 +7450,9 @@ int main(int argc, char ** argv)
 
   TestHistoryDerivedConstructionUsesPartnershipLengthRange();
   cout << "alpha_mu_prototype: history-derived partnership length construction OK\n";
+
+  TestHistoryDerivedConstructionExplanationTracksPartnershipRangeStageCounts();
+  cout << "alpha_mu_prototype: history-derived constructor stage accounting OK\n";
 
   TestHistoryDerivedConstructionExplanationTracksFollowSuitRejections();
   cout << "alpha_mu_prototype: history-derived construction explanation pruning OK\n";

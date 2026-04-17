@@ -141,7 +141,7 @@ The prototype also now includes an explicit follow-suit-implication stage derive
 
 The prototype also now includes a first seed-based hidden-seat world-construction step from partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement, plus a first moderate-size ambiguous two-defender visible-seed pool with deterministic downselection after staged filtering and a longer multi-trick visible-seed history whose broader pool is narrowed by play-derived follow-suit evidence before sampling, with constructor-local explicit known-card and bidding card-location pruning plus suit-length and partnership suit-length range pruning before the later full filtering pipeline.
 
-The prototype also now includes constructor-local accounting and explanation traces for that seed-based hidden-seat construction, including stable counts before ownership pinning, after ownership pinning, after constructor-local card-location pruning, and after later constructor-local length/HCP/balanced narrowing.
+The prototype also now includes constructor-local accounting and explanation traces for that seed-based hidden-seat construction, including stable counts before ownership pinning, after ownership pinning, after constructor-local card-location pruning, and separately after constructor-local length, HCP, and balanced narrowing.
 
 The prototype also now includes constructor-local MinHCP and MaxHCP pruning for those seed-based hidden-seat candidate worlds before the later full bidding filter, along with a first constructor-local partnership HCP-range pruning path when one partner is hidden and the other remains visible.
 

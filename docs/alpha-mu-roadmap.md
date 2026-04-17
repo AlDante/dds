@@ -22,7 +22,7 @@ The prototype already includes:
 - staged possible-world filtering, including first partnership suit-length range and partnership HCP-range bidding constraints,
 - seed-based hidden-seat world construction for post-lead partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement, a first moderate-size two-defender visible-seed pool backed by deterministic downselection, and a longer multi-trick visible-seed history narrowed by play-derived evidence before sampling,
 - constructor-local explicit known-card and bidding pruning for card location, plus suit length, partnership suit-length ranges, partnership HCP-range, seat-level HCP, and balanced shape,
-- constructor-local accounting and explanation traces for history-derived world construction,
+- constructor-local accounting and explanation traces for history-derived world construction, split into card-location, length, HCP, and balanced pruning stages,
 - play-history legality filtering,
 - deterministic world downselection,
 - bridge move generation,
