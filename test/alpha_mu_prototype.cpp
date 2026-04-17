@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -1075,6 +1076,40 @@ namespace
     {
     }
   };
+
+
+  struct BenchmarkBoardProgressContext
+  {
+    string method;
+    string handFile;
+    unsigned boardNumber;
+    unsigned totalBoards;
+    int depth;
+    double reportIntervalSeconds;
+    chrono::steady_clock::time_point totalStart;
+    chrono::steady_clock::time_point boardStart;
+    double nextReportSeconds;
+    unsigned long long recursiveCalls;
+    unsigned long long ddsLeafCalls;
+
+    BenchmarkBoardProgressContext() :
+      method(),
+      handFile(),
+      boardNumber(0),
+      totalBoards(0),
+      depth(0),
+      reportIntervalSeconds(0.0),
+      totalStart(),
+      boardStart(),
+      nextReportSeconds(0.0),
+      recursiveCalls(0ULL),
+      ddsLeafCalls(0ULL)
+    {
+    }
+  };
+
+
+  static BenchmarkBoardProgressContext * gBenchmarkBoardProgress = NULL;
 
 
   static void Fail(const string& msg)
@@ -2420,6 +2455,9 @@ namespace
   static ParetoFront MakeZeroFront(const unsigned worldCount);
   static int BestScore(const futureTricks& fut);
   static void CheckDDS(const int ret, const string& tag);
+  static void MaybeReportBenchmarkBoardProgress(
+    const BridgeState& state,
+    const int tricksRemaining);
 
 
   static ParetoFront MakeBridgeTerminalFront(const BridgeState& state)
@@ -2472,6 +2510,9 @@ namespace
       futureTricks fut;
       memset(&fut, 0, sizeof(fut));
 
+      if (gBenchmarkBoardProgress != NULL)
+        gBenchmarkBoardProgress->ddsLeafCalls++;
+
       const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
       const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut, 0);
       ostringstream ddsTag;
@@ -2504,10 +2545,12 @@ namespace
   }
 
 
-  static ParetoFront SearchBridgeState(
+  static ParetoFront SearchBridgeStateInternal(
     const BridgeState& state,
     const int tricksRemaining)
   {
+    MaybeReportBenchmarkBoardProgress(state, tricksRemaining);
+
     if (state.possibleWorlds.Empty())
       return MakeZeroFront(state.possibleWorlds.count);
 
@@ -2526,7 +2569,7 @@ namespace
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeState(children[i].state, nextDepth));
+          SearchBridgeStateInternal(children[i].state, nextDepth));
       }
       return front;
     }
@@ -2537,7 +2580,7 @@ namespace
     {
       const int nextDepth = tricksRemaining - BridgeDepthCost(state,
         children[i].state);
-      const ParetoFront childFront = SearchBridgeState(
+      const ParetoFront childFront = SearchBridgeStateInternal(
         children[i].state,
         nextDepth);
       if (! initialized)
@@ -2549,6 +2592,14 @@ namespace
         front = ParetoFront::MinProduct(front, childFront);
     }
     return front;
+  }
+
+
+  static ParetoFront SearchBridgeState(
+    const BridgeState& state,
+    const int tricksRemaining)
+  {
+    return SearchBridgeStateInternal(state, tricksRemaining);
   }
 
 
@@ -3514,6 +3565,61 @@ namespace
   }
 
 
+  static set<unsigned> ParseSkippedBoardNumbers(
+    const string& skipSpec,
+    const unsigned availableBoards)
+  {
+    set<unsigned> skipped;
+    if (skipSpec.empty())
+      return skipped;
+
+    const vector<string> parts = SplitString(skipSpec, ',', false);
+    for (unsigned i = 0; i < parts.size(); i++)
+    {
+      const string token = parts[i];
+      const size_t dash = token.find('-');
+      if (dash == string::npos)
+      {
+        const int boardNumber = atoi(token.c_str());
+        Check(boardNumber > 0,
+          "benchmark skip-board spec should use positive 1-based board numbers");
+        Check(static_cast<unsigned>(boardNumber) <= availableBoards,
+          "benchmark skip-board spec should not reference a board beyond the selected hand-file range");
+        skipped.insert(static_cast<unsigned>(boardNumber));
+        continue;
+      }
+
+      const int startBoard = atoi(token.substr(0, dash).c_str());
+      const int endBoard = atoi(token.substr(dash + 1).c_str());
+      Check(startBoard > 0 && endBoard > 0 && startBoard <= endBoard,
+        "benchmark skip-board ranges should be positive increasing 1-based ranges");
+      Check(static_cast<unsigned>(endBoard) <= availableBoards,
+        "benchmark skip-board range should not extend beyond the selected hand-file range");
+      for (int boardNumber = startBoard; boardNumber <= endBoard; boardNumber++)
+        skipped.insert(static_cast<unsigned>(boardNumber));
+    }
+
+    return skipped;
+  }
+
+
+  static vector<unsigned> SelectBenchmarkBoardNumbers(
+    const HandFileData& data,
+    const int maxBoards,
+    const string& skipSpec)
+  {
+    const unsigned candidateBoards = BoardsToBenchmark(data, maxBoards);
+    const set<unsigned> skipped = ParseSkippedBoardNumbers(skipSpec, candidateBoards);
+    vector<unsigned> selectedBoards;
+    for (unsigned boardNumber = 1; boardNumber <= candidateBoards; boardNumber++)
+    {
+      if (skipped.find(boardNumber) == skipped.end())
+        selectedBoards.push_back(boardNumber);
+    }
+    return selectedBoards;
+  }
+
+
   static double BenchmarkCheckpointIntervalSeconds();
 
 
@@ -3521,6 +3627,9 @@ namespace
     const BenchmarkMethodSummary& summary,
     const unsigned completedBoards,
     const double elapsedSeconds);
+
+
+  static double BenchmarkProgressIntervalSeconds();
 
 
   static void ReportBenchmarkBoardTiming(
@@ -3532,7 +3641,8 @@ namespace
 
   static BenchmarkMethodSummary BenchmarkDDSExactBoards(
     const string& handFile,
-    const int maxBoards)
+    const int maxBoards,
+    const string& skipSpec)
   {
     HandFileData data;
     LoadHandFile(handFile, data);
@@ -3542,7 +3652,9 @@ namespace
     BenchmarkMethodSummary summary;
     summary.method = "dds";
     summary.handFile = ResolvePath(handFile);
-    summary.boardsTested = BoardsToBenchmark(data, maxBoards);
+    const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data, maxBoards,
+      skipSpec);
+    summary.boardsTested = static_cast<unsigned>(boardNumbers.size());
     Check(summary.boardsTested > 0,
       "DDS benchmark selected zero boards to test");
 
@@ -3550,12 +3662,14 @@ namespace
     const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
     double lastCheckpoint = 0.0;
-    for (unsigned i = 0; i < summary.boardsTested; i++)
+    for (unsigned i = 0; i < boardNumbers.size(); i++)
     {
+      const unsigned boardNumber = boardNumbers[i];
       const chrono::steady_clock::time_point boardStart =
         chrono::steady_clock::now();
-      const int score = SolveDDSLeafWorld(data, static_cast<int>(i), 0);
-      if (score != BestScore(data.futList[i]))
+      const unsigned boardIndex = boardNumber - 1U;
+      const int score = SolveDDSLeafWorld(data, static_cast<int>(boardIndex), 0);
+      if (score != BestScore(data.futList[boardIndex]))
         summary.mismatches++;
 
       const double boardElapsed = chrono::duration<double>(
@@ -3563,12 +3677,12 @@ namespace
       summary.perBoardSeconds.push_back(boardElapsed);
       const double elapsed = chrono::duration<double>(
         chrono::steady_clock::now() - start).count();
-      ReportBenchmarkBoardTiming(summary, i + 1, boardElapsed, elapsed);
+      ReportBenchmarkBoardTiming(summary, boardNumber, boardElapsed, elapsed);
 
       if (checkpointSeconds > 0.0)
       {
         if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
-            (i + 1 == summary.boardsTested))
+            (i + 1 == boardNumbers.size()))
         {
           ReportBenchmarkCheckpoint(summary, i + 1, elapsed);
           lastCheckpoint = elapsed;
@@ -3584,7 +3698,8 @@ namespace
   static BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
     const string& handFile,
     const int depth,
-    const int maxBoards)
+    const int maxBoards,
+    const string& skipSpec)
   {
     Check(depth >= 0,
       "alpha-mu benchmark depth should be non-negative");
@@ -3597,7 +3712,9 @@ namespace
     BenchmarkMethodSummary summary;
     summary.method = "alpha_mu";
     summary.handFile = ResolvePath(handFile);
-    summary.boardsTested = BoardsToBenchmark(data, maxBoards);
+    const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data, maxBoards,
+      skipSpec);
+    summary.boardsTested = static_cast<unsigned>(boardNumbers.size());
     summary.depth = depth;
     Check(summary.boardsTested > 0,
       "alpha-mu benchmark selected zero boards to test");
@@ -3606,15 +3723,32 @@ namespace
     const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
     double lastCheckpoint = 0.0;
-    for (unsigned i = 0; i < summary.boardsTested; i++)
+    for (unsigned i = 0; i < boardNumbers.size(); i++)
     {
+      const unsigned boardNumber = boardNumbers[i];
+      const unsigned boardIndex = boardNumber - 1U;
       const chrono::steady_clock::time_point boardStart =
         chrono::steady_clock::now();
-      const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[i]);
+      const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[boardIndex]);
+
+      BenchmarkBoardProgressContext progress;
+      progress.method = summary.method;
+      progress.handFile = summary.handFile;
+      progress.boardNumber = boardNumber;
+      progress.totalBoards = summary.boardsTested;
+      progress.depth = depth;
+      progress.reportIntervalSeconds = BenchmarkProgressIntervalSeconds();
+      progress.totalStart = start;
+      progress.boardStart = boardStart;
+      progress.nextReportSeconds = progress.reportIntervalSeconds;
+      gBenchmarkBoardProgress = (progress.reportIntervalSeconds > 0.0 ? &progress : NULL);
+
       const ParetoFront front = SearchBridgeState(state, depth);
+      gBenchmarkBoardProgress = NULL;
+
       const int alphaScore = SingleWorldFrontScore(front, depth,
-        static_cast<int>(i));
-      if (alphaScore != BestScore(data.futList[i]))
+        static_cast<int>(boardIndex));
+      if (alphaScore != BestScore(data.futList[boardIndex]))
         summary.mismatches++;
 
       const double boardElapsed = chrono::duration<double>(
@@ -3622,12 +3756,12 @@ namespace
       summary.perBoardSeconds.push_back(boardElapsed);
       const double elapsed = chrono::duration<double>(
         chrono::steady_clock::now() - start).count();
-      ReportBenchmarkBoardTiming(summary, i + 1, boardElapsed, elapsed);
+      ReportBenchmarkBoardTiming(summary, boardNumber, boardElapsed, elapsed);
 
       if (checkpointSeconds > 0.0)
       {
         if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
-            (i + 1 == summary.boardsTested))
+            (i + 1 == boardNumbers.size()))
         {
           ReportBenchmarkCheckpoint(summary, i + 1, elapsed);
           lastCheckpoint = elapsed;
@@ -3674,6 +3808,69 @@ namespace
 
     const double parsed = atof(value);
     return (parsed > 0.0 ? parsed : 0.0);
+  }
+
+
+  static double BenchmarkProgressIntervalSeconds()
+  {
+    const char * value = getenv("DDS_ALPHA_MU_BENCHMARK_PROGRESS_SECONDS");
+    if (value != NULL && *value != '\0')
+    {
+      const double parsed = atof(value);
+      if (parsed > 0.0)
+        return parsed;
+    }
+
+    return BenchmarkCheckpointIntervalSeconds();
+  }
+
+
+  static void MaybeReportBenchmarkBoardProgress(
+    const BridgeState& state,
+    const int tricksRemaining)
+  {
+    if (gBenchmarkBoardProgress == NULL ||
+        gBenchmarkBoardProgress->reportIntervalSeconds <= 0.0)
+    {
+      return;
+    }
+
+    gBenchmarkBoardProgress->recursiveCalls++;
+    if ((gBenchmarkBoardProgress->recursiveCalls & 0x3FFULL) != 0ULL)
+      return;
+
+    const double boardElapsed = chrono::duration<double>(
+      chrono::steady_clock::now() - gBenchmarkBoardProgress->boardStart).count();
+    if (boardElapsed < gBenchmarkBoardProgress->nextReportSeconds)
+      return;
+
+    const double totalElapsed = chrono::duration<double>(
+      chrono::steady_clock::now() - gBenchmarkBoardProgress->totalStart).count();
+
+    cout.setf(ios::fixed);
+    cout << setprecision(6);
+    cout << "ALPHA_MU_BENCHMARK_PROGRESS method="
+         << gBenchmarkBoardProgress->method
+         << " file=" << gBenchmarkBoardProgress->handFile
+         << " board=" << gBenchmarkBoardProgress->boardNumber
+         << " total_boards=" << gBenchmarkBoardProgress->totalBoards
+         << " depth=" << gBenchmarkBoardProgress->depth
+         << " board_elapsed_seconds=" << boardElapsed
+         << " elapsed_seconds=" << totalElapsed
+         << " recursive_calls=" << gBenchmarkBoardProgress->recursiveCalls
+         << " dds_leaf_calls=" << gBenchmarkBoardProgress->ddsLeafCalls
+         << " tricks_remaining=" << tricksRemaining
+         << " active_worlds=" << state.possibleWorlds.PopCount()
+         << " current_trick_size=" << state.currentTrick.size()
+         << " player=" << state.playerToMove
+         << endl;
+
+    do
+    {
+      gBenchmarkBoardProgress->nextReportSeconds +=
+        gBenchmarkBoardProgress->reportIntervalSeconds;
+    }
+    while (boardElapsed >= gBenchmarkBoardProgress->nextReportSeconds);
   }
 
 
@@ -6002,8 +6199,9 @@ int main(int argc, char ** argv)
 
       const string handFile(argv[2]);
       const int maxBoards = (argc >= 4 ? atoi(argv[3]) : 0);
+      const string skipSpec = (argc >= 5 ? argv[4] : "");
       const BenchmarkMethodSummary summary = BenchmarkDDSExactBoards(
-        handFile, maxBoards);
+        handFile, maxBoards, skipSpec);
       ReportBenchmarkMethodSummary(summary);
       cout << "alpha_mu_prototype: DDS exact benchmark OK\n";
       return 0;
@@ -6016,8 +6214,9 @@ int main(int argc, char ** argv)
       const string handFile(argv[2]);
       const int depth = (argc >= 4 ? atoi(argv[3]) : 0);
       const int maxBoards = (argc >= 5 ? atoi(argv[4]) : 0);
+      const string skipSpec = (argc >= 6 ? argv[5] : "");
       const BenchmarkMethodSummary summary = BenchmarkAlphaMuExactBoards(
-        handFile, depth, maxBoards);
+        handFile, depth, maxBoards, skipSpec);
       ReportBenchmarkMethodSummary(summary);
       cout << "alpha_mu_prototype: alpha-mu exact benchmark OK\n";
       return 0;

@@ -30,16 +30,22 @@ def default_log_path(method: str, hand_file: str, depth: int) -> Path:
     return BUILD_DIR / name
 
 
-def build_command(method: str, hand_file: str, depth: int, max_boards: int) -> list[str]:
+def build_command(method: str, hand_file: str, depth: int, max_boards: int, skip_boards: str) -> list[str]:
     if method == "dds":
-        return ["./build/alpha_mu_prototype", "benchmark_dds", hand_file, str(max_boards)]
-    return [
+        command = ["./build/alpha_mu_prototype", "benchmark_dds", hand_file, str(max_boards)]
+        if skip_boards:
+            command.append(skip_boards)
+        return command
+    command = [
         "./build/alpha_mu_prototype",
         "benchmark_alpha",
         hand_file,
         str(depth),
         str(max_boards),
     ]
+    if skip_boards:
+        command.append(skip_boards)
+    return command
 
 
 def append_log_line(path: Path, line: str) -> None:
@@ -74,6 +80,7 @@ def main() -> int:
     parser.add_argument("--max-boards", type=int, default=0)
     parser.add_argument("--checkpoint-seconds", type=float, default=30.0)
     parser.add_argument("--heartbeat-seconds", type=float, default=30.0)
+    parser.add_argument("--skip-boards", default="")
     parser.add_argument("--log-path", default="")
     args = parser.parse_args()
 
@@ -90,7 +97,7 @@ def main() -> int:
         args.method, args.hand_file, args.depth
     )
     status_path = Path(f"{log_path}.status.json")
-    command = build_command(args.method, args.hand_file, args.depth, args.max_boards)
+    command = build_command(args.method, args.hand_file, args.depth, args.max_boards, args.skip_boards)
 
     env = os.environ.copy()
     env["DYLD_LIBRARY_PATH"] = str(ROOT / "src" / "build")
@@ -107,6 +114,7 @@ def main() -> int:
         f"hand_file={args.hand_file}\n",
         f"depth={args.depth}\n",
         f"max_boards={args.max_boards}\n",
+        f"skip_boards={args.skip_boards}\n",
         f"checkpoint_seconds={args.checkpoint_seconds:.6f}\n",
         f"heartbeat_seconds={args.heartbeat_seconds:.6f}\n",
         f"command={' '.join(command)}\n",
@@ -132,14 +140,19 @@ def main() -> int:
         "hand_file": args.hand_file,
         "depth": args.depth,
         "max_boards": args.max_boards,
+        "skip_boards": args.skip_boards,
         "command": command,
         "pid": proc.pid,
         "log_path": str(log_path),
         "checkpoint_seconds": args.checkpoint_seconds,
         "heartbeat_seconds": args.heartbeat_seconds,
         "last_checkpoint_line": "",
+        "last_progress_line": "",
         "benchmark_summary_line": "",
         "per_board_seconds": [],
+        "completed_board_numbers": [],
+        "per_board_timings": [],
+        "current_board_progress": {},
         "last_output_line": "",
         "elapsed_seconds": 0.0,
         "returncode": None,
@@ -178,6 +191,29 @@ def main() -> int:
         status["last_output_line"] = item.rstrip("\n")
         if item.startswith("ALPHA_MU_BENCHMARK_CHECKPOINT "):
             status["last_checkpoint_line"] = item.rstrip("\n")
+        elif item.startswith("ALPHA_MU_BENCHMARK_PROGRESS "):
+            fields: dict[str, str] = {}
+            for token in item.strip().split()[1:]:
+                if "=" not in token:
+                    continue
+                key, value = token.split("=", 1)
+                fields[key] = value
+            progress: dict[str, Any] = {}
+            for key, value in fields.items():
+                if key in {"board", "total_boards", "depth", "recursive_calls", "dds_leaf_calls", "tricks_remaining", "active_worlds", "current_trick_size", "player"}:
+                    try:
+                        progress[key] = int(value)
+                    except ValueError:
+                        progress[key] = value
+                elif key in {"board_elapsed_seconds", "elapsed_seconds"}:
+                    try:
+                        progress[key] = float(value)
+                    except ValueError:
+                        progress[key] = value
+                else:
+                    progress[key] = value
+            status["last_progress_line"] = item.rstrip("\n")
+            status["current_board_progress"] = progress
         elif item.startswith("ALPHA_MU_BENCHMARK_BOARD "):
             fields: dict[str, str] = {}
             for token in item.strip().split()[1:]:
@@ -186,9 +222,23 @@ def main() -> int:
                 key, value = token.split("=", 1)
                 fields[key] = value
             board_value = fields.get("board_seconds")
+            board_number_value = fields.get("board")
             if board_value is not None:
                 try:
                     status["per_board_seconds"].append(float(board_value))
+                except ValueError:
+                    pass
+            if board_number_value is not None and board_value is not None:
+                try:
+                    board_number = int(board_number_value)
+                    board_seconds = float(board_value)
+                    status["completed_board_numbers"].append(board_number)
+                    status["per_board_timings"].append(
+                        {"board": board_number, "seconds": board_seconds}
+                    )
+                    current_progress = status.get("current_board_progress")
+                    if isinstance(current_progress, dict) and current_progress.get("board") == board_number:
+                        status["current_board_progress"] = {}
                 except ValueError:
                     pass
         elif item.startswith("ALPHA_MU_BENCHMARK "):

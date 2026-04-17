@@ -109,11 +109,20 @@ Unlike the benchmark runner, the prototype is not a DDS root-policy measurement 
 
 The new `test/alpha_mu_dds_compare.py` runner sits between the two: it uses the prototype's exact one-world bridge benchmark modes to compare original DDS solve speed against alpha-mu solve speed on the same boards, while also checking score agreement at each measured alpha-mu depth.
 
-For longer single benchmark runs, `test/run_alpha_mu_prototype_benchmark.py` streams output live, preserves machine-readable `ALPHA_MU_BENCHMARK_CHECKPOINT ...` lines in the log, and updates a `.status.json` sidecar so interrupted runs still leave partial progress behind.
+For longer single benchmark runs, `test/run_alpha_mu_prototype_benchmark.py` streams output live, preserves machine-readable `ALPHA_MU_BENCHMARK_PROGRESS ...`, `ALPHA_MU_BENCHMARK_CHECKPOINT ...`, and `ALPHA_MU_BENCHMARK_BOARD ...` lines in the log, and updates a `.status.json` sidecar so interrupted runs still leave partial progress behind, including the latest in-flight board snapshot, completed board numbers, and per-board timings.
 
 Example depth-2 baseline run from the repository root:
 
 ```zsh
 python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list1.txt --depth 2 --checkpoint-seconds 30
 ```
+
+Skip specific 1-based board numbers or ranges while keeping checkpointed partial progress:
+
+```zsh
+python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 4 --skip-boards 2 --checkpoint-seconds 60 --heartbeat-seconds 60
+python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list100.txt --depth 2 --skip-boards 2,5-7 --checkpoint-seconds 30
+```
+
+For very long boards, `ALPHA_MU_BENCHMARK_PROGRESS ...` lines report the current board number, elapsed time on that board, recursive call count, DDS leaf-call count, tricks remaining, active worlds, current trick size, and player to move. The sidecar mirrors the latest such snapshot as `current_board_progress`.
 

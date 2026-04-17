@@ -654,15 +654,14 @@ void splitIntoWords(
   unsigned startPos = 0;
   bool isSpace = true;
 
-  // It seems compilers have different ideas about files.
-  const size_t tl = text.length();
-  string ttext;
-  if (text.back() == ' ')
-    ttext = text.substr(0, tl-1);
-  else if (text.at(tl-2) == ' ')
-    ttext = text.substr(0, tl-2);
-  else
-    ttext = text;
+  // Trim trailing whitespace without assuming a particular line ending.
+  string ttext = text;
+  while (! ttext.empty() &&
+         (ttext.back() == ' ' || ttext.back() == '\r' ||
+          ttext.back() == '\n' || ttext.back() == '\t'))
+  {
+    ttext.erase(ttext.size() - 1U, 1U);
+  }
 
   const unsigned l = static_cast<unsigned>(ttext.length());
 
