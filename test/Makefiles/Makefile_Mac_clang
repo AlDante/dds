@@ -108,6 +108,8 @@ PLAYREG_OBJ_FILES	= $(OBJ_DIR)/$(PLAYREG).o $(OBJ_DIR)/examples/hands.o
 
 ALPHAMU_SOURCE_FILES	=	\
 	parse.cpp		\
+	alpha_mu_prototype_core.cpp	\
+	alpha_mu_prototype_tests.cpp	\
 	alpha_mu_prototype.cpp
 
 ALPHAMU_OBJ_FILES	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(ALPHAMU_SOURCE_FILES)))

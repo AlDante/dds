@@ -32,9 +32,12 @@ It is meant to validate the core paper semantics before deeper optimization work
 - DDS-backed leaf evaluation on a small curated world set,
 - DDS-backed bridge leaf evaluation at the end of generated bridge continuations.
 
-## File
+## Files
 
-- `test/alpha_mu_prototype.cpp`
+- `test/alpha_mu_prototype.cpp` — thin CLI runner / mode dispatcher
+- `test/alpha_mu_prototype_core.h` — shared types and callable prototype API
+- `test/alpha_mu_prototype_core.cpp` — actual alpha-mu prototype implementation
+- `test/alpha_mu_prototype_tests.cpp` — regression suite and grouped test runners
 
 ## What it checks
 

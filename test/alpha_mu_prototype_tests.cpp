@@ -1,0 +1,2907 @@
+/*
+   DDS, a bridge double dummy solver.
+
+   Copyright (C) 2006-2014 by Bo Haglund /
+   2014-2018 by Bo Haglund & Soren Hein.
+
+   See LICENSE and README.
+*/
+
+#include "alpha_mu_prototype_core.h"
+#include "alpha_mu_prototype_tests.h"
+
+namespace alpha_mu_prototype
+{
+  using namespace std;
+
+  static void TestParetoInsert()
+  {
+    ParetoFront front(3);
+    front.Insert(MakeBinaryOutcome("100"));
+    front.Insert(MakeBinaryOutcome("011"));
+    front.Insert(MakeBinaryOutcome("110"));
+
+    Check(front.vectors.size() == 2,
+      "Pareto insert should remove dominated vectors");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "front should contain [1 1 0]");
+    Check(FrontContains(front, MakeBinaryOutcome("011")),
+      "front should contain [0 1 1]");
+  }
+
+
+  static void TestNonLocalityExample()
+  {
+    ToyNode leaf100("leaf100", TOY_LEAF, 3);
+    leaf100.leafFront = MakeFront(3, vector<string>(1, "100"));
+
+    ToyNode leaf011("leaf011", TOY_LEAF, 3);
+    leaf011.leafFront = MakeFront(3, vector<string>(1, "011"));
+
+    ToyNode leaf000a("leaf000a", TOY_LEAF, 3);
+    leaf000a.leafFront = MakeFront(3, vector<string>(1, "000"));
+
+    ToyNode leaf000b("leaf000b", TOY_LEAF, 3);
+    leaf000b.leafFront = MakeFront(3, vector<string>(1, "000"));
+
+    ToyNode d("d", TOY_MAX, 3);
+    AddChild(d, leaf100);
+    AddChild(d, leaf011);
+
+    ToyNode e("e", TOY_MAX, 3);
+    AddChild(e, leaf000a);
+    AddChild(e, leaf100);
+
+    ToyNode b("b", TOY_MIN, 3);
+    AddChild(b, d);
+    AddChild(b, e);
+
+    ToyNode f("f", TOY_MAX, 3);
+    AddChild(f, leaf000b);
+
+    ToyNode c("c", TOY_MIN, 3);
+    AddChild(c, f);
+
+    ToyNode a("a", TOY_MAX, 3);
+    AddChild(a, b);
+    AddChild(a, c);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(a, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(front.vectors.size() == 1,
+      "non-locality example should collapse to one best root vector");
+    Check(FrontContains(front, MakeBinaryOutcome("100")),
+      "non-locality example should prefer [1 0 0] at the root");
+    Check(! rootCutTriggered,
+      "non-locality example should not need a root cut");
+  }
+
+
+  static void TestEarlyCutExample()
+  {
+    ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
+    {
+      vector<string> fronts;
+      fronts.push_back("110");
+      fronts.push_back("011");
+      bestLeaf.leafFront = MakeFront(3, fronts);
+    }
+
+    ToyNode cutLeaf1("cutLeaf1", TOY_LEAF, 3);
+    cutLeaf1.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode shouldNotVisit("shouldNotVisit", TOY_LEAF, 3);
+    shouldNotVisit.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    AddChild(candidateMin, cutLeaf1);
+    AddChild(candidateMin, shouldNotVisit);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, bestLeaf);
+    AddChild(root, candidateMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(front.vectors.size() == 2,
+      "early-cut example should preserve the first move's Pareto front");
+    Check(stats.earlyCuts == 1,
+      "early-cut example should trigger exactly one early cut");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("shouldNotVisit")) == stats.visitOrder.end(),
+      "early cut should stop before visiting the dominated continuation");
+    Check(! rootCutTriggered,
+      "early-cut example should not trigger a root cut");
+  }
+
+
+  static void TestUsefulWorldMaintenance()
+  {
+    ToyNode minFirst("minFirst", TOY_LEAF, 3);
+    minFirst.leafFront = MakeFront(3, vector<string>(1, "101"));
+
+    ToyNode minSecond("minSecond", TOY_LEAF, 3);
+    minSecond.leafFront = MakeFront(3, vector<string>(1, "010"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    AddChild(candidateMin, minFirst);
+    AddChild(candidateMin, minSecond);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(candidateMin, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, false, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(FrontContains(front, MakeBinaryOutcome("000")),
+      "useful-world example should reduce the Min continuation to [0 0 0]");
+    Check(stats.usefulWorldUpdates == 2,
+      "useful-world example should record two useful-world updates at the Min node");
+    Check(stats.leafWorldEvaluations == 5,
+      "useful-world example should evaluate only 5 leaf worlds instead of 6");
+    Check(! rootCutTriggered,
+      "useful-world example should not trigger a root cut");
+  }
+
+
+  static void TestRootCutExample()
+  {
+    ToyNode stableBest("stableBest", TOY_LEAF, 3);
+    stableBest.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode skippedByRootCut("skippedByRootCut", TOY_LEAF, 3);
+    skippedByRootCut.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, stableBest);
+    AddChild(root, skippedByRootCut);
+
+    const IterativeResult result = RunIterativeDeepening(root, 2);
+
+    Check(result.depthReached == 2,
+      "iterative deepening should reach the second depth before cutting");
+    Check(result.rootCutTriggered,
+      "root-cut example should trigger a root cut");
+    Check(result.statsPerDepth.size() == 2,
+      "iterative deepening should record two depth passes");
+    Check(result.statsPerDepth[1].rootCuts == 1,
+      "second depth pass should contain one root cut");
+    Check(find(result.statsPerDepth[1].visitOrder.begin(),
+      result.statsPerDepth[1].visitOrder.end(),
+      string("skippedByRootCut")) == result.statsPerDepth[1].visitOrder.end(),
+      "root cut should stop before the second root move is searched");
+  }
+
+
+  static void TestWorldCuts()
+  {
+    ToyNode zeroLeaf("zeroLeaf", TOY_LEAF, 3);
+    zeroLeaf.leafFront = MakeFront(3, vector<string>(1, "101"));
+
+    SearchStats zeroStats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront zeroFront = SearchToy(
+      zeroLeaf,
+      1,
+      WorldMask::None(3),
+      vector<const ParetoFront *>(),
+      OutcomeVector(3),
+      tt,
+      false,
+      -1.0,
+      zeroStats,
+      rootCutTriggered,
+      exactComplete);
+
+    Check(zeroStats.worldCutsZero == 1,
+      "empty useful-world mask should trigger a zero-world cut");
+    Check(zeroStats.leafWorldEvaluations == 0,
+      "zero-world cut should avoid all leaf evaluations");
+    Check(FrontContains(zeroFront, MakeBinaryOutcome("000")),
+      "zero-world cut should return the all-zero vector");
+
+    ToyNode left("left", TOY_LEAF, 3);
+    left.leafFront = MakeFront(3, vector<string>(1, "010"));
+
+    ToyNode right("right", TOY_LEAF, 3);
+    right.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, left);
+    AddChild(root, right);
+
+    SearchStats singleStats;
+    const WorldMask onlyWorld1(3, 1ULL << 1);
+    const ParetoFront singleFront = SearchToy(
+      root,
+      1,
+      onlyWorld1,
+      vector<const ParetoFront *>(),
+      OutcomeVector(3),
+      tt,
+      true,
+      -1.0,
+      singleStats,
+      rootCutTriggered,
+      exactComplete);
+
+    Check(singleStats.worldCutsSingle == 1,
+      "single useful world should trigger a single-world cut");
+    Check(singleStats.leafWorldEvaluations == 2,
+      "single-world cut should evaluate only one world through the collapsed search");
+    Check(FrontContains(singleFront, MakeBinaryOutcome("x1x")),
+      "single-world cut should return the exact one-world result as a sparse vector");
+  }
+
+
+  static void TestParetoFrontTT()
+  {
+    ToyNode sharedLeaf("sharedLeaf", TOY_LEAF, 3);
+    sharedLeaf.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, sharedLeaf);
+    AddChild(root, sharedLeaf);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 1, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(exactComplete,
+      "transposition-table example should complete the shared subtree exactly");
+    Check(stats.ttHits == 1,
+      "transposition-table example should record exactly one TT hit on the repeated subtree");
+    Check(stats.leafWorldEvaluations == 3,
+      "transposition-table example should evaluate the shared leaf only once");
+    Check(stats.ttStores >= 2,
+      "transposition-table example should store both subtree and root fronts");
+    Check(tt.entries.size() >= 2,
+      "transposition-table example should keep at least the shared leaf and root entries");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "transposition-table example should preserve the repeated leaf outcome");
+    Check(! rootCutTriggered,
+      "transposition-table example should not trigger a root cut");
+  }
+
+
+  static void TestPossibleWorldGeneration()
+  {
+    vector<string> pbns;
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 765.8765.JT9.876 JT98.AKQ.432.AKQ 43.432.8765.5432");
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 7654.876.JT9.876 JT98.AKQ.432.AKQ 3.5432.8765.5432");
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 76543.876.JT.876 JT98.AKQ.432.AKQ .5432.98765.5432");
+    pbns.push_back(
+      "N:AKQ2.JT9.AKQ.JT9 76543..JT987.876 JT98.AKQ.432.AKQ .8765432.65.5432");
+
+    vector<ParsedWorld> worlds;
+    for (unsigned i = 0; i < pbns.size(); i++)
+      worlds.push_back(ParsePBNWorld(pbns[i]));
+
+    Check(WorldHasCard(worlds[0], SEAT_NORTH, SUIT_SPADES, 'A'),
+      "possible-world parser should preserve known declarer cards");
+    Check(WorldSuitLength(worlds[3], SEAT_WEST, SUIT_SPADES) == 0,
+      "possible-world parser should preserve empty suits");
+
+    vector<ParsedWorld> biddingWorlds;
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 AQJ3.KQ2.K98.654 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 KQ32.AJ2.Q98.A54 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 AKQ2.JQ3.Q98.A54 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+    biddingWorlds.push_back(ParsePBNWorld(
+      "N:T987.8765.432.32 AKQJ9.2.9876.543 6543.T43.A65.KQJ 2.A9.KQJT7.T9876"));
+
+    Check(WorldHighCardPoints(biddingWorlds[0], SEAT_EAST) == 15,
+      "bidding-style world generation should count East's high-card points correctly");
+    Check(WorldHasBalancedShape(biddingWorlds[1], SEAT_EAST),
+      "bidding-style world generation should recognize a balanced East hand shape");
+    Check(! WorldHasBalancedShape(biddingWorlds[3], SEAT_EAST),
+      "bidding-style world generation should reject clearly unbalanced hand shapes");
+
+    vector<ParsedWorld> handTypeWorlds;
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJ.T98.765.432 ... ..."));
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT4.9.654.432 ... ..."));
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT.98765.4.32 ... ..."));
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJ.T987.6543.2 ... ..."));
+
+    Check(WorldHasHandType(handTypeWorlds[0], SEAT_EAST, HAND_TYPE_BALANCED),
+      "hand-type classification should recognize a balanced East hand");
+    Check(WorldHasHandType(handTypeWorlds[1], SEAT_EAST, HAND_TYPE_ONE_SUITER),
+      "hand-type classification should recognize a one-suiter East hand");
+    Check(WorldHasHandType(handTypeWorlds[2], SEAT_EAST, HAND_TYPE_TWO_SUITER),
+      "hand-type classification should recognize a two-suiter East hand");
+    Check(WorldHasHandType(handTypeWorlds[3], SEAT_EAST, HAND_TYPE_THREE_SUITER),
+      "hand-type classification should recognize a three-suiter East hand");
+
+    BridgeInformationState oneNoTrumpInfo;
+    oneNoTrumpInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+    oneNoTrumpInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 15));
+    oneNoTrumpInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 17));
+    WorldGenerationStats oneNoTrumpStats;
+    const WorldMask oneNoTrumpMask = GeneratePossibleWorlds(biddingWorlds,
+      oneNoTrumpInfo, &oneNoTrumpStats);
+    Check(oneNoTrumpMask == WorldMask(4, 0x3U),
+      "1NT-style balanced 15-17 HCP bidding constraints should keep only the balanced medium-strength East worlds");
+    Check(oneNoTrumpStats.afterBiddingCount == 2,
+      "bidding-style HCP and balanced-shape constraints should leave exactly two matching worlds");
+
+    BridgeInformationState handTypeInfo;
+    handTypeInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_TWO_SUITER));
+    WorldGenerationStats handTypeStats;
+    const WorldMask handTypeMask = GeneratePossibleWorlds(handTypeWorlds,
+      handTypeInfo, &handTypeStats);
+    Check(handTypeMask == WorldMask(4, 0x4U),
+      "hand-type-only bidding constraints should keep only the two-suiter world");
+    Check(handTypeStats.afterBiddingCount == 1,
+      "hand-type-only bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation handTypeExplanation =
+      ExplainPossibleWorldGeneration(handTypeWorlds, handTypeInfo);
+    Check(! handTypeExplanation.worlds[0].accepted &&
+          handTypeExplanation.worlds[0].rejectionStage == "bidding" &&
+          handTypeExplanation.worlds[0].rejectionReason.find("two-suiter") != string::npos,
+      "hand-type-only explanation should reject non-matching hand types at the bidding stage");
+
+    BridgeInformationState biddingInfo;
+    biddingInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    WorldGenerationStats biddingStats;
+    const WorldMask biddingMask = GeneratePossibleWorlds(worlds, biddingInfo,
+      &biddingStats);
+    Check(biddingMask == WorldMask(4, 0xCU),
+      "bidding-style spade-length constraint should keep the last two worlds");
+    Check(biddingStats.candidateWorldCount == 4,
+      "world-generation stats should count the initial candidate pool");
+    Check(biddingStats.afterBiddingCount == 2,
+      "world-generation stats should record the post-bidding surviving worlds");
+
+    BridgeInformationState lengthRangeInfo;
+    lengthRangeInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    lengthRangeInfo.biddingConstraints.push_back(WorldConstraint::MaxLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    lengthRangeInfo.biddingConstraints.push_back(WorldConstraint::MaxLength(
+      SEAT_EAST, SUIT_HEARTS, 0));
+    WorldGenerationStats lengthRangeStats;
+    const WorldMask lengthRangeMask = GeneratePossibleWorlds(worlds,
+      lengthRangeInfo, &lengthRangeStats);
+    Check(lengthRangeMask == WorldMask(4, 0x8U),
+      "suit-length-only bidding constraints should keep only the world matching the supplied East suit-length bounds");
+    Check(lengthRangeStats.afterBiddingCount == 1,
+      "suit-length-range bidding constraints should narrow the world pool during the bidding stage");
+
+    vector<ParsedWorld> combinedAuctionWorlds;
+    combinedAuctionWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT4.9.654.432 ... ..."));
+    combinedAuctionWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT.98765.4.32 ... ..."));
+    combinedAuctionWorlds.push_back(ParsePBNWorld(
+      "N:... KQJT9.9.7654.432 ... ..."));
+
+    BridgeInformationState combinedAuctionInfo;
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 10));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 10));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_ONE_SUITER));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 6));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_SPADES, 6));
+    const WorldMask combinedAuctionMask = GeneratePossibleWorlds(
+      combinedAuctionWorlds, combinedAuctionInfo, NULL);
+    Check(combinedAuctionMask == WorldMask(3, 0x1U),
+      "combined HCP, hand-type, and suit-length bidding constraints should identify a single matching world");
+
+    vector<ParsedWorld> partnershipWorlds;
+    partnershipWorlds.push_back(ParsePBNWorld(
+      "N:AKQ.JT9.AKQ.JT9 765.98765.JT9.87 JT98.AKQ.432.AKQ 43.432.8765.5432"));
+    partnershipWorlds.push_back(ParsePBNWorld(
+      "N:AKQ.JT9.AKQ.JT9 7654.8765.JT9.87 JT98.AKQ.432.AKQ 32.432.8765.5432"));
+    partnershipWorlds.push_back(ParsePBNWorld(
+      "N:AKQ.JT9.AKQ.JT9 76543.87.JT9.876 JT98.AKQ.432.AKQ 2.432.8765.65432"));
+
+    BridgeInformationState partnershipInfo;
+    partnershipInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 8));
+    WorldGenerationStats partnershipStats;
+    const WorldMask partnershipMask = GeneratePossibleWorlds(partnershipWorlds,
+      partnershipInfo, &partnershipStats);
+    Check(partnershipMask == WorldMask(3, 0x1U),
+      "partnership-fit bidding constraints should keep only worlds where East/West have the required combined heart length");
+    Check(partnershipStats.afterBiddingCount == 1,
+      "partnership-fit bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation partnershipExplanation =
+      ExplainPossibleWorldGeneration(partnershipWorlds, partnershipInfo);
+    Check(partnershipExplanation.worlds.size() == 3,
+      "partnership-fit explanation should cover every candidate world");
+    Check(partnershipExplanation.worlds[0].accepted,
+      "the world meeting the partnership heart-fit constraint should survive the explanation pipeline");
+    Check(! partnershipExplanation.worlds[1].accepted &&
+          partnershipExplanation.worlds[1].rejectionStage == "bidding" &&
+          partnershipExplanation.worlds[1].rejectionReason.find("East/West partnership must hold at least 8 cards in hearts") != string::npos,
+      "partnership-fit explanation should reject short East/West heart fits at the bidding stage");
+
+    vector<ParsedWorld> partnershipRangeWorlds;
+    partnershipRangeWorlds.push_back(ParsePBNWorld(
+      "N:T... .K.. 9... J..."));
+    partnershipRangeWorlds.push_back(ParsePBNWorld(
+      "N:T... .K.. 9... J.Q.."));
+    partnershipRangeWorlds.push_back(ParsePBNWorld(
+      "N:T... .KJ.. 9... J.Q.."));
+
+    BridgeInformationState partnershipRangeInfo;
+    partnershipRangeInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 2));
+    partnershipRangeInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxLength(SEAT_EAST, SUIT_HEARTS, 2));
+    WorldGenerationStats partnershipRangeStats;
+    const WorldMask partnershipRangeMask = GeneratePossibleWorlds(
+      partnershipRangeWorlds, partnershipRangeInfo, &partnershipRangeStats);
+    Check(partnershipRangeMask == WorldMask(3, 0x2U),
+      "partnership length-range bidding constraints should keep only worlds where East/West stay inside the exact combined heart-fit target");
+    Check(partnershipRangeStats.afterBiddingCount == 1,
+      "partnership length-range bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation partnershipRangeExplanation =
+      ExplainPossibleWorldGeneration(partnershipRangeWorlds,
+        partnershipRangeInfo);
+    Check(! partnershipRangeExplanation.worlds[0].accepted &&
+          partnershipRangeExplanation.worlds[0].rejectionStage == "bidding" &&
+          partnershipRangeExplanation.worlds[0].rejectionReason.find("East/West partnership must hold at least 2 cards in hearts") != string::npos,
+      "partnership length-range explanation should reject worlds below the combined fit floor at the bidding stage");
+    Check(partnershipRangeExplanation.worlds[1].accepted,
+      "the world meeting the exact partnership heart-fit target should survive the explanation pipeline");
+    Check(! partnershipRangeExplanation.worlds[2].accepted &&
+          partnershipRangeExplanation.worlds[2].rejectionStage == "bidding" &&
+          partnershipRangeExplanation.worlds[2].rejectionReason.find("East/West partnership must hold at most 2 cards in hearts") != string::npos,
+      "partnership length-range explanation should reject worlds above the combined fit ceiling at the bidding stage");
+
+    vector<ParsedWorld> partnershipHcpWorlds;
+    partnershipHcpWorlds.push_back(ParsePBNWorld(
+      "N:T... K... 9... Q..."));
+    partnershipHcpWorlds.push_back(ParsePBNWorld(
+      "N:T... Q... 9... J..."));
+    partnershipHcpWorlds.push_back(ParsePBNWorld(
+      "N:T... A... 9... K..."));
+
+    BridgeInformationState partnershipHcpInfo;
+    partnershipHcpInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinHCP(SEAT_EAST, 5));
+    partnershipHcpInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxHCP(SEAT_EAST, 5));
+    WorldGenerationStats partnershipHcpStats;
+    const WorldMask partnershipHcpMask = GeneratePossibleWorlds(
+      partnershipHcpWorlds, partnershipHcpInfo, &partnershipHcpStats);
+    Check(partnershipHcpMask == WorldMask(3, 0x1U),
+      "partnership HCP-range bidding constraints should keep only worlds where East/West stay inside the combined HCP range");
+    Check(partnershipHcpStats.afterBiddingCount == 1,
+      "partnership HCP-range bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation partnershipHcpExplanation =
+      ExplainPossibleWorldGeneration(partnershipHcpWorlds, partnershipHcpInfo);
+    Check(partnershipHcpExplanation.worlds.size() == 3,
+      "partnership HCP-range explanation should cover every candidate world");
+    Check(partnershipHcpExplanation.worlds[0].accepted,
+      "the world meeting the partnership HCP range should survive the explanation pipeline");
+    Check(! partnershipHcpExplanation.worlds[1].accepted &&
+          partnershipHcpExplanation.worlds[1].rejectionStage == "bidding" &&
+          partnershipHcpExplanation.worlds[1].rejectionReason.find("East/West partnership must hold at least 5 HCP") != string::npos,
+      "partnership HCP-range explanation should reject worlds below the combined HCP floor at the bidding stage");
+    Check(! partnershipHcpExplanation.worlds[2].accepted &&
+          partnershipHcpExplanation.worlds[2].rejectionStage == "bidding" &&
+          partnershipHcpExplanation.worlds[2].rejectionReason.find("East/West partnership must hold at most 5 HCP") != string::npos,
+      "partnership HCP-range explanation should reject worlds above the combined HCP ceiling at the bidding stage");
+
+    BridgeInformationState playInfo;
+    playInfo.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
+    playInfo.biddingConstraints.push_back(
+      WorldConstraint::VoidSuit(SEAT_WEST, SUIT_SPADES));
+    WorldGenerationStats playStats;
+    const WorldMask playMask = GeneratePossibleWorlds(worlds, playInfo,
+      &playStats);
+    Check(playMask == WorldMask(4, 0x8U),
+      "play-style void and card-location constraints should isolate the final world");
+    Check(playStats.afterKnownCardCount == 1,
+      "world-generation stats should record the known-card filter before later stages");
+    Check(playStats.afterSamplingCount == 1,
+      "world-generation stats should report the unchanged count when no sampling is requested");
+    Check(playStats.finalWorldCount == 1,
+      "world-generation stats should record the final surviving world count");
+
+    BridgeInformationState combinedInfo;
+    combinedInfo.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_DIAMONDS, '8'));
+    combinedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 5));
+    combinedInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_HEARTS, 0));
+    const WorldMask combinedMask = GeneratePossibleWorlds(worlds, combinedInfo,
+      NULL);
+    Check(combinedMask == WorldMask(4, 0x8U),
+      "combined bidding/play constraints should identify a single possible world");
+
+    vector<ParsedWorld> duplicateWorlds(worlds);
+    duplicateWorlds.push_back(worlds[3]);
+    BridgeInformationState dedupInfo;
+    dedupInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    dedupInfo.deduplicateEquivalentWorlds = true;
+    WorldGenerationStats dedupStats;
+    const WorldMask dedupMask = GeneratePossibleWorlds(duplicateWorlds,
+      dedupInfo, &dedupStats);
+    Check(dedupStats.duplicateWorldsRemoved == 1,
+      "world-generation should remove one duplicate world after staged filtering");
+    Check(dedupMask == WorldMask(5, 0xCU),
+      "world deduplication should keep the first equivalent surviving world and drop later duplicates");
+
+    BridgeInformationState notHasInfo;
+    notHasInfo.knownCardConstraints.push_back(
+      WorldConstraint::NotHasCard(SEAT_WEST, SUIT_SPADES, '3'));
+    const WorldMask notHasMask = GeneratePossibleWorlds(worlds, notHasInfo, NULL);
+    Check(notHasMask == WorldMask(4, 0xCU),
+      "explicit cannot-hold-card constraints should keep only worlds where West does not hold the specified spade");
+  }
+
+
+  static void TestPlayHistoryFiltering()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld("N:A... K.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... .Q.. K... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... .Q.. K... 3..."));
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.deduplicateEquivalentWorlds = true;
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(worlds, info, &stats);
+
+    Check(mask == WorldMask(3, 0x2ULL),
+      "play-history filtering should keep only the world where East could legally fail to follow spades and duplicate removal should keep the first equivalent survivor");
+    Check(stats.afterPlayHistoryCount == 2,
+      "play-history filtering should leave exactly the two equivalent legal worlds before deduplication");
+    Check(stats.afterCurrentTrickCount == 2,
+      "current-trick filtering should preserve worlds that can replay the current partial trick history");
+    Check(stats.duplicateWorldsRemoved == 1,
+      "play-history world generation should report duplicate removal after legality filtering");
+    Check(stats.finalWorldCount == 1,
+      "play-history world generation should finish with one deduplicated surviving world");
+  }
+
+
+  static void TestFollowSuitImplicationsAndWorldExplanation()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld("N:A... K.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... K9.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... K.J.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:2... K.Q.. A... 3..."));
+
+    BridgeInformationState info;
+    info.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_NORTH, SUIT_SPADES, 'A'));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(worlds, info, &stats);
+    Check(mask == WorldMask(4, 0x1ULL),
+      "explicit follow-suit implications plus detailed replay checks should leave only the one fully legal world");
+    Check(stats.afterFollowSuitCount == 2,
+      "derived follow-suit implications should remove the world where East still has a spare spade before replaying history");
+    Check(stats.afterCurrentTrickCount == 1,
+      "current-trick replay should remove the world that lacks the required discard card after passing follow-suit filtering");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(worlds, info);
+    Check(explanation.appliedFollowSuitConstraints.size() == 1,
+      "follow-suit explanation should expose the single derived spade-length implication from the discard history");
+    Check(explanation.appliedFollowSuitConstraints[0].kind == CONSTRAINT_MAX_LENGTH &&
+          explanation.appliedFollowSuitConstraints[0].player == SEAT_EAST &&
+          explanation.appliedFollowSuitConstraints[0].suit == SUIT_SPADES &&
+          explanation.appliedFollowSuitConstraints[0].count == 1,
+      "follow-suit explanation should derive that East can have held at most one spade before the later discard on a spade lead");
+    Check(explanation.finalWorldMask == WorldMask(4, 0x1ULL),
+      "world-generation explanation should preserve the same final surviving mask as the filtering pipeline");
+
+    Check(explanation.worlds.size() == 4,
+      "world-generation explanation should include every candidate world");
+    Check(explanation.worlds[0].accepted,
+      "the fully legal world should be marked as accepted in the explanation trace");
+    Check(explanation.worlds[0].rejectionStage.empty(),
+      "the accepted world should not record a rejection stage");
+    Check(! explanation.worlds[1].accepted &&
+          explanation.worlds[1].rejectionStage == "follow_suit" &&
+          explanation.worlds[1].rejectionReason.find("at most 1 cards in spades") != string::npos,
+      "the explanation trace should reject world 1 at the explicit follow-suit stage with the derived max-length reason");
+    Check(! explanation.worlds[2].accepted &&
+          explanation.worlds[2].rejectionStage == "current_trick" &&
+          explanation.worlds[2].rejectionReason.find("requires East to hold Q of hearts") != string::npos,
+      "the explanation trace should reject world 2 at the current-trick stage because the required discard card is absent");
+    Check(! explanation.worlds[3].accepted &&
+          explanation.worlds[3].rejectionStage == "known_cards" &&
+          explanation.worlds[3].rejectionReason.find("North must hold A of spades") != string::npos,
+      "the explanation trace should reject world 3 immediately on the known-card requirement");
+  }
+
+
+  static void TestHistoryDerivedCandidateWorldConstruction()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+    Check(constructed.hiddenCards.size() == 4,
+      "history-derived construction should collect all hidden East/West cards into a candidate pool");
+    Check(constructed.worlds.size() == 2,
+      "history-derived construction should use played-card ownership to reduce the hidden-seat candidate pool to the two heart-swap worlds");
+    Check(constructed.visibleSeedWorld.suits[SEAT_EAST][SUIT_SPADES].empty() &&
+          constructed.visibleSeedWorld.suits[SEAT_WEST][SUIT_HEARTS].empty(),
+      "history-derived construction should clear hidden-seat cards from the visible partial-information seed");
+
+    bool sawEastHeartQ = false;
+    bool sawEastHeartT = false;
+    for (unsigned i = 0; i < constructed.worlds.size(); i++)
+    {
+      Check(WorldHasCard(constructed.worlds[i], SEAT_EAST, SUIT_SPADES, 'K'),
+        "history-derived construction should pin East's played spade to East in every constructed world");
+      Check(WorldHasCard(constructed.worlds[i], SEAT_WEST, SUIT_SPADES, 'J'),
+        "history-derived construction should pin West's played spade to West in every constructed world");
+      if (WorldHasCard(constructed.worlds[i], SEAT_EAST, SUIT_HEARTS, 'Q'))
+        sawEastHeartQ = true;
+      if (WorldHasCard(constructed.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+    }
+    Check(sawEastHeartQ && sawEastHeartT,
+      "history-derived construction should leave the unplayed heart ownership unresolved across the two constructed worlds");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
+    Check(mask == WorldMask(2, 0x3ULL),
+      "without extra hidden-card location evidence the staged filtering pipeline should keep both history-derived heart-swap worlds");
+    Check(stats.candidateWorldCount == 2,
+      "world-generation stats should report the history-derived constructed candidate count");
+    Check(stats.afterKnownCardCount == 2,
+      "without explicit hidden-seat known-card constraints the known-card stage should leave both constructed heart-swap worlds intact");
+    Check(stats.afterPlayHistoryCount == 2,
+      "both constructed heart-swap worlds should replay the recorded trick history legally");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(constructed.worlds, info);
+    Check(explanation.worlds.size() == 2,
+      "world-generation explanation should cover each history-derived candidate world");
+    Check(explanation.worlds[0].accepted,
+      "the first history-derived candidate world should survive when no extra hidden-card evidence distinguishes the heart swap");
+    Check(explanation.worlds[1].accepted,
+      "the second history-derived candidate world should also survive when no extra hidden-card evidence distinguishes the heart swap");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesKnownCardLocation()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local known-card pruning the hidden-seat pool should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local known-card pruning should collapse the hidden-seat pool to the one world where East holds the known heart queen");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constrained.worlds[0], SEAT_WEST, SUIT_HEARTS, 'T'),
+      "constructor-local known-card pruning should assign the required hidden heart queen to East before later filtering");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local known-card pruning should also survive the later staged filters");
+    Check(stats.afterKnownCardCount == 1,
+      "later known-card filtering should see only the constructor-pruned known-card survivor");
+    Check(stats.afterPlayHistoryCount == 1,
+      "the constructor-pruned known-card survivor should still replay the recorded trick history legally");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesKnownCardExclusion()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local known-card exclusion pruning the hidden-seat pool should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.knownCardConstraints.push_back(
+      WorldConstraint::NotHasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local known-card exclusion pruning should collapse the hidden-seat pool to the one world where East cannot still hold the heart queen");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'T') &&
+          WorldHasCard(constrained.worlds[0], SEAT_WEST, SUIT_HEARTS, 'Q'),
+      "constructor-local known-card exclusion pruning should remove the forbidden hidden heart-queen assignment before later filtering");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local known-card exclusion pruning should also survive the later staged filters");
+    Check(stats.afterKnownCardCount == 1,
+      "later known-card filtering should see only the constructor-pruned exclusion survivor");
+    Check(stats.afterPlayHistoryCount == 1,
+      "the constructor-pruned exclusion survivor should still replay the recorded trick history legally");
+  }
+
+
+  static void TestHistoryDerivedConstructionExplanationTracksCardLocationNarrowing()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.knownCardConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, info);
+    Check(explanation.stats.rawAssignmentCount == 6,
+      "constructor-local explanation should report the full six-world hidden-card assignment pool before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 2,
+      "constructor-local explanation should report ownership pinning reducing the heart-swap fixture from six worlds to two");
+    Check(explanation.stats.afterCardLocationCount == 1,
+      "constructor-local explanation should report known-card location pruning collapsing the heart-swap fixture to one world before later constructor checks");
+    Check(explanation.stats.afterConstructorLengthCount == 1 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local explanation should preserve the lone known-card survivor through length, HCP, and balanced constructor stages when no later constructor pruning applies");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local explanation should report one final surviving world after card-location narrowing leaves nothing further to prune");
+    Check(explanation.worlds.size() == 1 && explanation.worlds[0].accepted,
+      "constructor-local explanation should include the lone surviving known-card world as accepted");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesPartnershipHCPRange()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_SOUTH);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local partnership HCP pruning the East-versus-South heart-honor swap should keep both legal worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinHCP(SEAT_EAST, 6));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxHCP(SEAT_EAST, 6));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local partnership HCP-range pruning should keep only the world where East/West reach the exact combined HCP target");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          ! WorldHasCard(constrained.worlds[0], SEAT_SOUTH, SUIT_HEARTS, 'Q'),
+      "constructor-local partnership HCP-range pruning should keep the world where East receives the hidden heart queen and East/West reach six combined HCP");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local partnership HCP-range pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned partnership-HCP survivor");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorHcp = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_hcp" &&
+               explanation.worlds[i].rejectionReason.find("East/West partnership must hold at least 6 HCP") != string::npos)
+      {
+        rejectedAtConstructorHcp++;
+      }
+    }
+    Check(explanation.stats.rawAssignmentCount == 6,
+      "constructor-local partnership HCP explanation should report the six raw East/South hidden-card assignments before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 2 &&
+          explanation.stats.afterCardLocationCount == 2,
+      "constructor-local partnership HCP explanation should report ownership pinning reducing the pool to the two heart-honor swap worlds before HCP pruning");
+    Check(explanation.stats.afterConstructorLengthCount == 2 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local partnership HCP explanation should keep both ownership-consistent worlds through length pruning, then narrow to one at the HCP stage");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local partnership HCP explanation should report the two ownership-consistent worlds collapsing to one after constructor HCP pruning");
+    Check(acceptedWorlds == 1 && rejectedAtConstructorHcp == 1,
+      "constructor-local partnership HCP explanation should show one surviving world and one constructor_hcp rejection at the partnership HCP floor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesPartnershipLengthRange()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.Q.. 2..8. J.T9..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_SOUTH);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local partnership length pruning the East-versus-South heart swap should keep both legal worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 2));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxLength(SEAT_EAST, SUIT_HEARTS, 2));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local partnership length-range pruning should keep only the world where East/West reach the exact combined heart-fit target");
+    Check(! WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constrained.worlds[0], SEAT_SOUTH, SUIT_HEARTS, 'Q'),
+      "constructor-local partnership length-range pruning should keep the world where East does not receive the extra hidden heart and East/West stay at exactly two hearts");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local partnership length-range pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned partnership-length survivor");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorLength = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length" &&
+               explanation.worlds[i].rejectionReason.find("East/West partnership must hold at most 2 cards in hearts") != string::npos)
+      {
+        rejectedAtConstructorLength++;
+      }
+    }
+    Check(explanation.stats.rawAssignmentCount == 6,
+      "constructor-local partnership length explanation should report the six raw East/South hidden-card assignments before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 2 &&
+          explanation.stats.afterCardLocationCount == 2,
+      "constructor-local partnership length explanation should report ownership pinning reducing the pool to the two heart-versus-diamond swap worlds before length pruning");
+    Check(explanation.stats.afterConstructorLengthCount == 1 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local partnership length explanation should narrow to one world at the length stage and preserve that survivor through later constructor stages");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local partnership length explanation should report the two ownership-consistent worlds collapsing to one after constructor length pruning");
+    Check(acceptedWorlds == 1 && rejectedAtConstructorLength == 1,
+      "constructor-local partnership length explanation should show one surviving world and one constructor_length rejection at the partnership fit ceiling");
+  }
+
+
+  static void TestHistoryDerivedConstructionExplanationTracksPartnershipRangeStageCounts()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.Q.Q. 2..8. J...");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_SOUTH);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinLength(SEAT_EAST, SUIT_HEARTS, 1));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxLength(SEAT_EAST, SUIT_HEARTS, 1));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMinHCP(SEAT_EAST, 6));
+    info.biddingConstraints.push_back(
+      WorldConstraint::PartnershipMaxHCP(SEAT_EAST, 6));
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, info);
+    Check(explanation.stats.rawAssignmentCount == 10,
+      "constructor-stage accounting should report the full ten raw East/South hidden-card assignments before ownership evidence is applied in the mixed partnership-range fixture");
+    Check(explanation.stats.afterOwnershipCount == 3,
+      "constructor-stage accounting should report ownership pinning reducing the mixed partnership-range fixture to three candidate worlds");
+    Check(explanation.stats.afterCardLocationCount == 3,
+      "constructor-stage accounting should preserve all three ownership-consistent worlds before partnership-range pruning when no extra card-location evidence applies");
+    Check(explanation.stats.afterConstructorLengthCount == 2,
+      "constructor-stage accounting should show partnership length-range pruning reducing the mixed fixture from three worlds to two");
+    Check(explanation.stats.afterConstructorHCPCount == 1,
+      "constructor-stage accounting should show partnership HCP-range pruning reducing the mixed fixture from two worlds to one");
+    Check(explanation.stats.afterConstructorBalancedCount == 1 &&
+          explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-stage accounting should preserve the lone mixed partnership-range survivor through the balanced and final constructor checkpoints");
+
+    unsigned rejectedAtLength = 0;
+    unsigned rejectedAtHcp = 0;
+    unsigned acceptedWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length")
+        rejectedAtLength++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_hcp")
+        rejectedAtHcp++;
+    }
+    Check(explanation.worlds.size() == 3,
+      "constructor-stage accounting should enumerate the three ownership-consistent worlds in the mixed partnership-range fixture");
+    Check(acceptedWorlds == 1 && rejectedAtLength == 1 && rejectedAtHcp == 1,
+      "constructor-stage accounting should show one world rejected at partnership length, one at partnership HCP, and one final survivor in the mixed fixture");
+  }
+
+
+  static void TestHistoryDerivedConstructionExplanationTracksFollowSuitRejections()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT.J96 842.KQ2.KQ2.KQ72 T765.54.654.T");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState info;
+    info.deriveFollowSuitConstraints = true;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '8')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'T')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'J')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'T')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, '8')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '6')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '7')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_HEARTS, '5')));
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, info);
+    Check(explanation.stats.rawAssignmentCount == 35,
+      "constructor-local explanation should report the full thirty-five-world visible-seed assignment pool before ownership evidence is applied");
+    Check(explanation.stats.afterOwnershipCount == 20,
+      "constructor-local explanation should report ownership pinning reducing the visible-seed pool from thirty-five worlds to twenty");
+    Check(explanation.stats.afterCardLocationCount == 20,
+      "constructor-local explanation should preserve the twenty ownership-consistent visible-seed worlds when no extra card-location constraints are present");
+    Check(explanation.stats.afterConstructorConstraintCount == 3 &&
+          explanation.stats.finalWorldCount == 3,
+      "constructor-local explanation should report the longer visible-seed history narrowing from twenty worlds to three before later staged filtering");
+
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorLength = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length")
+        rejectedAtConstructorLength++;
+    }
+    Check(explanation.worlds.size() == 20,
+      "constructor-local explanation should enumerate every visible-seed world that survives ownership and card-location narrowing");
+    Check(acceptedWorlds == 3 && rejectedAtConstructorLength == 17,
+      "constructor-local explanation should show the longer visible-seed history splitting twenty ownership-consistent worlds into three survivors and seventeen constructor-length rejections");
+    Check(explanation.worlds[0].steps[0].stage == "constructor_length",
+      "constructor-local explanation should begin with the constructor-length stage for visible-seed follow-suit pruning");
+  }
+
+
+  static void TestHistoryDerivedConstructionRespectsCurrentTrick()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_HEARTS, '9')));
+    info.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_HEARTS,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+    Check(constructed.worlds.size() == 1,
+      "history-derived construction should use current-trick ownership as well as prior play to resolve the remaining hidden heart location");
+    Check(WorldHasCard(constructed.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constructed.worlds[0], SEAT_WEST, SUIT_HEARTS, 'T'),
+      "history-derived construction should pin the current-trick heart to East and leave West with the other hidden heart");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the uniquely constructed world should survive both play-history and current-trick replay filtering");
+    Check(stats.afterCurrentTrickCount == 1,
+      "current-trick replay should confirm the uniquely constructed world after seed-based hidden-seat construction");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingCardLocation()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState info;
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    info.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    info.biddingConstraints.push_back(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'));
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+    Check(constructed.worlds.size() == 1,
+      "constructor-local bidding card-location pruning should collapse the hidden-seat pool to the one world where East holds the bid-implied heart queen");
+    Check(WorldHasCard(constructed.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q') &&
+          WorldHasCard(constructed.worlds[0], SEAT_WEST, SUIT_HEARTS, 'T'),
+      "constructor-local bidding card-location pruning should assign the constrained heart queen to East before later filtering");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constructed.worlds, info, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local bidding card-location pruning should also survive the later staged filters");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingLength()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.QT.. 2... J..98.");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 6,
+      "without constructor-local bidding length pruning the hidden-seat pool should keep all six legal heart-versus-diamond assignment worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_HEARTS, 2));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local bidding length pruning should collapse the hidden-seat pool to the one world where East keeps both bid-implied hearts");
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(WorldSuitLength(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS) >= 2,
+        "every world surviving constructor-local bidding length pruning should satisfy the East heart-length lower bound immediately");
+    }
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "worlds surviving constructor-local bidding length pruning should also survive the later staged filters unchanged");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned worlds for the hidden-seat length-bounded case");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingMinHCP()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local HCP pruning the hidden-seat pool should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 5));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local MinHCP pruning should keep only the world where East receives enough honor strength");
+    Check(WorldHighCardPoints(constrained.worlds[0], SEAT_EAST) >= 5,
+      "the world surviving constructor-local MinHCP pruning should satisfy East's minimum honor-point bound immediately");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'Q'),
+      "constructor-local MinHCP pruning should keep the world where East receives the hidden heart queen");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local MinHCP pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned MinHCP survivor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingMaxHCP()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local HCP pruning the hidden-seat pool should keep both legal heart-swap worlds for the MaxHCP case as well");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 3));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local MaxHCP pruning should keep only the world where East stays under the honor-point cap");
+    Check(WorldHighCardPoints(constrained.worlds[0], SEAT_EAST) <= 3,
+      "the world surviving constructor-local MaxHCP pruning should satisfy East's maximum honor-point bound immediately");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'T'),
+      "constructor-local MaxHCP pruning should keep the world where East does not receive the hidden heart queen");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local MaxHCP pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned MaxHCP survivor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingBalancedShape()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:A3.AKT7.AKT7.A32 QJ98.QJ98.QJ9.QJ K2.65432.65432.K T7654..8.T987654");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    const auto addHasCards =
+      [&](const int seat, const int suit, const string& ranks)
+      {
+        for (unsigned i = 0; i < ranks.size(); i++)
+        {
+          unconstrainedInfo.biddingConstraints.push_back(
+            WorldConstraint::HasCard(seat, suit, ranks[i]));
+        }
+      };
+
+    addHasCards(SEAT_EAST, SUIT_SPADES, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_HEARTS, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_DIAMONDS, "QJ9");
+    addHasCards(SEAT_EAST, SUIT_CLUBS, "Q");
+    addHasCards(SEAT_WEST, SUIT_SPADES, "7654");
+    addHasCards(SEAT_WEST, SUIT_DIAMONDS, "8");
+    addHasCards(SEAT_WEST, SUIT_CLUBS, "T987654");
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local balanced pruning the full hidden-hand fixture should keep the two legal ambiguous spade-versus-club worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local balanced pruning should keep only the world where East can still reach a balanced 13-card shape");
+    Check(WorldHasBalancedShape(constrained.worlds[0], SEAT_EAST),
+      "the world surviving constructor-local balanced pruning should give East a balanced full-hand shape");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_CLUBS, 'J'),
+      "constructor-local balanced pruning should keep the world where East receives the ambiguous club instead of the ambiguous spade");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local balanced pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned balanced-shape survivor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingHandType()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:... AKQJ9T.987.65.43 ... 8765.654.432.AK2");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    const auto addHasCards =
+      [&](const int seat, const int suit, const string& ranks)
+      {
+        for (unsigned i = 0; i < ranks.size(); i++)
+        {
+          unconstrainedInfo.biddingConstraints.push_back(
+            WorldConstraint::HasCard(seat, suit, ranks[i]));
+        }
+      };
+
+    addHasCards(SEAT_EAST, SUIT_SPADES, "AKQJ9");
+    addHasCards(SEAT_EAST, SUIT_HEARTS, "987");
+    addHasCards(SEAT_EAST, SUIT_DIAMONDS, "65");
+    addHasCards(SEAT_EAST, SUIT_CLUBS, "43");
+    addHasCards(SEAT_WEST, SUIT_SPADES, "8765");
+    addHasCards(SEAT_WEST, SUIT_HEARTS, "654");
+    addHasCards(SEAT_WEST, SUIT_DIAMONDS, "432");
+    addHasCards(SEAT_WEST, SUIT_CLUBS, "AK");
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local hand-type pruning the full hidden-hand fixture should keep the two legal ambiguous spade-versus-club worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_ONE_SUITER));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local hand-type pruning should keep only the world where East remains a one-suiter");
+    Check(WorldHasHandType(constrained.worlds[0], SEAT_EAST, HAND_TYPE_ONE_SUITER),
+      "the world surviving constructor-local hand-type pruning should classify East as a one-suiter");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_SPADES, 'T'),
+      "constructor-local hand-type pruning should keep the world where East receives the ambiguous spade instead of the ambiguous club");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    Check(explanation.stats.afterConstructorLengthCount == 2 &&
+          explanation.stats.afterConstructorHCPCount == 2 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local hand-type explanation should preserve both full-hand candidates through length and HCP stages, then narrow to one at the hand-type stage");
+  }
+
+
+  static void TestHistoryDerivedConstructionHandTypeDefersOnIncompleteHands()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_ONE_SUITER));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 2,
+      "constructor-local hand-type pruning should defer on incomplete hidden hands instead of pruning the short toy fixture early");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(2, 0x0ULL),
+      "the later full bidding filter should still reject incomplete short hidden-hand worlds for a hand-type requirement");
+    Check(stats.afterBiddingCount == 0,
+      "later bidding-stage filtering should reject every incomplete short hidden-hand world under a hand-type requirement");
+  }
+
+
+  static void TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without balanced constraints the short hidden-seat fixture should keep both legal heart-swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 2,
+      "constructor-local balanced pruning should defer on incomplete hidden hands instead of pruning the short toy fixture early");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(2, 0x0ULL),
+      "the later full bidding filter should still reject the incomplete short hidden-hand worlds for a balanced-shape requirement");
+    Check(stats.afterBiddingCount == 0,
+      "later bidding-stage filtering should reject every incomplete short hidden-hand world under a balanced-shape requirement");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesDerivedFollowSuitLength()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A9... KQ.JT.. 2... J..98.");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 6,
+      "without constructor-local follow-suit pruning the longer post-lead hidden-seat fixture should keep all six legal queen-plus-red-card assignment worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 3,
+      "the later staged filters should narrow the unconstrained longer-history pool to the three worlds where East cannot still hold a hidden spade after discarding on the second spade lead");
+    Check(stagedStats.afterFollowSuitCount == 3,
+      "the explicit follow-suit stage should account for the longer-history narrowing before current-trick replay is checked");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 3,
+      "constructor-local derived follow-suit pruning should reduce the longer post-lead hidden-seat pool to the same three worlds before later filtering");
+
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(! WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_SPADES, 'Q'),
+        "every world surviving constructor-local follow-suit pruning should move the remaining hidden spade queen away from East after the second-round discard");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every world surviving constructor-local follow-suit pruning should still pin East's current-trick heart discard to East");
+    }
+
+    bool sawEastHeartT = false;
+    bool sawEastDiamond9 = false;
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '9'))
+        sawEastDiamond9 = true;
+    }
+    Check(sawEastHeartT && sawEastDiamond9,
+      "constructor-local follow-suit pruning should still leave multiple longer-history red-card assignments unresolved across the surviving worlds");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(3, 0x7ULL),
+      "worlds surviving constructor-local follow-suit pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 3,
+      "world-generation stats should report the constructor-pruned three-world pool for the longer-history fixture");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned rejectedAtFollowSuit = 0;
+    unsigned acceptedWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "follow_suit")
+        rejectedAtFollowSuit++;
+    }
+    Check(acceptedWorlds == 3 && rejectedAtFollowSuit == 3,
+      "world-generation explanation should show the longer-history pool splitting into three accepted worlds and three follow-suit rejections");
+  }
+
+
+  static void TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT7.J96 842.KQ2.KQ2.KQ72 T765.54.654.T4");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.hiddenCards.size() == 5,
+      "visible-seed history-derived construction should infer the five-card hidden East/West complement from the full deck");
+    Check(unconstrained.worlds.size() == 6,
+      "without derived follow-suit pruning the visible-seed longer-history fixture should keep all six legal allocations of the remaining four ambiguous hidden cards");
+    Check(unconstrained.visibleSeedWorld.suits[SEAT_EAST][SUIT_SPADES] == "J" &&
+          unconstrained.visibleSeedWorld.suits[SEAT_WEST][SUIT_CLUBS] == "T4",
+      "visible-seed construction should preserve already-known hidden-seat cards instead of clearing them like curated full hidden hands");
+
+    bool sawHiddenSpadeQ = false;
+    bool sawPinnedHeartJ = false;
+    bool sawHiddenClub5 = false;
+    for (unsigned i = 0; i < unconstrained.hiddenCards.size(); i++)
+    {
+      if (unconstrained.hiddenCards[i].card == BridgeMove(SUIT_SPADES, 'Q'))
+        sawHiddenSpadeQ = true;
+      if (unconstrained.hiddenCards[i].card == BridgeMove(SUIT_HEARTS, 'J') &&
+          unconstrained.hiddenCards[i].allowedSeatsMask == SeatBit(SEAT_EAST))
+      {
+        sawPinnedHeartJ = true;
+      }
+      if (unconstrained.hiddenCards[i].card == BridgeMove(SUIT_CLUBS, '5'))
+        sawHiddenClub5 = true;
+    }
+    Check(sawHiddenSpadeQ && sawPinnedHeartJ && sawHiddenClub5,
+      "visible-seed construction should infer the missing hidden-card complement and still pin current-trick ownership for cards already shown by play history");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 3,
+      "later staged filtering should narrow the visible-seed longer-history pool to the three worlds where East cannot still hold the hidden spade queen after discarding on the second spade lead");
+    Check(stagedStats.afterFollowSuitCount == 3,
+      "the explicit follow-suit stage should report the visible-seed longer-history narrowing before current-trick replay is checked");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 3,
+      "constructor-local visible-seed follow-suit pruning should reduce the inferred hidden-card pool to the same three worlds before later filtering");
+
+    bool sawEastHeartT = false;
+    bool sawEastDiamond9 = false;
+    bool sawEastClub5 = false;
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(! WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_SPADES, 'Q'),
+        "every visible-seed world surviving constructor-local follow-suit pruning should move the hidden spade queen away from East after the second-round discard");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every visible-seed world surviving constructor-local follow-suit pruning should still pin East's current-trick heart discard to East");
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '9'))
+        sawEastDiamond9 = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_CLUBS, '5'))
+        sawEastClub5 = true;
+    }
+    Check(sawEastHeartT && sawEastDiamond9 && sawEastClub5,
+      "visible-seed construction should still leave multiple longer-history red-and-club assignments unresolved across the surviving inferred worlds");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(3, 0x7ULL),
+      "visible-seed worlds surviving constructor-local follow-suit pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 3,
+      "world-generation stats should report the constructor-pruned three-world inferred visible-seed pool for the longer-history fixture");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned rejectedAtFollowSuit = 0;
+    unsigned acceptedWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "follow_suit")
+        rejectedAtFollowSuit++;
+    }
+    Check(acceptedWorlds == 3 && rejectedAtFollowSuit == 3,
+      "world-generation explanation should show the inferred visible-seed longer-history pool splitting into three accepted worlds and three follow-suit rejections");
+  }
+
+
+  static void TestHistoryDerivedConstructionSupportsModeratelyLargerVisibleSeedPools()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT.J96 842.KQ2.KQ2.KQ72 T765.54.654.T");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.hiddenCards.size() == 7,
+      "the moderate visible-seed fixture should infer a seven-card hidden East/West complement from the full deck");
+    Check(unconstrained.worlds.size() == 20,
+      "without constructor-local follow-suit pruning the moderate visible-seed fixture should keep all twenty legal assignments of the six remaining ambiguous hidden cards after East's pinned discard card");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats constrainedStats;
+    const WorldMask constrainedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &constrainedStats);
+    Check(constrainedMask.PopCount() == 10,
+      "the staged filters should narrow the moderate visible-seed pool from twenty worlds to ten once East's second-round spade discard rules out the hidden queen of spades");
+    Check(constrainedStats.afterFollowSuitCount == 10,
+      "follow-suit stats should report the moderate visible-seed narrowing before later stages");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 10,
+      "constructor-local follow-suit pruning should reduce the moderate visible-seed pool to the same ten worlds before later filtering");
+
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(! WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_SPADES, 'Q'),
+        "every world surviving constructor-local pruning in the moderate visible-seed fixture should move the hidden spade queen away from East");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every world surviving constructor-local pruning in the moderate visible-seed fixture should keep East's current-trick heart discard pinned to East");
+    }
+
+    BridgeInformationState sampledA(constrainedInfo);
+    sampledA.sampleLimit = 4;
+    sampledA.samplingSeed = 2;
+    WorldGenerationStats sampledAStats;
+    const WorldMask sampleA = GeneratePossibleWorlds(constrained.worlds,
+      sampledA, &sampledAStats);
+    const WorldMask sampleARepeat = GeneratePossibleWorlds(constrained.worlds,
+      sampledA, NULL);
+
+    BridgeInformationState sampledB(sampledA);
+    sampledB.samplingSeed = 5;
+    WorldGenerationStats sampledBStats;
+    const WorldMask sampleB = GeneratePossibleWorlds(constrained.worlds,
+      sampledB, &sampledBStats);
+
+    Check(sampleA == sampleARepeat,
+      "deterministic sampling over the moderate visible-seed pool should reproduce the same sampled world mask for the same seed");
+    Check(sampleA.PopCount() == 4,
+      "deterministic sampling over the moderate visible-seed pool should cap the surviving worlds at the configured sample limit");
+    Check(sampleB.PopCount() == 4,
+      "deterministic sampling over the moderate visible-seed pool should retain the requested number of worlds for a different seed as well");
+    Check(! (sampleA == sampleB),
+      "deterministic sampling over the moderate visible-seed pool should allow the sampling seed to shift which canonical worlds survive");
+    Check(sampledAStats.afterFollowSuitCount == 10,
+      "sampling should leave the moderate visible-seed post-follow-suit count measurable before downselection");
+    Check(sampledAStats.afterSamplingCount == 4 && sampledAStats.sampledOutWorlds == 6,
+      "sampling stats should report the moderate visible-seed pool shrinking from ten constructor-pruned worlds to four retained worlds");
+    Check(sampledBStats.finalWorldCount == 4,
+      "the final world count for the moderate visible-seed sampled pool should equal the configured sample limit");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(constrained.worlds, sampledA);
+    unsigned acceptedWorlds = 0;
+    unsigned sampledOutWorlds = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "sampling")
+        sampledOutWorlds++;
+    }
+    Check(acceptedWorlds == 4 && sampledOutWorlds == 6,
+      "world-generation explanation should show the moderate visible-seed constructor-pruned pool retaining four deterministic samples and rejecting six worlds only at the sampling stage");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesLongerVisibleSeedHistory()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:AK93.A93.A83.A83 J.876.JT.J96 842.KQ2.KQ2.KQ72 T765.54.654.T");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+    spec.inferHiddenCardsFromVisibleHands = true;
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '5')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, '9')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '8')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'T')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'J')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, 'T')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_CLUBS, '8')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '6')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_CLUBS, '7')));
+    unconstrainedInfo.currentTrickHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_CLUBS,
+      BridgeMove(SUIT_HEARTS, '5')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.hiddenCards.size() == 7,
+      "the longer visible-seed history fixture should still infer the seven-card hidden East/West complement from the full deck");
+    Check(unconstrained.worlds.size() == 20,
+      "without constructor-local follow-suit pruning the longer visible-seed history fixture should keep the full twenty-world hidden-card pool");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 3,
+      "the staged filters should narrow the longer visible-seed history pool from twenty worlds to three once East's second spade discard and West's second club discard are both enforced");
+    Check(stagedStats.afterFollowSuitCount == 3,
+      "the explicit follow-suit stage should account for the entire longer-history narrowing before replay legality is checked");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 3,
+      "constructor-local follow-suit pruning should reduce the longer visible-seed history pool to the same three worlds before later filtering");
+
+    bool sawEastHeartT = false;
+    bool sawEastDiamond9 = false;
+    bool sawEastDiamond7 = false;
+    for (unsigned i = 0; i < constrained.worlds.size(); i++)
+    {
+      Check(WorldHasCard(constrained.worlds[i], SEAT_WEST, SUIT_SPADES, 'Q'),
+        "every world surviving the longer-history constructor pruning should move the hidden spade queen to West after East discards on the second spade lead");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_CLUBS, '5') &&
+            WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_CLUBS, '4'),
+        "every world surviving the longer-history constructor pruning should move both hidden clubs to East after West discards on the second club lead");
+      Check(WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'J'),
+        "every world surviving the longer-history constructor pruning should still pin East's earlier heart discard to East");
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_HEARTS, 'T'))
+        sawEastHeartT = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '9'))
+        sawEastDiamond9 = true;
+      if (WorldHasCard(constrained.worlds[i], SEAT_EAST, SUIT_DIAMONDS, '7'))
+        sawEastDiamond7 = true;
+    }
+    Check(sawEastHeartT && sawEastDiamond9 && sawEastDiamond7,
+      "the longer-history constructor pruning should still leave a three-way ambiguity over East's last hidden red card after the black-suit deductions are applied");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(3, 0x7ULL),
+      "worlds surviving longer-history constructor pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 3,
+      "world-generation stats should report the constructor-pruned three-world longer-history pool");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtFollowSuit = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "follow_suit")
+        rejectedAtFollowSuit++;
+    }
+    Check(acceptedWorlds == 3 && rejectedAtFollowSuit == 17,
+      "world-generation explanation should show the longer visible-seed history splitting the twenty-world pool into three accepted worlds and seventeen follow-suit rejections");
+  }
+
+
+  static void TestDeterministicWorldSampling()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 765.8765.JT9.876 JT98.AKQ.432.AKQ 43.432.8765.5432"));
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 7654.876.JT9.876 JT98.AKQ.432.AKQ 3.5432.8765.5432"));
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543.876.JT.876 JT98.AKQ.432.AKQ .5432.98765.5432"));
+    worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543..JT987.876 JT98.AKQ.432.AKQ .8765432.65.5432"));
+
+    BridgeInformationState first;
+    first.sampleLimit = 2;
+    first.samplingSeed = 0;
+    WorldGenerationStats firstStats;
+    const WorldMask sampleA = GeneratePossibleWorlds(worlds, first, &firstStats);
+    const WorldMask sampleARepeat = GeneratePossibleWorlds(worlds, first, NULL);
+
+    BridgeInformationState second(first);
+    second.samplingSeed = 1;
+    WorldGenerationStats secondStats;
+    const WorldMask sampleB = GeneratePossibleWorlds(worlds, second, &secondStats);
+
+    Check(sampleA == sampleARepeat,
+      "deterministic sampling should reproduce the same sampled world mask for the same seed");
+    Check(sampleA.PopCount() == 2,
+      "deterministic sampling should cap the world mask at the configured sample limit");
+    Check(sampleB.PopCount() == 2,
+      "deterministic sampling should keep the requested number of worlds for a different seed as well");
+    Check(! (sampleA == sampleB),
+      "deterministic sampling should allow the seed to shift which canonical worlds are retained");
+    Check(firstStats.sampledOutWorlds == 2,
+      "deterministic sampling stats should report how many worlds were dropped by sample limiting");
+    Check(firstStats.afterSamplingCount == 2,
+      "deterministic sampling stats should record the post-sampling surviving world count");
+    Check(secondStats.finalWorldCount == 2,
+      "deterministic sampling should leave the final world count equal to the sample limit");
+  }
+
+
+  static void TestBridgeMoveGeneration()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_EAST;
+    state.leadSuit = SUIT_DIAMONDS;
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+
+    state.worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543.876.JT.876 JT98.AKQ.432.AKQ .5432.98765.5432"));
+    state.worlds.push_back(ParsePBNWorld(
+      "N:AKQ2.JT9.AKQ.JT9 76543..JT987.876 JT98.AKQ.432.AKQ .8765432.65.5432"));
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(moves.size() == 5,
+      "bridge move generation should union legal diamond plays across possible worlds");
+    Check(moves[0] == BridgeMove(SUIT_DIAMONDS, '7'),
+      "bridge move generation should include the lowest legal diamond from the union");
+    Check(moves[4] == BridgeMove(SUIT_DIAMONDS, 'J'),
+      "bridge move generation should include the highest legal diamond from the union");
+
+    const BridgeState afterD8 = PlayBridgeMove(state,
+      BridgeMove(SUIT_DIAMONDS, '8'));
+    Check(afterD8.possibleWorlds == WorldMask(2, 0x2ULL),
+      "playing D8 should eliminate the world where East could not legally play that diamond");
+    Check(afterD8.playerToMove == SEAT_SOUTH,
+      "bridge move generation should advance turn order after a play");
+    Check(afterD8.leadSuit == SUIT_DIAMONDS,
+      "bridge move generation should preserve the established lead suit within the trick");
+    Check(! WorldHasCard(afterD8.worlds[1], SEAT_EAST, SUIT_DIAMONDS, '8'),
+      "bridge move application should remove the played card from surviving worlds");
+
+    const vector<BridgeChild> children = ExpandBridgeChildren(state);
+    Check(children.size() == moves.size(),
+      "bridge child expansion should create one child per legal bridge move");
+    Check(children[1].move == BridgeMove(SUIT_DIAMONDS, '8'),
+      "bridge child expansion should preserve move ordering");
+    Check(children[1].state.possibleWorlds == WorldMask(2, 0x2ULL),
+      "bridge child expansion should carry the filtered possible-world mask into the child state");
+  }
+
+
+  static void TestBridgeSearchControl()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_NORTH;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+
+    state.worlds.push_back(ParsePBNWorld("N:A... K... 2... 3..."));
+    state.worlds.push_back(ParsePBNWorld("N:Q... K... A... 3..."));
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(moves.size() == 2,
+      "bridge search control should offer the union of North's possible opening leads");
+    Check(moves[0] == BridgeMove(SUIT_SPADES, 'Q'),
+      "bridge search control should order opening leads by rank");
+    Check(moves[1] == BridgeMove(SUIT_SPADES, 'A'),
+      "bridge search control should include the alternative opening lead");
+
+    BridgeState manual = PlayBridgeMove(state, BridgeMove(SUIT_SPADES, 'Q'));
+    manual = PlayBridgeMove(manual, BridgeMove(SUIT_SPADES, 'K'));
+    manual = PlayBridgeMove(manual, BridgeMove(SUIT_SPADES, 'A'));
+    manual = PlayBridgeMove(manual, BridgeMove(SUIT_SPADES, '3'));
+
+    Check(manual.currentTrick.empty(),
+      "bridge search control should clear the trick after the fourth card");
+    Check(manual.playerToMove == SEAT_SOUTH,
+      "bridge search control should advance to the trick winner after completion");
+    Check(manual.maxTricksWon == 1,
+      "bridge search control should count a won trick for the Max side");
+
+    const ParetoFront front = SearchBridgeState(state, 1);
+    Check(front.vectors.size() == 2,
+      "bridge search control should keep one sparse winning vector per viable opening lead");
+    Check(FrontContains(front, MakeBinaryOutcome("1x")),
+      "bridge search control should keep the lead that wins only in the first world");
+    Check(FrontContains(front, MakeBinaryOutcome("x1")),
+      "bridge search control should keep the lead that wins only in the second world");
+  }
+
+
+  static void TestBridgeRootReportThreeWorldContinuation()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_NORTH;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.trickLeader = SEAT_NORTH;
+    state.leadSuit = -1;
+    state.possibleWorlds = WorldMask(3, 0x7ULL);
+    state.worlds.push_back(ParsePBNWorld("N:2.K.. A.Q.. 3.2.. 4.3.."));
+    state.worlds.push_back(ParsePBNWorld("N:2.Q.. A.J.. 3.2.. 4.3.."));
+    state.worlds.push_back(ParsePBNWorld("N:2.J.. A.T.. 3.2.. 4.3.."));
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(moves.size() == 4,
+      "three-world continuation should expose one merged spade lead plus three world-specific heart leads");
+    Check(moves[0] == BridgeMove(SUIT_SPADES, '2'),
+      "three-world continuation should include the merged spade lead first");
+    Check(moves[1] == BridgeMove(SUIT_HEARTS, 'J') &&
+          moves[2] == BridgeMove(SUIT_HEARTS, 'Q') &&
+          moves[3] == BridgeMove(SUIT_HEARTS, 'K'),
+      "three-world continuation should include the three world-specific heart leads after the shared spade lead");
+
+    const BridgeRootReport report = AnalyzeBridgeRoot(state, 2);
+    Check(report.children.size() == 4,
+      "bridge root reporting should produce one child report per legal root move");
+
+    const ParetoFront rootFront = SearchBridgeState(state, 2);
+    Check(report.rootFront.vectors.size() == rootFront.vectors.size(),
+      "bridge root reporting should reproduce the same root front size as direct search");
+
+    OutcomeVector mergedSpade(3);
+    mergedSpade.valid = WorldMask(3, 0x7ULL);
+    mergedSpade.values[0] = 1;
+    mergedSpade.values[1] = 1;
+    mergedSpade.values[2] = 1;
+
+    OutcomeVector world0Heart(3);
+    world0Heart.valid = WorldMask(3, 0x1ULL);
+    world0Heart.values[0] = 1;
+
+    OutcomeVector world1Heart(3);
+    world1Heart.valid = WorldMask(3, 0x2ULL);
+    world1Heart.values[1] = 1;
+
+    OutcomeVector world2Heart(3);
+    world2Heart.valid = WorldMask(3, 0x4ULL);
+    world2Heart.values[2] = 1;
+
+    Check(FrontContains(report.rootFront, mergedSpade),
+      "bridge root reporting should preserve the merged three-world continuation front [1 1 1]");
+    Check(FrontContains(report.rootFront, world0Heart),
+      "bridge root reporting should preserve the world-0-only continuation front [1 x x]");
+    Check(FrontContains(report.rootFront, world1Heart),
+      "bridge root reporting should preserve the world-1-only continuation front [x 1 x]");
+    Check(FrontContains(report.rootFront, world2Heart),
+      "bridge root reporting should preserve the world-2-only continuation front [x x 1]");
+
+    bool sawMerged = false;
+    bool sawWorld0 = false;
+    bool sawWorld1 = false;
+    bool sawWorld2 = false;
+    for (unsigned i = 0; i < report.children.size(); i++)
+    {
+      const BridgeRootChildReport& child = report.children[i];
+      if (child.move == BridgeMove(SUIT_SPADES, '2'))
+      {
+        sawMerged = true;
+        Check(child.validWorlds == WorldMask(3, 0x7ULL),
+          "the shared spade lead should keep all three worlds valid after the deeper continuation");
+        Check(FrontContains(child.front, mergedSpade),
+          "the shared spade lead should yield the exact merged continuation front [1 1 1]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'K'))
+      {
+        sawWorld0 = true;
+        Check(child.validWorlds == WorldMask(3, 0x1ULL),
+          "the heart-K lead should isolate world 0 only");
+        Check(FrontContains(child.front, world0Heart),
+          "the heart-K lead should yield the world-0-only continuation front [1 x x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'Q'))
+      {
+        sawWorld1 = true;
+        Check(child.validWorlds == WorldMask(3, 0x2ULL),
+          "the heart-Q lead should isolate world 1 only");
+        Check(FrontContains(child.front, world1Heart),
+          "the heart-Q lead should yield the world-1-only continuation front [x 1 x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'J'))
+      {
+        sawWorld2 = true;
+        Check(child.validWorlds == WorldMask(3, 0x4ULL),
+          "the heart-J lead should isolate world 2 only");
+        Check(FrontContains(child.front, world2Heart),
+          "the heart-J lead should yield the world-2-only continuation front [x x 1]");
+      }
+    }
+
+    Check(sawMerged && sawWorld0 && sawWorld1 && sawWorld2,
+      "bridge root reporting should cover the merged branch and all three split branches in the three-world continuation");
+  }
+
+
+  static void TestBridgeMultiTrickDDSLeaf()
+  {
+    SetMaxThreads(0);
+
+    HandFileData data;
+    LoadHandFile(kAlphaMuPlayHandFile, data);
+    Check(data.number >= 1,
+      "alpha_mu_play.txt should provide at least one real DDS world for the multi-trick bridge test");
+
+    const int handno = 0;
+    BridgeState state;
+    state.worlds.push_back(ParsePBNWorld(data.dealList[handno].remainCards));
+    state.possibleWorlds = WorldMask(1, 0x1ULL);
+    state.playerToMove = data.dealList[handno].first;
+    state.maxSide = SeatSide(state.playerToMove);
+    state.trumpSuit = (data.dealList[handno].trump == 4 ? -1 :
+      data.dealList[handno].trump);
+    state.trickLeader = state.playerToMove;
+    state.leadSuit = -1;
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    Check(! moves.empty(),
+      "multi-trick bridge test should expose at least one legal opening move in the real DDS world");
+
+    OutcomeVector optimum(1);
+    optimum.valid = WorldMask(1, 0x1ULL);
+    optimum.values[0] = BestScore(data.futList[handno]);
+
+    const ParetoFront directLeaf = SearchBridgeState(state, 0);
+    Check(directLeaf.vectors.size() == 1,
+      "bridge DDS leaf evaluation should collapse to a single exact-score vector in a one-world state");
+    Check(FrontContains(directLeaf, optimum),
+      "bridge DDS leaf evaluation should match the golden FUT optimum on a real DDS world");
+
+    const ParetoFront front = SearchBridgeState(state, 1);
+    Check(front.vectors.size() == 1,
+      "one full searched trick plus a DDS bridge leaf should still collapse to a single exact-score vector in a one-world state");
+    Check(FrontContains(front, optimum),
+      "one full searched trick plus a DDS bridge leaf should preserve the golden FUT optimum on a real DDS world");
+
+
+    BridgeState multiLeafState;
+    multiLeafState.playerToMove = SEAT_NORTH;
+    multiLeafState.maxSide = 0;
+    multiLeafState.trumpSuit = -1;
+    multiLeafState.trickLeader = SEAT_NORTH;
+    multiLeafState.leadSuit = -1;
+    multiLeafState.possibleWorlds = WorldMask(2, 0x3ULL);
+    multiLeafState.worlds.push_back(ParsePBNWorld("N:A... K... 2... 3..."));
+    multiLeafState.worlds.push_back(ParsePBNWorld("N:Q... K... A... 3..."));
+
+    OutcomeVector multiLeafExact(2);
+    multiLeafExact.valid = WorldMask(2, 0x3ULL);
+    multiLeafExact.values[0] = ExactBridgeDDSScoreForWorld(multiLeafState, 0);
+    multiLeafExact.values[1] = ExactBridgeDDSScoreForWorld(multiLeafState, 1);
+    Check(multiLeafExact.values[0] == 1 && multiLeafExact.values[1] == 1,
+      "multi-world bridge DDS leaf should return the expected exact one-trick values before any searched continuation");
+
+    const ParetoFront multiLeafFront = SearchBridgeState(multiLeafState, 0);
+    Check(multiLeafFront.vectors.size() == 1,
+      "multi-world bridge DDS leaf evaluation should collapse to one exact vector before any searched continuation");
+    Check(FrontContains(multiLeafFront, multiLeafExact),
+      "multi-world bridge DDS leaf evaluation should match the direct DDS exact trick counts across surviving worlds");
+
+    BridgeState splitState;
+    splitState.playerToMove = SEAT_NORTH;
+    splitState.maxSide = 0;
+    splitState.trumpSuit = -1;
+    splitState.trickLeader = SEAT_EAST;
+    splitState.leadSuit = SUIT_HEARTS;
+    splitState.possibleWorlds = WorldMask(2, 0x3ULL);
+    splitState.currentTrick.push_back(BridgeMove(SUIT_HEARTS, 'K'));
+    splitState.currentTrick.push_back(BridgeMove(SUIT_HEARTS, 'T'));
+    splitState.currentTrick.push_back(BridgeMove(SUIT_HEARTS, 'J'));
+    splitState.currentTrickPlayers.push_back(SEAT_EAST);
+    splitState.currentTrickPlayers.push_back(SEAT_SOUTH);
+    splitState.currentTrickPlayers.push_back(SEAT_WEST);
+    splitState.worlds.push_back(ParsePBNWorld("N:K2.A.. J3... A4... Q5..."));
+    splitState.worlds.push_back(ParsePBNWorld("N:A2.Q.. Q3... K4... J5..."));
+
+    const vector<BridgeMove> splitMoves = GenerateBridgeMoves(splitState);
+    Check(splitMoves.size() == 2,
+      "multi-world bridge DDS continuation should expose exactly the two world-distinguishing heart plays");
+    Check(splitMoves[0] == BridgeMove(SUIT_HEARTS, 'Q'),
+      "multi-world bridge DDS continuation should include the world-1 heart completion");
+    Check(splitMoves[1] == BridgeMove(SUIT_HEARTS, 'A'),
+      "multi-world bridge DDS continuation should include the world-0 heart completion");
+
+    const ParetoFront splitDirectLeaf = SearchBridgeState(splitState, 0);
+    OutcomeVector splitLeaf(2);
+    splitLeaf.valid = WorldMask(2, 0x3ULL);
+    splitLeaf.values[0] = 3;
+    splitLeaf.values[1] = 2;
+    Check(splitDirectLeaf.vectors.size() == 1,
+      "partial-trick bridge DDS leaf evaluation should collapse to one exact vector before any searched continuation");
+    Check(FrontContains(splitDirectLeaf, splitLeaf),
+      "partial-trick bridge DDS leaf evaluation should match the exact multi-world continuation trick counts across surviving worlds");
+
+    const ParetoFront splitContinuation = SearchBridgeState(splitState, 2);
+    OutcomeVector world0Only(2);
+    world0Only.valid = WorldMask(2, 0x1ULL);
+    world0Only.values[0] = 3;
+    OutcomeVector world1Only(2);
+    world1Only.valid = WorldMask(2, 0x2ULL);
+    world1Only.values[1] = 2;
+
+    Check(splitContinuation.vectors.size() == 2,
+      "multi-world bridge DDS continuation should keep two sparse exact-score vectors after the searched continuation");
+    Check(FrontContains(splitContinuation, world0Only),
+      "multi-world bridge DDS continuation should preserve the world-0-only exact continuation [3 x]");
+    Check(FrontContains(splitContinuation, world1Only),
+      "multi-world bridge DDS continuation should preserve the world-1-only exact continuation [x 2]");
+
+    BridgeState threeWorldState;
+    threeWorldState.playerToMove = SEAT_NORTH;
+    threeWorldState.maxSide = 0;
+    threeWorldState.trumpSuit = -1;
+    threeWorldState.trickLeader = SEAT_NORTH;
+    threeWorldState.leadSuit = -1;
+    threeWorldState.possibleWorlds = WorldMask(3, 0x7ULL);
+    threeWorldState.worlds.push_back(ParsePBNWorld("N:2.K.. A.Q.. 3.2.. 4.3.."));
+    threeWorldState.worlds.push_back(ParsePBNWorld("N:2.Q.. A.J.. 3.2.. 4.3.."));
+    threeWorldState.worlds.push_back(ParsePBNWorld("N:2.J.. A.T.. 3.2.. 4.3.."));
+
+    const vector<BridgeMove> threeWorldMoves = GenerateBridgeMoves(threeWorldState);
+    Check(threeWorldMoves.size() == 4,
+      "three-world bridge DDS continuation should expose one shared spade lead and three world-specific heart leads");
+
+    const BridgeRootReport threeWorldReport = AnalyzeBridgeRoot(threeWorldState, 1);
+    Check(threeWorldReport.children.size() == 4,
+      "three-world bridge DDS continuation should report one root child per legal lead before DDS handoff");
+
+    const ParetoFront threeWorldFront = SearchBridgeState(threeWorldState, 1);
+    Check(threeWorldReport.rootFront.vectors.size() == threeWorldFront.vectors.size(),
+      "three-world bridge DDS continuation root reporting should match the direct DDS-backed root front size");
+
+    OutcomeVector mergedThreeWorld(3);
+    mergedThreeWorld.valid = WorldMask(3, 0x7ULL);
+    mergedThreeWorld.values[0] = 1;
+    mergedThreeWorld.values[1] = 1;
+    mergedThreeWorld.values[2] = 1;
+
+    OutcomeVector threeWorld0Only(3);
+    threeWorld0Only.valid = WorldMask(3, 0x1ULL);
+    threeWorld0Only.values[0] = 1;
+
+    OutcomeVector threeWorld1Only(3);
+    threeWorld1Only.valid = WorldMask(3, 0x2ULL);
+    threeWorld1Only.values[1] = 1;
+
+    OutcomeVector threeWorld2Only(3);
+    threeWorld2Only.valid = WorldMask(3, 0x4ULL);
+    threeWorld2Only.values[2] = 1;
+
+    Check(FrontContains(threeWorldFront, mergedThreeWorld),
+      "three-world bridge DDS continuation should preserve the merged DDS-backed root front [1 1 1]");
+    Check(FrontContains(threeWorldFront, threeWorld0Only),
+      "three-world bridge DDS continuation should preserve the world-0-only DDS-backed root front [1 x x]");
+    Check(FrontContains(threeWorldFront, threeWorld1Only),
+      "three-world bridge DDS continuation should preserve the world-1-only DDS-backed root front [x 1 x]");
+    Check(FrontContains(threeWorldFront, threeWorld2Only),
+      "three-world bridge DDS continuation should preserve the world-2-only DDS-backed root front [x x 1]");
+
+    bool sawSharedSpade = false;
+    bool sawHeartK = false;
+    bool sawHeartQ = false;
+    bool sawHeartJ = false;
+    for (unsigned i = 0; i < threeWorldReport.children.size(); i++)
+    {
+      const BridgeRootChildReport& child = threeWorldReport.children[i];
+      if (child.move == BridgeMove(SUIT_SPADES, '2'))
+      {
+        sawSharedSpade = true;
+        Check(child.validWorlds == WorldMask(3, 0x7ULL),
+          "the shared spade lead should keep all three worlds valid before the DDS leaf handoff");
+        Check(FrontContains(child.front, mergedThreeWorld),
+          "the shared spade lead should produce the merged DDS-backed continuation front [1 1 1]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'K'))
+      {
+        sawHeartK = true;
+        Check(child.validWorlds == WorldMask(3, 0x1ULL),
+          "the heart-K lead should isolate world 0 before the DDS leaf handoff");
+        Check(FrontContains(child.front, threeWorld0Only),
+          "the heart-K lead should produce the world-0-only DDS-backed continuation front [1 x x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'Q'))
+      {
+        sawHeartQ = true;
+        Check(child.validWorlds == WorldMask(3, 0x2ULL),
+          "the heart-Q lead should isolate world 1 before the DDS leaf handoff");
+        Check(FrontContains(child.front, threeWorld1Only),
+          "the heart-Q lead should produce the world-1-only DDS-backed continuation front [x 1 x]");
+      }
+      else if (child.move == BridgeMove(SUIT_HEARTS, 'J'))
+      {
+        sawHeartJ = true;
+        Check(child.validWorlds == WorldMask(3, 0x4ULL),
+          "the heart-J lead should isolate world 2 before the DDS leaf handoff");
+        Check(FrontContains(child.front, threeWorld2Only),
+          "the heart-J lead should produce the world-2-only DDS-backed continuation front [x x 1]");
+      }
+    }
+
+    Check(sawSharedSpade && sawHeartK && sawHeartQ && sawHeartJ,
+      "three-world bridge DDS continuation should cover the shared branch and all three split branches in root reporting");
+  }
+
+
+  static void TestEmptyEntryInteriorFronts()
+  {
+    ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
+    bestLeaf.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode partialA("partialA", TOY_LEAF, 3);
+    partialA.leafFront = MakeFront(3, vector<string>(1, "010"));
+
+    ToyNode partialB("partialB", TOY_LEAF, 3);
+    partialB.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode shouldNotVisit("shouldNotVisit", TOY_LEAF, 3);
+    shouldNotVisit.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    AddChild(candidateMin, partialA, WorldMask(3, 0x6ULL));
+    AddChild(candidateMin, partialB, WorldMask(3, 0x3ULL));
+    AddChild(candidateMin, shouldNotVisit);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, bestLeaf);
+    AddChild(root, candidateMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(stats.earlyCuts == 1,
+      "empty-entry example should trigger one early cut after the interior front is completed");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("shouldNotVisit")) == stats.visitOrder.end(),
+      "empty-entry example should cut before visiting the remaining Min child");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "empty-entry example should preserve the dominating root outcome");
+    Check(MakeBinaryOutcome("x10").ToString() == "[x 1 0]",
+      "empty-entry parsing should support sparse vectors");
+
+    const ParetoFront sparseA = partialA.leafFront.RestrictToUseful(
+      WorldMask(3, 0x6ULL));
+    const ParetoFront sparseB = partialB.leafFront.RestrictToUseful(
+      WorldMask(3, 0x3ULL));
+    const ParetoFront combined = ParetoFront::MinProduct(sparseA, sparseB);
+    Check(FrontContains(combined, MakeBinaryOutcome("110")),
+      "empty-entry example should combine sparse child fronts into [1 1 0]");
+    Check(FrontContains(partialA.leafFront.RestrictToUseful(WorldMask(3, 0x6ULL)),
+      MakeBinaryOutcome("x10")),
+      "restricting to child worlds should produce an empty entry in the skipped world");
+  }
+
+
+  static void TestOptimisticImpossibleWorlds()
+  {
+    ToyNode rootBest("rootBest", TOY_LEAF, 3);
+    rootBest.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode impossibleReply("impossibleReply", TOY_LEAF, 3);
+    impossibleReply.leafFront = MakeFront(3, vector<string>(1, "000"));
+
+    ToyNode shouldNotVisit("shouldNotVisit", TOY_LEAF, 3);
+    shouldNotVisit.leafFront = MakeFront(3, vector<string>(1, "111"));
+
+    ToyNode candidateMin("candidateMin", TOY_MIN, 3);
+    candidateMin.optimisticValues = MakeBinaryOutcome("011");
+    AddChild(candidateMin, impossibleReply, WorldMask(3, 0x4ULL));
+    AddChild(candidateMin, shouldNotVisit);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, rootBest);
+    AddChild(root, candidateMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 2, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    const ParetoFront sparseImpossible = impossibleReply.leafFront.RestrictToUseful(
+      WorldMask(3, 0x4ULL));
+    Check(FrontContains(sparseImpossible, MakeBinaryOutcome("xx0")),
+      "optimistic example should first produce a sparse impossible-world vector [x x 0]");
+
+    const ParetoFront optimisticImpossible = sparseImpossible.CompleteOptimistically(
+      WorldMask::All(3), candidateMin.optimisticValues);
+    Check(FrontContains(optimisticImpossible, MakeBinaryOutcome("010")),
+      "optimistic example should complete [x x 0] to [0 1 0] using the closest known world values");
+
+    Check(stats.optimisticCompletions >= 1,
+      "optimistic example should record at least one optimistic completion");
+    Check(stats.earlyCuts == 1,
+      "optimistic example should trigger an early cut once the impossible world is completed optimistically");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("shouldNotVisit")) == stats.visitOrder.end(),
+      "optimistic example should cut before visiting the remaining Min child");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "optimistic example should preserve the dominating root outcome");
+    Check(! rootCutTriggered,
+      "optimistic example should not be reported as a root cut");
+  }
+
+
+  static void TestDeepAlphaCut()
+  {
+    ToyNode rootBest("rootBest", TOY_LEAF, 3);
+    rootBest.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode innerBest("innerBest", TOY_LEAF, 3);
+    innerBest.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode candidateFirst("candidateFirst", TOY_LEAF, 3);
+    candidateFirst.leafFront = MakeFront(3, vector<string>(1, "110"));
+
+    ToyNode skippedByDeepAlpha("skippedByDeepAlpha", TOY_LEAF, 3);
+    skippedByDeepAlpha.leafFront = MakeFront(3, vector<string>(1, "111"));
+
+    ToyNode deepMin("deepMin", TOY_MIN, 3);
+    AddChild(deepMin, candidateFirst);
+    AddChild(deepMin, skippedByDeepAlpha);
+
+    ToyNode innerMax("innerMax", TOY_MAX, 3);
+    AddChild(innerMax, innerBest);
+    AddChild(innerMax, deepMin);
+
+    ToyNode outerMin("outerMin", TOY_MIN, 3);
+    AddChild(outerMin, innerMax);
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, rootBest);
+    AddChild(root, outerMin);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 3, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(stats.deepAlphaCuts == 1,
+      "deep-alpha example should trigger exactly one deep alpha cut");
+    Check(stats.earlyCuts == 0,
+      "deep-alpha example should cut via an ancestor Max front rather than the immediate one");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("skippedByDeepAlpha")) == stats.visitOrder.end(),
+      "deep-alpha cut should stop before searching the remaining deep Min child");
+    Check(FrontContains(front, MakeBinaryOutcome("110")),
+      "deep-alpha example should preserve the dominating root outcome");
+    Check(! rootCutTriggered,
+      "deep-alpha example should not be reported as a root cut");
+  }
+
+
+  static void TestCutOnWin()
+  {
+    ToyNode winningMove("winningMove", TOY_LEAF, 3);
+    winningMove.leafFront = MakeFront(3, vector<string>(1, "111"));
+
+    ToyNode skippedSibling("skippedSibling", TOY_LEAF, 3);
+    skippedSibling.leafFront = MakeFront(3, vector<string>(1, "001"));
+
+    ToyNode root("root", TOY_MAX, 3);
+    AddChild(root, winningMove);
+    AddChild(root, skippedSibling);
+
+    SearchStats stats;
+    bool rootCutTriggered = false;
+    bool exactComplete = false;
+    TranspositionTable tt;
+    const ParetoFront front = SearchToy(root, 1, WorldMask::All(3),
+      vector<const ParetoFront *>(), OutcomeVector(3), tt, true, -1.0, stats,
+      rootCutTriggered, exactComplete);
+
+    Check(stats.cutOnWinCuts == 1,
+      "cut-on-win example should trigger exactly one cut on win");
+    Check(find(stats.visitOrder.begin(), stats.visitOrder.end(),
+      string("skippedSibling")) == stats.visitOrder.end(),
+      "cut on win should stop before searching the remaining sibling move");
+    Check(FrontContains(front, MakeBinaryOutcome("111")),
+      "cut-on-win example should keep the fully winning move");
+    Check(! rootCutTriggered,
+      "cut-on-win example should not be reported as a root cut");
+  }
+
+
+  static void TestDDSLeafDemo()
+  {
+    SetMaxThreads(0);
+
+    HandFileData data;
+    LoadHandFile(kAlphaMuPlayHandFile, data);
+
+    Check(data.number == 3,
+      "alpha_mu_play.txt should provide three DDS worlds for the leaf demo");
+
+    const int target = 4;
+    const DDSLeafEvalResult serial = EvaluateDDSLeafThresholdSerial(data, target);
+    const DDSLeafEvalResult parallel = EvaluateDDSLeafThresholdParallel(
+      data,
+      target,
+      data.number);
+
+    Check(serial.leaf.ToString() == "[1 1 0]",
+      "DDS leaf demo should yield the expected threshold vector [1 1 0]");
+    Check(parallel.leaf.ToString() == "[1 1 0]",
+      "parallel DDS leaf demo should yield the expected threshold vector [1 1 0]");
+    Check(serial.leaf.ToString() == parallel.leaf.ToString(),
+      "serial and parallel DDS leaf evaluation should return the same threshold vector");
+    Check(serial.bestScores == parallel.bestScores,
+      "serial and parallel DDS leaf evaluation should return the same world scores");
+    Check(parallel.workerCount >= 1,
+      "parallel DDS leaf evaluation should configure at least one worker");
+    Check(parallel.workerCount <= data.number,
+      "parallel DDS leaf evaluation should not configure more worker slots than worlds");
+  }
+
+  namespace
+  {
+    struct NamedTest
+    {
+      const char * successMessage;
+      void (*run)();
+    };
+  }
+
+  void RunBridgeDDSTestSuite()
+  {
+    TestBridgeMultiTrickDDSLeaf();
+    PrintPrototypeStatus("multi-trick bridge DDS leaf search OK");
+    PrintPrototypeStatus("all checks passed");
+  }
+
+  void RunDefaultTestSuite()
+  {
+    const NamedTest tests[] = {
+      {"Pareto insert test OK", &TestParetoInsert},
+      {"non-locality toy search OK", &TestNonLocalityExample},
+      {"early cut toy search OK", &TestEarlyCutExample},
+      {"useful-world maintenance OK", &TestUsefulWorldMaintenance},
+      {"world cuts OK", &TestWorldCuts},
+      {"Pareto-front TT OK", &TestParetoFrontTT},
+      {"possible-world generation OK", &TestPossibleWorldGeneration},
+      {"play-history filtering OK", &TestPlayHistoryFiltering},
+      {"follow-suit implications and world explanations OK", &TestFollowSuitImplicationsAndWorldExplanation},
+      {"history-derived candidate world construction OK", &TestHistoryDerivedCandidateWorldConstruction},
+      {"history-derived known-card construction OK", &TestHistoryDerivedConstructionUsesKnownCardLocation},
+      {"history-derived known-card exclusion construction OK", &TestHistoryDerivedConstructionUsesKnownCardExclusion},
+      {"history-derived construction explanation accounting OK", &TestHistoryDerivedConstructionExplanationTracksCardLocationNarrowing},
+      {"history-derived partnership HCP construction OK", &TestHistoryDerivedConstructionUsesPartnershipHCPRange},
+      {"history-derived partnership length construction OK", &TestHistoryDerivedConstructionUsesPartnershipLengthRange},
+      {"history-derived constructor stage accounting OK", &TestHistoryDerivedConstructionExplanationTracksPartnershipRangeStageCounts},
+      {"history-derived construction explanation pruning OK", &TestHistoryDerivedConstructionExplanationTracksFollowSuitRejections},
+      {"history-derived current-trick construction OK", &TestHistoryDerivedConstructionRespectsCurrentTrick},
+      {"history-derived bidding card-location construction OK", &TestHistoryDerivedConstructionUsesBiddingCardLocation},
+      {"history-derived bidding length construction OK", &TestHistoryDerivedConstructionUsesBiddingLength},
+      {"history-derived bidding MinHCP construction OK", &TestHistoryDerivedConstructionUsesBiddingMinHCP},
+      {"history-derived bidding MaxHCP construction OK", &TestHistoryDerivedConstructionUsesBiddingMaxHCP},
+      {"history-derived bidding balanced construction OK", &TestHistoryDerivedConstructionUsesBiddingBalancedShape},
+      {"history-derived bidding hand-type construction OK", &TestHistoryDerivedConstructionUsesBiddingHandType},
+      {"history-derived balanced deferral on incomplete hands OK", &TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands},
+      {"history-derived hand-type deferral on incomplete hands OK", &TestHistoryDerivedConstructionHandTypeDefersOnIncompleteHands},
+      {"history-derived follow-suit construction OK", &TestHistoryDerivedConstructionUsesDerivedFollowSuitLength},
+      {"history-derived visible-seed construction OK", &TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands},
+      {"history-derived moderate visible-seed pools OK", &TestHistoryDerivedConstructionSupportsModeratelyLargerVisibleSeedPools},
+      {"history-derived longer visible-seed history OK", &TestHistoryDerivedConstructionUsesLongerVisibleSeedHistory},
+      {"deterministic world sampling OK", &TestDeterministicWorldSampling},
+      {"bridge move generation OK", &TestBridgeMoveGeneration},
+      {"bridge search control OK", &TestBridgeSearchControl},
+      {"bridge root reporting OK", &TestBridgeRootReportThreeWorldContinuation},
+      {"empty-entry interior fronts OK", &TestEmptyEntryInteriorFronts},
+      {"optimistic impossible worlds OK", &TestOptimisticImpossibleWorlds},
+      {"deep alpha cuts OK", &TestDeepAlphaCut},
+      {"cut on win OK", &TestCutOnWin},
+      {"root cut toy search OK", &TestRootCutExample},
+      {"DDS leaf demo and leaf parallelization OK", &TestDDSLeafDemo}
+    };
+
+    for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)
+    {
+      tests[i].run();
+      PrintPrototypeStatus(tests[i].successMessage);
+    }
+
+    PrintPrototypeStatus("all checks passed");
+  }
+}
