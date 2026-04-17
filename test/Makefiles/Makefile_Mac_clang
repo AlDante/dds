@@ -36,6 +36,8 @@ INCL_OWN_SOURCE	= Makefiles/own_sources.txt
 # If your compiler name is not given here, change it.
 CC		= clang++
 
+PROFILE_BUILD	?=	0
+
 # We compile with aggressive warnings, but we have to turn off some
 # of them as they appear in libraries in great numbers...
 
@@ -62,22 +64,36 @@ WARN_FLAGS	= 		\
 	-Wno-long-long		\
 	-Wno-format
 
-COMPILE_FLAGS	= -O3 -flto -mtune=generic \
+RELEASE_OPT_FLAGS	= -O3 -flto
+PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
+
+ifeq ($(PROFILE_BUILD),1)
+OPT_FLAGS	= $(PROFILE_OPT_FLAGS)
+BUILD_DIR	= build-profile
+DDS_BUILD_DIR	= ../src/build-profile
+RPATH_DIR	= @loader_path/../../src/build-profile
+else
+OPT_FLAGS	= $(RELEASE_OPT_FLAGS)
+BUILD_DIR	= build
+DDS_BUILD_DIR	= ../src/build
+RPATH_DIR	= @loader_path/../../src/build
+endif
+
+COMPILE_FLAGS	= $(OPT_FLAGS) -mtune=generic \
 		$(WARN_FLAGS) -std=c++11 $(THREADING)
 
-.PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu_prototype itest depend clean
+.PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu_prototype itest profile_binaries depend clean
 
 DLLBASE		= dds
 STATIC_LIB	= lib$(DLLBASE).a
 DLIB 		= $(DLLBASE).lib
 
-BUILD_DIR	= build
 OBJ_DIR		= $(BUILD_DIR)/obj
 
 LINK1_FLAGS	=
 LINK2_FLAGS	= $(THREAD_LINK) \
-		-L../src/build -l$(DLLBASE) \
-		-Wl,-rpath,@loader_path/../../src/build
+		-L$(DDS_BUILD_DIR) -l$(DLLBASE) \
+		-Wl,-rpath,$(RPATH_DIR)
 LINK3_FLAGS	= $(THREAD_LINK)
 
 # This is in addition to $(DTEST).cpp
@@ -150,6 +166,9 @@ timer_regression:	$(TIMERREG_BIN)
 play_analysis_benchmark:	$(PLAYREG_BIN)
 
 alpha_mu_prototype:	$(ALPHAMU_BIN)
+
+profile_binaries:
+	$(MAKE) -f Makefiles/Makefile_Mac_clang PROFILE_BUILD=1 regression_api dtest play_analysis_benchmark alpha_mu_prototype
 
 itest:	$(ITEST_BIN)
 

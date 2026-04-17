@@ -120,7 +120,7 @@ python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list1.txt --d
 Skip specific 1-based board numbers or ranges while keeping checkpointed partial progress:
 
 ```zsh
-python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 4 --skip-boards 2 --checkpoint-seconds 60 --heartbeat-seconds 60
+python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 3 --skip-boards 2 --checkpoint-seconds 60 --heartbeat-seconds 60
 python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list100.txt --depth 2 --skip-boards 2,5-7 --checkpoint-seconds 30
 ```
 

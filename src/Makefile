@@ -49,6 +49,8 @@ INCL_SOURCE	= Makefiles/sources.txt
 # If your compiler name is not given here, change it.
 CC		= clang++
 
+PROFILE_BUILD	?=	0
+
 # We compile with aggressive warnings, but we have to turn off some
 # of them as they appear in libraries in great numbers...
 
@@ -75,7 +77,18 @@ WARN_FLAGS	= 		\
 	-Wno-long-long		\
 	-Wno-format
 
-COMPILE_FLAGS	= -fPIC -O3 -flto -mtune=generic -std=c++11 \
+RELEASE_OPT_FLAGS	= -O3 -flto
+PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
+
+ifeq ($(PROFILE_BUILD),1)
+OPT_FLAGS	= $(PROFILE_OPT_FLAGS)
+BUILD_DIR	= build-profile
+else
+OPT_FLAGS	= $(RELEASE_OPT_FLAGS)
+BUILD_DIR	= build
+endif
+
+COMPILE_FLAGS	= -fPIC $(OPT_FLAGS) -mtune=generic -std=c++11 \
 		$(WARN_FLAGS) 	\
 		$(DDS_BEHAVIOR) $(THREAD_COMPILE) $(THREADING)
 
@@ -88,7 +101,6 @@ LINK_FLAGS	=		\
 
 include $(INCL_SOURCE)
 
-BUILD_DIR	= build
 OBJ_DIR		= $(BUILD_DIR)/obj
 SHARED_LIB	= $(BUILD_DIR)/lib$(DLLBASE).so
 LEGACY_SHARED_LIB = lib$(DLLBASE).so
@@ -99,6 +111,9 @@ DEP_FILES	= $(subst .o,.d,$(O_FILES))
 
 macos:	$(O_FILES)
 	$(CC) -o $(SHARED_LIB) $(O_FILES) $(LINK_FLAGS)
+
+macos_profile:
+	$(MAKE) PROFILE_BUILD=1 macos
 
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
