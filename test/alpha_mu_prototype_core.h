@@ -1,11 +1,19 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file alpha_mu_prototype_core.h
+ * @brief Shared data structures and callable entry points for the alpha-mu prototype.
+ *
+ * The prototype follows the two-paper alpha-mu line described in
+ * `docs/alpha-mu.md` and `docs/action-plan.md`. The first paper contributes the
+ * imperfect-information search model over sampled possible worlds using outcome
+ * vectors, Pareto fronts, Max-node union, and Min-node product/min backup. The
+ * later optimization paper contributes useful-world maintenance, world cuts,
+ * cut-on-win, optimistic completion of impossible worlds, deep alpha cuts, and
+ * related implementation refinements.
+ *
+ * This header intentionally exposes both the paper-faithful toy search and the
+ * bridge-specific scaffolding that feeds DDS perfect-information leaves into the
+ * same front-based search semantics.
+ */
 
 #ifndef DDS_TEST_ALPHA_MU_PROTOTYPE_CORE_H
 #define DDS_TEST_ALPHA_MU_PROTOTYPE_CORE_H
@@ -31,6 +39,14 @@ namespace alpha_mu_prototype
 {
   using namespace std;
 
+  /**
+   * @brief Bit-mask representation of the currently relevant possible worlds.
+   *
+   * Alpha-mu operations repeatedly need to talk about subsets of the sampled
+   * worlds: worlds still consistent with the history, worlds still useful at a
+   * Min node, worlds reachable by a child move, and so on. This small helper is
+   * the core set representation used throughout the prototype.
+   */
   struct WorldMask
   {
     unsigned count;
@@ -52,6 +68,7 @@ namespace alpha_mu_prototype
       }
     }
 
+    /** @brief Construct a mask containing all world indices in the range. */
     static WorldMask All(const unsigned countArg)
     {
       return WorldMask(
@@ -60,6 +77,7 @@ namespace alpha_mu_prototype
          (countArg == 0 ? 0ULL : ((1ULL << countArg) - 1ULL))));
     }
 
+    /** @brief Construct an empty mask with the given world capacity. */
     static WorldMask None(const unsigned countArg)
     {
       return WorldMask(countArg, 0ULL);
@@ -70,11 +88,13 @@ namespace alpha_mu_prototype
       return count == other.count && bits == other.bits;
     }
 
+    /** @brief Return whether a world index is currently enabled in the mask. */
     bool Has(const unsigned index) const
     {
       return index < count && ((bits & (1ULL << index)) != 0ULL);
     }
 
+    /** @brief Count the number of active worlds represented by this mask. */
     unsigned PopCount() const
     {
       unsigned n = 0;
@@ -87,21 +107,25 @@ namespace alpha_mu_prototype
       return n;
     }
 
+    /** @brief Return the set-theoretic union of two world masks. */
     WorldMask Union(const WorldMask& other) const
     {
       return WorldMask(count, bits | other.bits);
     }
 
+    /** @brief Return the set-theoretic intersection of two world masks. */
     WorldMask Intersection(const WorldMask& other) const
     {
       return WorldMask(count, bits & other.bits);
     }
 
+    /** @brief Return whether no worlds survive in the mask. */
     bool Empty() const
     {
       return bits == 0ULL;
     }
 
+    /** @brief Render the active world indices in a compact debug form. */
     string ToString() const
     {
       ostringstream oss;
@@ -119,6 +143,14 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Score vector over the sampled worlds.
+   *
+   * In the original alpha-mu formulation each entry stores the score obtained in
+   * one possible world. The `valid` mask distinguishes worlds that have an exact
+   * value in the vector from worlds that are currently impossible, pruned, or
+   * only present through optimistic completion.
+   */
   struct OutcomeVector
   {
     WorldMask valid;
@@ -140,6 +172,11 @@ namespace alpha_mu_prototype
     {
     }
 
+    /**
+     * @brief Return whether this vector weakly dominates another vector.
+     *
+     * Dominance is only defined for vectors over the same valid-world set.
+     */
     bool Dominates(const OutcomeVector& other) const
     {
       if (! (valid == other.valid))
@@ -153,6 +190,7 @@ namespace alpha_mu_prototype
       return true;
     }
 
+    /** @brief Return the mean score over the currently valid worlds. */
     double Mean() const
     {
       const unsigned n = valid.PopCount();
@@ -169,6 +207,12 @@ namespace alpha_mu_prototype
       return static_cast<double>(sum) / static_cast<double>(n);
     }
 
+    /**
+     * @brief Compute the Min-node product/min combination with another vector.
+     *
+     * This is the per-world minimum used by the alpha-mu Min backup rule before
+     * Pareto reduction is applied at the front level.
+     */
     OutcomeVector MinWith(const OutcomeVector& other) const
     {
       if (values.size() != other.values.size())
@@ -193,6 +237,12 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /**
+     * @brief Zero out worlds that are no longer useful at a Min node.
+     *
+     * This models the optimization-paper idea that some worlds no longer affect
+     * the Min backup once the current front already proves them irrelevant.
+     */
     OutcomeVector RestrictToUseful(const WorldMask& useful) const
     {
       OutcomeVector result(*this);
@@ -205,6 +255,12 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /**
+     * @brief Fill missing worlds with optimistic values for dominance checks.
+     *
+     * This corresponds to the optimization-paper discussion of comparing sparse
+     * fronts by giving impossible or unexpanded worlds optimistic completions.
+     */
     OutcomeVector CompleteOptimistically(
       const WorldMask& useful,
       const OutcomeVector& optimistic) const
@@ -230,6 +286,7 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /** @brief Render the vector as debug text with `x` for invalid worlds. */
     string ToString() const
     {
       ostringstream oss;
@@ -249,6 +306,14 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Non-dominated set of outcome vectors.
+   *
+   * Pareto-front maintenance is the central data structure in alpha-mu. Max
+   * nodes union child fronts and then drop dominated vectors; Min nodes form the
+   * product of child fronts under per-world minimum and then again reduce by
+   * dominance.
+   */
   struct ParetoFront
   {
     unsigned worldCount;
@@ -260,6 +325,7 @@ namespace alpha_mu_prototype
     {
     }
 
+    /** @brief Insert a vector and discard any newly dominated incumbents. */
     void Insert(const OutcomeVector& candidate)
     {
       for (unsigned i = 0; i < vectors.size(); i++)
@@ -279,6 +345,7 @@ namespace alpha_mu_prototype
       vectors.swap(kept);
     }
 
+    /** @brief Return whether every vector in @p other is dominated here. */
     bool DominatesFront(const ParetoFront& other) const
     {
       for (unsigned i = 0; i < other.vectors.size(); i++)
@@ -299,6 +366,12 @@ namespace alpha_mu_prototype
       return true;
     }
 
+    /**
+     * @brief Return the best mean score over the front.
+     *
+     * The prototype uses this as the root `mu` value for iterative deepening and
+     * the root-cut optimization.
+     */
     double Mu() const
     {
       double best = 0.0;
@@ -307,6 +380,7 @@ namespace alpha_mu_prototype
       return best;
     }
 
+    /** @brief Perform the alpha-mu Max-node union/merge operation. */
     static ParetoFront MaxMerge(
       const ParetoFront& left,
       const ParetoFront& right)
@@ -319,6 +393,7 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /** @brief Perform the alpha-mu Min-node product/min operation. */
     static ParetoFront MinProduct(
       const ParetoFront& left,
       const ParetoFront& right)
@@ -332,6 +407,11 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /**
+     * @brief Compute the useful worlds still capable of affecting Min backup.
+     *
+     * This implements the optimization-paper notion of useful worlds.
+     */
     WorldMask UsefulWorlds() const
     {
       WorldMask useful = WorldMask::None(worldCount);
@@ -353,6 +433,7 @@ namespace alpha_mu_prototype
       return useful;
     }
 
+    /** @brief Return the union of worlds mentioned by any vector in the front. */
     WorldMask ValidWorlds() const
     {
       WorldMask valid = WorldMask::None(worldCount);
@@ -361,6 +442,7 @@ namespace alpha_mu_prototype
       return valid;
     }
 
+    /// @brief Apply useful-world reduction to every vector in the front.
     ParetoFront RestrictToUseful(const WorldMask& useful) const
     {
       ParetoFront result(worldCount);
@@ -369,6 +451,7 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /// @brief Optimistically complete every vector for sparse-front comparison.
     ParetoFront CompleteOptimistically(
       const WorldMask& useful,
       const OutcomeVector& optimistic) const
@@ -381,6 +464,11 @@ namespace alpha_mu_prototype
       return result;
     }
 
+    /**
+     * @brief Return whether some vector wins strictly in every useful world.
+     *
+     * This is the condition used by the optimization-paper cut-on-win rule.
+     */
     bool WinsAll(const WorldMask& useful) const
     {
       for (unsigned i = 0; i < vectors.size(); i++)
@@ -403,6 +491,7 @@ namespace alpha_mu_prototype
       return false;
     }
 
+    /** @brief Render the front as a set of outcome vectors. */
     string ToString() const
     {
       ostringstream oss;
@@ -419,6 +508,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Node role in the small paper-faithful toy search harness. */
   enum ToyNodeType
   {
     TOY_LEAF = 0,
@@ -427,6 +517,13 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Minimal game tree node used to exercise paper semantics in isolation.
+   *
+   * The toy tree lets the prototype test non-locality, early cut, cut-on-win,
+   * deep alpha cuts, transposition-table behavior, and root cut without bridge
+   * move-generation noise.
+   */
   struct ToyNode
   {
     string name;
@@ -451,6 +548,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Counters for the paper-level search mechanics exercised in a run. */
   struct SearchStats
   {
     int nodesVisited;
@@ -486,6 +584,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Exact transposition-table payload for a previously solved front. */
   struct TTEntry
   {
     ParetoFront front;
@@ -502,6 +601,12 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Toy-search transposition table keyed by node, depth, and useful worlds.
+   *
+   * Only exact fronts are stored, mirroring the paper's preference to avoid
+   * mixing partial front information into reuse.
+   */
   struct TranspositionTable
   {
     map<string, TTEntry> entries;
@@ -523,6 +628,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Result of iterative deepening in Max-move horizon. */
   struct IterativeResult
   {
     ParetoFront front;
@@ -540,6 +646,12 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Owning wrapper for parsed DDS hand-file arrays.
+   *
+   * The benchmark and comparison modes use the legacy C parsing helpers from the
+   * test harness; this wrapper gives them a single RAII-managed lifetime.
+   */
   struct HandFileData
   {
     int number;
@@ -646,6 +758,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Canonical seat numbering used throughout the prototype. */
   enum Seat
   {
     SEAT_NORTH = 0,
@@ -655,6 +768,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Canonical suit numbering used throughout the prototype. */
   enum SuitIndex
   {
     SUIT_SPADES = 0,
@@ -664,6 +778,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Supported world-constraint families for world construction/filtering. */
   enum ConstraintKind
   {
     CONSTRAINT_HAS_CARD = 0,
@@ -682,6 +797,12 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Auction-side hand-shape categories accepted by the scoped interface.
+   *
+   * These are consumed as already-derived bidding facts; alpha-mu does not try
+   * to interpret the auction itself.
+   */
   enum HandType
   {
     HAND_TYPE_BALANCED = 0,
@@ -691,12 +812,14 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Simple PBN-style four-hand world representation. */
   struct ParsedWorld
   {
     string suits[4][4];
   };
 
 
+  /** @brief Single bridge card play in suit/rank form. */
   struct BridgeMove
   {
     int suit;
@@ -719,6 +842,13 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Bridge continuation state searched by the prototype.
+   *
+   * This wraps the current partial trick, side to move, already won Max-side
+   * tricks, trump, and the surviving possible worlds that remain legal after the
+   * line of play followed so far.
+   */
   struct BridgeState
   {
     vector<ParsedWorld> worlds;
@@ -748,6 +878,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief A legal bridge child move paired with the resulting continuation state. */
   struct BridgeChild
   {
     BridgeMove move;
@@ -755,6 +886,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Root-level report for one candidate bridge move. */
   struct BridgeRootChildReport
   {
     BridgeMove move;
@@ -772,6 +904,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Full root report containing all child fronts and the merged root front. */
   struct BridgeRootReport
   {
     vector<BridgeRootChildReport> children;
@@ -785,6 +918,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Recorded play-history fact used to constrain legal worlds. */
   struct PlayHistoryEvent
   {
     int player;
@@ -810,6 +944,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Stage-by-stage counts for staged possible-world filtering. */
   struct WorldGenerationStats
   {
     unsigned candidateWorldCount;
@@ -839,6 +974,12 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief One externally derived fact about a world.
+   *
+   * These constraints are the boundary between the alpha-mu world generator and
+   * other analysis components such as auction interpretation.
+   */
   struct WorldConstraint
   {
     ConstraintKind kind;
@@ -1008,6 +1149,13 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Partial-information package used to generate or explain worlds.
+   *
+   * The prototype separates known cards, bidding facts, follow-suit facts, play
+   * history, and deterministic sampling controls so each stage can be tested and
+   * explained independently.
+   */
   struct BridgeInformationState
   {
     vector<WorldConstraint> knownCardConstraints;
@@ -1035,6 +1183,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief One hidden card plus the seats it may still legally belong to. */
   struct HiddenCardCandidate
   {
     BridgeMove card;
@@ -1048,6 +1197,13 @@ namespace alpha_mu_prototype
   };
 
 
+  /**
+   * @brief Seed specification for constructor-local world building from history.
+   *
+   * This is a repository-specific extension around the paper algorithm: it turns
+   * a partial-information bridge state into a candidate world pool that alpha-mu
+   * can search over.
+   */
   struct HistoryDerivedWorldSpec
   {
     ParsedWorld seedWorld;
@@ -1063,6 +1219,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Candidate worlds produced by history-derived construction. */
   struct HistoryDerivedConstructionResult
   {
     ParsedWorld visibleSeedWorld;
@@ -1078,6 +1235,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Stage counters for constructor-local history-derived pruning. */
   struct HistoryDerivedConstructionStats
   {
     unsigned rawAssignmentCount;
@@ -1103,6 +1261,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief One explanatory acceptance/rejection step for a candidate world. */
   struct WorldExplanationStep
   {
     string stage;
@@ -1118,6 +1277,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Full staged explanation for one candidate world. */
   struct WorldExplanation
   {
     unsigned worldIndex;
@@ -1139,6 +1299,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Explanation bundle for the staged world-filter pipeline. */
   struct WorldGenerationExplanation
   {
     vector<WorldConstraint> appliedFollowSuitConstraints;
@@ -1154,6 +1315,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Explanation bundle for constructor-local history-derived pruning. */
   struct HistoryDerivedConstructionExplanation
   {
     HistoryDerivedConstructionStats stats;
@@ -1169,6 +1331,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Result of replaying a history sequence inside one candidate world. */
   struct HistoryCheckResult
   {
     bool ok;
@@ -1182,6 +1345,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Scores obtained from DDS leaf evaluation over one or more worlds. */
   struct DDSLeafEvalResult
   {
     OutcomeVector leaf;
@@ -1197,6 +1361,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Per-depth timing and mismatch summary in DDS-vs-alpha-mu comparison mode. */
   struct DDSVsAlphaMuDepthTiming
   {
     int depth;
@@ -1212,6 +1377,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Aggregate comparison summary across DDS and alpha-mu exact modes. */
   struct DDSVsAlphaMuComparison
   {
     string handFile;
@@ -1229,6 +1395,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Summary for one exact benchmark method over a hand-file workload. */
   struct BenchmarkMethodSummary
   {
     string method;
@@ -1252,6 +1419,7 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Mutable progress-reporting state for long-running benchmark jobs. */
   struct BenchmarkBoardProgressContext
   {
     string method;
@@ -1282,73 +1450,132 @@ namespace alpha_mu_prototype
     }
   };
 
+  /** @brief Prefix used by prototype status and failure messages. */
   extern const char kPrototypeMessagePrefix[];
+  /** @brief Default hand-file used by the alpha-mu DDS leaf regressions. */
   extern const char kAlphaMuPlayHandFile[];
 
+  /** @brief Abort the current run with a prototype-prefixed fatal message. */
   void Fail(const string& msg);
+  /** @brief Assert a prototype invariant and fail with context if it is violated. */
   void Check(const bool condition, const string& msg);
+  /** @brief Exact equality check for two outcome vectors. */
   bool SameOutcome( const OutcomeVector& left, const OutcomeVector& right);
+  /** @brief Return whether a front contains a vector exactly, not merely by dominance. */
   bool FrontContains( const ParetoFront& front, const OutcomeVector& target);
+  /** @brief Convert PBN seat letters to the prototype seat indices. */
   int SeatIndex(const char seat);
+  /** @brief Split a string with optional retention of empty fields. */
   vector<string> SplitString( const string& text, const char delimiter, const bool keepEmpty);
+  /** @brief Parse a compact PBN world string into the internal world representation. */
   ParsedWorld ParsePBNWorld(const string& pbn);
+  /** @brief Return whether a world places a given card at a given seat. */
   bool WorldHasCard( const ParsedWorld& world, const int player, const int suit, const char rank);
+  /** @brief Return the length of one suit in one hand. */
   int WorldSuitLength( const ParsedWorld& world, const int player, const int suit);
+  /** @brief Convert a rank character to standard high-card-point value. */
   int HonorPointValue(const char rank);
+  /** @brief Sum the high-card points held by one seat in one world. */
   int WorldHighCardPoints( const ParsedWorld& world, const int player);
+  /** @brief Render a hand-type enum value in auction-facing terminology. */
   string HandTypeName(const int handType);
+  /** @brief Classify a full 13-card length pattern against the supported hand types. */
   bool LengthsMatchHandType( const int lengths[4], const int totalCards, const int handType);
+  /** @brief Return whether a complete world hand satisfies the given hand-type class. */
   bool WorldHasHandType( const ParsedWorld& world, const int player, const int handType);
+  /** @brief Compatibility helper for the balanced-hand special case. */
   bool WorldHasBalancedShape( const ParsedWorld& world, const int player);
+  /** @brief Normalize legacy balanced constraints and explicit hand-type constraints. */
   int ConstraintHandType(const WorldConstraint& constraint);
+  /** @brief Map rank text into ascending rank order for comparisons and sorting. */
   int RankOrder(const char rank);
+  /** @brief Convert rank text to DDS numeric rank encoding. */
   int RankValue(const char rank);
+  /** @brief Convert DDS numeric rank encoding back to rank text. */
   char RankFromDDSValue(const int value);
+  /** @brief Count all remaining cards still present in a world. */
   unsigned WorldCardCount(const ParsedWorld& world);
+  /** @brief Count the cards still present in one seat of a world. */
   unsigned WorldSeatCardCount( const ParsedWorld& world, const int player);
+  /** @brief Serialize the internal world representation back to compact PBN text. */
   string SerializePBNWorld(const ParsedWorld& world);
+  /** @brief Human-readable seat name for diagnostics and explanations. */
   string SeatName(const int seat);
+  /** @brief Human-readable suit name for diagnostics and explanations. */
   string SuitName(const int suit);
+  /** @brief Return the partner seat in a bridge partnership. */
   int PartnerSeat(const int seat);
+  /** @brief Human-readable partnership label anchored at one seat. */
   string PartnershipName(const int seat);
+  /** @brief Human-readable card name for diagnostics and explanations. */
   string CardName(const BridgeMove& move);
+  /** @brief Check whether a world satisfies one explicit constraint. */
   bool WorldMatchesConstraint( const ParsedWorld& world, const WorldConstraint& constraint);
+  /** @brief Remove a played card from the specified seat in a world. */
   void RemoveCardFromWorld( ParsedWorld& world, const int player, const BridgeMove& move);
+  /** @brief Render a constraint as explanatory text. */
   string ConstraintToString(const WorldConstraint& constraint);
+  /** @brief Return the first failing constraint as user-facing explanatory text. */
   string FirstConstraintFailureReason( const ParsedWorld& world, const vector<WorldConstraint>& constraints);
+  /** @brief Replay a complete prior history against a world and explain failure. */
   HistoryCheckResult CheckWorldReplayHistory( const ParsedWorld& world, const vector<PlayHistoryEvent>& history, const string& stageName);
+  /** @brief Replay a partial current trick after an already accepted prior history. */
   HistoryCheckResult CheckWorldReplayHistoryAfterHistory( const ParsedWorld& world, const vector<PlayHistoryEvent>& priorHistory, const vector<PlayHistoryEvent>& history, const string& stageName);
+  /** @brief Derive follow-suit impossibility constraints from observed discards. */
   void AppendDerivedFollowSuitConstraints( const vector<PlayHistoryEvent>& history, int playedCount[4][4], vector<WorldConstraint>& constraints);
+  /** @brief Gather explicit and derived follow-suit constraints for filtering. */
   vector<WorldConstraint> CollectFollowSuitConstraints( const BridgeInformationState& information);
+  /** @brief Select bidding constraints that are safe for constructor-local pruning. */
   vector<WorldConstraint> CollectConstructorConstraints( const BridgeInformationState& information);
+  /** @brief Append one explanation step to a world's trace. */
   void AddWorldExplanationStep( WorldExplanation& explanation, const string& stage, const bool passed, const string& detail);
   unsigned SeatBit(const int seat);
   unsigned SeatMask(const vector<int>& seats);
   bool VectorContainsSeat( const vector<int>& seats, const int seat);
+  /** @brief Return whether a constructor-local constraint refers to hidden seats. */
   bool ConstructorConstraintTouchesHiddenSeats( const vector<int>& hiddenSeats, const WorldConstraint& constraint);
   string CardKey(const BridgeMove& move);
   void SortSuitCards(string& cards);
+  /** @brief Canonicalize suit-card order to stabilize deduplication and explanations. */
   void CanonicalizeWorld(ParsedWorld& world);
+  /** @brief Record cards already played, keyed by card name and owner seat. */
   void CollectPlayedCards( const BridgeInformationState& information, map<string, int>& playedBySeat);
   unsigned CountSeatChoices(const unsigned allowedSeatsMask);
+  /** @brief Find the current owner seat of a card in a world, or `-1` if absent. */
   int FindCardSeatInWorld( const ParsedWorld& world, const int suit, const char rank);
+  /** @brief Extract explicitly unspecified hidden cards from the visible seed world. */
   void CollectSeedHiddenCards( const HistoryDerivedWorldSpec& spec, HistoryDerivedConstructionResult& result, const unsigned hiddenSeatMask, int targetCounts[4]);
+  /** @brief Infer hidden cards from the full-deck complement of visible seed hands. */
   void CollectInferredHiddenCardsFromVisibleHands( const HistoryDerivedWorldSpec& spec, HistoryDerivedConstructionResult& result, const unsigned hiddenSeatMask, int targetCounts[4], int finalSeatCounts[4]);
+  /** @brief Pin played cards to their known owning hidden seats before enumeration. */
   void ApplyConstructionPlayedCardOwnership( const vector<int>& hiddenSeats, const BridgeInformationState& information, vector<HiddenCardCandidate>& hiddenCards);
+  /** @brief Sort hidden-card candidates for stable world construction and reporting. */
   void SortHiddenCardCandidates( vector<HiddenCardCandidate>& hiddenCards);
+  /** @brief Sort constructed worlds canonically for deterministic downstream behavior. */
   void SortConstructedWorlds( vector<ParsedWorld>& worlds);
+  /** @brief Prepare the constructor-local state used by history-derived world building. */
   void PrepareHistoryDerivedConstruction( const HistoryDerivedWorldSpec& spec, const BridgeInformationState& information, HistoryDerivedConstructionResult& result, vector<WorldConstraint>& constructorConstraints, int targetCounts[4], int finalSeatCounts[4]);
+  /** @brief Restrict hidden-card seat choices using explicit card-location constraints. */
   void ApplyConstructionCardLocationConstraints( const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints, vector<HiddenCardCandidate>& hiddenCards);
   int PotentialRemainingSuitCardsForSeat( const vector<HiddenCardCandidate>& hiddenCards, const unsigned nextIndex, const int seat, const int suit);
   int PotentialRemainingHighCardPointsForSeat( const vector<HiddenCardCandidate>& hiddenCards, const unsigned nextIndex, const int seat);
+  /** @brief Check whether unfinished assignments can still satisfy length constraints. */
   bool ConstructorLengthConstraintsPossible( const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints, const ParsedWorld& current, const vector<HiddenCardCandidate>& hiddenCards, const unsigned nextIndex);
+  /** @brief Check whether unfinished assignments can still satisfy HCP constraints. */
   bool ConstructorHCPConstraintsPossible( const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints, const ParsedWorld& current, const vector<HiddenCardCandidate>& hiddenCards, const unsigned nextIndex);
+  /** @brief Conservative balanced/hand-type feasibility test for partial hidden hands. */
   bool PartialSeatCanStillReachBalancedShape( const ParsedWorld& current, const vector<HiddenCardCandidate>& hiddenCards, const unsigned nextIndex, const int seat, const int targetCount, const int handType);
+  /** @brief Check whether unfinished assignments can still satisfy shape constraints. */
   bool ConstructorBalancedConstraintsPossible( const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints, const ParsedWorld& current, const vector<HiddenCardCandidate>& hiddenCards, const int finalSeatCounts[4], const unsigned nextIndex);
+  /** @brief Combined constructor-local feasibility check across bidding-derived facts. */
   bool ConstructorBiddingConstraintsPossible( const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints, const ParsedWorld& current, const vector<HiddenCardCandidate>& hiddenCards, const int finalSeatCounts[4], const unsigned nextIndex);
+  /** @brief Check whether one hidden card can still be assigned to one seat. */
   bool CanAssignHiddenCard( const HiddenCardCandidate& candidate, const int seat, const int targetCounts[4], const int assignedCounts[4]);
+  /** @brief Enumerate history-derived worlds with constructor-local pruning enabled. */
   void ConstructHistoryDerivedWorldsRec( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const vector<WorldConstraint>& constructorConstraints, const int targetCounts[4], const int finalSeatCounts[4], int assignedCounts[4], ParsedWorld& current, const unsigned index, vector<ParsedWorld>& worlds);
+  /** @brief Enumerate the raw assignment space without constructor-local pruning. */
   void EnumerateHistoryDerivedWorldsRec( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const int targetCounts[4], int assignedCounts[4], ParsedWorld& current, const unsigned index, vector<ParsedWorld>& worlds);
+  /** @brief Materialize all raw worlds implied by the visible seed and hidden cards. */
   vector<ParsedWorld> EnumerateHistoryDerivedWorlds( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const int targetCounts[4], const ParsedWorld& visibleSeedWorld);
   bool WorldMatchesConstructorLengthConstraints( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
   bool WorldMatchesConstructorHCPConstraints( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
@@ -1356,9 +1583,19 @@ namespace alpha_mu_prototype
   string FirstConstructorLengthFailureReason( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
   string FirstConstructorHCPFailureReason( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
   string FirstConstructorBalancedFailureReason( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
+  /**
+   * @brief Build candidate worlds from a partial-information bridge history.
+   *
+   * This is the repository-specific bridge front-end that feeds the alpha-mu
+   * search layer: start from a visible seed state, enumerate hidden-card
+   * assignments, and prune early using only constructor-safe constraints.
+   */
   HistoryDerivedConstructionResult ConstructCandidateWorldsFromHistory( const HistoryDerivedWorldSpec& spec, const BridgeInformationState& information);
+  /** @brief Explain each constructor-local pruning stage used during world building. */
   HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction( const HistoryDerivedWorldSpec& spec, const BridgeInformationState& information);
+  /** @brief Convert a bridge continuation state into the DDS `dealPBN` leaf format. */
   dealPBN MakeDDSDealPBN( const BridgeState& state, const ParsedWorld& world);
+  /** @brief Count the number of unresolved tricks remaining in one world. */
   int RemainingTricksInWorld( const BridgeState& state, const ParsedWorld& world);
   bool BridgeMoveLess( const BridgeMove& left, const BridgeMove& right);
   int SeatSide(const int seat);
@@ -1368,62 +1605,134 @@ namespace alpha_mu_prototype
   vector<BridgeMove> LegalMovesInWorld( const ParsedWorld& world, const int player, const int leadSuit);
   bool ContainsMove( const vector<BridgeMove>& moves, const BridgeMove& move);
   bool WorldCanPlayMove( const ParsedWorld& world, const int player, const int leadSuit, const BridgeMove& move);
+  /** @brief Generate the union of legal moves across all surviving worlds. */
   vector<BridgeMove> GenerateBridgeMoves(const BridgeState& state);
+  /** @brief Apply one move, eliminating worlds where that move was illegal. */
   BridgeState PlayBridgeMove( const BridgeState& state, const BridgeMove& move);
+  /** @brief Expand the bridge state into legal move/state children. */
   vector<BridgeChild> ExpandBridgeChildren(const BridgeState& state);
+  /** @brief Construct the all-zero front used for empty or impossible world sets. */
   ParetoFront MakeZeroFront(const unsigned worldCount);
   int BestScore(const futureTricks& fut);
   void CheckDDS(const int ret, const string& tag);
   void MaybeReportBenchmarkBoardProgress( const BridgeState& state, const int tricksRemaining);
+  /** @brief Terminal bridge front when no further DDS solve is required. */
   ParetoFront MakeBridgeTerminalFront(const BridgeState& state);
+  /**
+   * @brief Evaluate all active worlds exactly with DDS and wrap them as one front.
+   *
+   * DDS acts as the perfect-information oracle beneath the alpha-mu layer.
+   */
   ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state);
+  /** @brief Charge one unit of alpha-mu depth when a full trick has just completed. */
   int BridgeDepthCost( const BridgeState& state, const BridgeState& child);
+  /**
+   * @brief Search a bridge continuation using alpha-mu Max/Min front semantics.
+   *
+   * This is the bridge-specific analogue of the toy search, but without the more
+   * aggressive paper optimizations; it focuses on validating front propagation
+   * and DDS leaf handoff over realistic card play.
+   */
   ParetoFront SearchBridgeStateInternal( const BridgeState& state, const int tricksRemaining);
+  /** @brief Public bridge-search wrapper for multi-trick continuation analysis. */
   ParetoFront SearchBridgeState( const BridgeState& state, const int tricksRemaining);
+  /** @brief Analyze every legal root move and report its child front summary. */
   BridgeRootReport AnalyzeBridgeRoot( const BridgeState& state, const int tricksRemaining);
+  /** @brief Check a world against all supplied constraints. */
   bool WorldMatchesAllConstraints( const ParsedWorld& world, const vector<WorldConstraint>& constraints);
+  /** @brief Filter a candidate world mask by explicit structural constraints. */
   WorldMask FilterWorldsByConstraints( const vector<ParsedWorld>& worlds, const WorldMask& candidates, const vector<WorldConstraint>& constraints);
+  /** @brief Check whether a world can replay an observed history legally. */
   bool WorldCanReplayHistory( const ParsedWorld& world, const vector<PlayHistoryEvent>& history);
+  /** @brief Filter candidates by replaying complete prior-trick history. */
   WorldMask FilterWorldsByHistory( const vector<ParsedWorld>& worlds, const WorldMask& candidates, const vector<PlayHistoryEvent>& history);
+  /** @brief Filter candidates by replaying the current partial trick after prior history. */
   WorldMask FilterWorldsByHistoryAfterHistory( const vector<ParsedWorld>& worlds, const WorldMask& candidates, const vector<PlayHistoryEvent>& priorHistory, const vector<PlayHistoryEvent>& history);
+  /** @brief Keep only one canonical representative of each equivalent world. */
   WorldMask DeduplicateWorldMask( const vector<ParsedWorld>& worlds, const WorldMask& candidates, unsigned& duplicatesRemoved);
+  /** @brief Downselect worlds reproducibly after canonical sorting. */
   WorldMask SampleWorldMaskDeterministically( const vector<ParsedWorld>& worlds, const WorldMask& candidates, const unsigned sampleLimit, const unsigned samplingSeed, unsigned& sampledOutWorlds);
+  /**
+   * @brief Run the staged world-generation pipeline.
+   *
+   * This is the bridge-specific world supplier for alpha-mu: known cards,
+   * bidding-derived facts, follow-suit implications, play history, current-trick
+   * replay, deduplication, and deterministic sampling are applied in order.
+   */
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const BridgeInformationState& information, WorldGenerationStats* stats);
+  /** @brief Produce an explanation trace for every stage of possible-world filtering. */
   WorldGenerationExplanation ExplainPossibleWorldGeneration( const vector<ParsedWorld>& worlds, const BridgeInformationState& information);
+  /** @brief Convenience overload for simple constraint-only world filtering. */
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const vector<WorldConstraint>& constraints);
+  /** @brief Build a binary toy outcome vector from `0`, `1`, and `x` text. */
   OutcomeVector MakeBinaryOutcome( const string& text);
+  /** @brief Add a toy child reachable only in the supplied world subset. */
   void AddChild( ToyNode& parent, const ToyNode& child, const WorldMask& worlds);
+  /** @brief Add a toy child reachable in all worlds. */
   void AddChild( ToyNode& parent, const ToyNode& child);
+  /** @brief Construct the exact-reuse key for the toy transposition table. */
   string MakeTTKey( const ToyNode& node, const int maxMoves, const WorldMask& usefulWorlds);
+  /** @brief Build a front from compact textual binary outcomes. */
   ParetoFront MakeFront( const unsigned worldCount, const vector<string>& outcomes);
+  /** @brief Resolve a hand-file path relative to either the current or parent directory. */
   string ResolvePath(const string& candidate);
+  /** @brief Construct an exact front for a single surviving world. */
   ParetoFront MakeSingleWorldFront( const unsigned worldCount, const unsigned world, const int value);
+  /** @brief Return the sole surviving world index, or fail if the mask is empty. */
   unsigned SoleWorldIndex(const WorldMask& mask);
+  /** @brief Evaluate the best value assigned to one world by a front. */
   int EvaluateLeafWorld( const ParetoFront& front, const unsigned world);
+  /** @brief Solve the toy tree exactly for one specific world. */
   int EvaluateSingleWorld( const ToyNode& node, const int maxMoves, const unsigned world, SearchStats& stats);
+  /**
+   * @brief Run the paper-faithful alpha-mu recursion on the toy tree.
+   *
+   * This function contains the main algorithmic ideas from the papers: Max-node
+   * front union, Min-node product/min, useful-world maintenance, optimistic
+   * completion, early cut, deep alpha cut, cut-on-win, root cut, and exact-only
+   * transposition-table storage.
+   */
   ParetoFront SearchToy( const ToyNode& node, const int maxMoves, const WorldMask& usefulWorlds, const vector<const ParetoFront *>& upperMaxFronts, const OutcomeVector& optimisticValues, TranspositionTable& tt, const bool isRoot, const double previousRootMu, SearchStats& stats, bool& rootCutTriggered, bool& exactComplete);
+  /** @brief Iteratively deepen the toy search in number of Max moves. */
   IterativeResult RunIterativeDeepening( const ToyNode& root, const int maxDepth);
+  /** @brief Exact DDS score for one bridge world from the current continuation state. */
   int ExactBridgeDDSScoreForWorld( const BridgeState& state, const unsigned worldIndex);
+  /** @brief Parse a DDS hand file into owned arrays for benchmark or comparison modes. */
   void LoadHandFile( const string& fname, HandFileData& data);
+  /** @brief Solve one parsed hand-file board exactly with DDS. */
   int SolveDDSLeafWorld( const HandFileData& data, const int index, const int thrId);
+  /** @brief Convert one parsed DDS deal into the prototype bridge-state wrapper. */
   BridgeState MakeBridgeStateFromDDSDeal( const dealPBN& deal);
+  /** @brief Extract the single-world score expected at a given alpha-mu depth. */
   int SingleWorldFrontScore( const ParetoFront& front, const int depth, const int boardIndex);
+  /** @brief Normalize the board-count limit used by benchmarks. */
   unsigned BoardsToBenchmark( const HandFileData& data, const int maxBoards);
+  /** @brief Parse a comma/range board-skip specification used by benchmarks. */
   set<unsigned> ParseSkippedBoardNumbers( const string& skipSpec, const unsigned availableBoards);
+  /** @brief Select the benchmark board numbers after limits and skips are applied. */
   vector<unsigned> SelectBenchmarkBoardNumbers( const HandFileData& data, const int maxBoards, const string& skipSpec);
   double BenchmarkCheckpointIntervalSeconds();
   void ReportBenchmarkCheckpoint( const BenchmarkMethodSummary& summary, const unsigned completedBoards, const double elapsedSeconds);
   double BenchmarkProgressIntervalSeconds();
   void ReportBenchmarkBoardTiming( const BenchmarkMethodSummary& summary, const unsigned boardNumber, const double boardElapsedSeconds, const double totalElapsedSeconds);
+  /** @brief Benchmark exact DDS solves over a chosen hand-file workload. */
   BenchmarkMethodSummary BenchmarkDDSExactBoards( const string& handFile, const int maxBoards, const string& skipSpec);
+  /** @brief Benchmark one-world exact alpha-mu solves over a chosen hand-file workload. */
   BenchmarkMethodSummary BenchmarkAlphaMuExactBoards( const string& handFile, const int depth, const int maxBoards, const string& skipSpec);
+  /** @brief Print a machine-readable benchmark summary line for one method. */
   void ReportBenchmarkMethodSummary( const BenchmarkMethodSummary& summary);
+  /** @brief Compare exact DDS and exact alpha-mu results over multiple depths. */
   DDSVsAlphaMuComparison CompareDDSAndAlphaMu( const string& handFile, const int maxDepth, const int maxBoards);
+  /** @brief Print a machine-readable DDS-vs-alpha-mu comparison summary. */
   void ReportDDSVsAlphaMuComparison( const DDSVsAlphaMuComparison& summary);
+  /** @brief Verify that DDS leaf best scores match the hand-file goldens. */
   void CheckDDSLeafBestScores( const HandFileData& data, const vector<int>& bestScores);
+  /** @brief Evaluate a hand file with serial DDS threshold probes. */
   DDSLeafEvalResult EvaluateDDSLeafThresholdSerial( const HandFileData& data, const int target);
+  /** @brief Evaluate a hand file with parallel DDS threshold probes. */
   DDSLeafEvalResult EvaluateDDSLeafThresholdParallel( const HandFileData& data, const int target, const int requestedThreads);
 
+  /** @brief Print a successful prototype status line with the standard prefix. */
   void PrintPrototypeStatus(const string& msg);
 }
 

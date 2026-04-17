@@ -1,10 +1,8 @@
 /*
-   DDS, a bridge double dummy solver.
+   alpha_mu_prototype, an alpha-mu bridge solver
 
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
+   Copyright © 2026 by David Jenkins
+   All rights reserved.
 */
 
 #include "alpha_mu_prototype_core.h"

@@ -40,7 +40,11 @@ INPUT                  = . \
                          ../src/SolverIF.h \
                          ../src/ABsearch.h \
                          ../src/QuickTricks.h \
-                         ../src/LaterTricks.h
+                         ../src/LaterTricks.h \
+                         ../test/alpha_mu_prototype.cpp \
+                         ../test/alpha_mu_prototype_core.h \
+                         ../test/alpha_mu_prototype_core.cpp \
+                         ../test/alpha_mu_prototype_tests.h
 FILE_PATTERNS          = *.md \
                          *.h \
                          README \

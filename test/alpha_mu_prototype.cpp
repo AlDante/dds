@@ -1,11 +1,7 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file alpha_mu_prototype.cpp
+ * @brief Thin command-line runner for the split alpha-mu prototype.
+ */
 
 #include <stdexcept>
 #include <string>
@@ -18,6 +14,7 @@ using namespace alpha_mu_prototype;
 
 namespace
 {
+  /** @brief Parse an integer CLI argument with full-string validation. */
   bool TryParseIntArgument(
 	const char * text,
 	int& value)
@@ -38,8 +35,7 @@ namespace
 	  return false;
 	}
   }
-
-
+  /** @brief Read an optional integer CLI argument or fall back to a default. */
   int ParseOptionalIntArgument(
 	const int argc,
 	char ** argv,
@@ -58,6 +54,12 @@ namespace
 }
 
 
+/**
+ * @brief Dispatch to regression, benchmark, and comparison modes.
+ *
+ * The actual alpha-mu implementation lives in `alpha_mu_prototype_core.*`; this
+ * file only validates and routes command-line arguments.
+ */
 int main(int argc, char ** argv)
 {
   if (argc >= 2)

@@ -1,10 +1,8 @@
 /*
-   DDS, a bridge double dummy solver.
+  alpha_mu_prototype, an alpha-mu bridge solver
 
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
+   Copyright © 2026 by David Jenkins
+   All rights reserved.
 */
 
 #include "alpha_mu_prototype_core.h"
@@ -1348,6 +1346,15 @@ string FirstConstructorBalancedFailureReason(
     }
     return "all constructor-local balanced-shape constraints passed";
   }
+  /**
+   * Build the candidate-world pool from a partially observed bridge position.
+   *
+   * This is not part of the original alpha-mu papers themselves; it is the
+   * repository-specific front-end that supplies the possible worlds the paper
+   * search runs over. The function first prepares visible/hidden card state,
+   * then applies constructor-safe ownership and card-location pruning, and only
+   * then enumerates hidden-card assignments with additional feasibility checks.
+   */
 HistoryDerivedConstructionResult ConstructCandidateWorldsFromHistory(
     const HistoryDerivedWorldSpec& spec,
     const BridgeInformationState& information)
@@ -1379,6 +1386,12 @@ HistoryDerivedConstructionResult ConstructCandidateWorldsFromHistory(
     SortConstructedWorlds(result.worlds);
     return result;
   }
+  /**
+   * Explain the constructor-local pruning stages used during world building.
+   *
+   * The explanation mirrors the actual construction order so tests can show how
+   * much each pre-search stage removes before the later staged filtering pass.
+   */
 HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction(
     const HistoryDerivedWorldSpec& spec,
     const BridgeInformationState& information)
@@ -1725,6 +1738,14 @@ ParetoFront MakeBridgeTerminalFront(const BridgeState& state)
     front.Insert(vec);
     return front;
   }
+  /**
+   * Evaluate each surviving world exactly with DDS and wrap the result as one
+   * sparse outcome vector.
+   *
+   * In alpha-mu terms, DDS is the perfect-information leaf oracle. The bridge
+   * continuation search above it stays in imperfect-information space, while DDS
+   * supplies the exact score once the prototype reaches its leaf horizon.
+   */
 ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state)
   {
     vector<unsigned> active;
@@ -1791,6 +1812,14 @@ int BridgeDepthCost(
   {
     return (state.currentTrick.size() == 3 && child.currentTrick.empty() ? 1 : 0);
   }
+  /**
+   * Bridge continuation search using the alpha-mu front semantics.
+   *
+   * Max-side turns merge child fronts by union plus Pareto reduction; defender
+   * turns combine children by Min-node product/min. This is the same semantic
+   * split as the original alpha-mu paper, but applied to concrete bridge moves
+   * and with DDS used as the exact leaf evaluator.
+   */
 ParetoFront SearchBridgeStateInternal(
     const BridgeState& state,
     const int tricksRemaining)
@@ -2080,6 +2109,14 @@ WorldMask SampleWorldMaskDeterministically(
     sampledOutWorlds = static_cast<unsigned>(active.size()) - sampleLimit;
     return sampled;
   }
+  /**
+   * Run the staged possible-world pipeline used before alpha-mu search starts.
+   *
+   * The alpha-mu papers assume a set of possible worlds is available. In this
+   * repository that set is built incrementally from bridge facts: known cards,
+   * bidding-derived facts, follow-suit implications, full play history, current
+   * trick legality, optional deduplication, and deterministic downselection.
+   */
 WorldMask GeneratePossibleWorlds(
     const vector<ParsedWorld>& worlds,
     const BridgeInformationState& information,
@@ -2135,6 +2172,12 @@ WorldMask GeneratePossibleWorlds(
       stats->finalWorldCount = mask.PopCount();
     return mask;
   }
+  /**
+   * Produce a per-world explanation for each filtering stage.
+   *
+   * This is intentionally verbose and test-facing: it makes the bridge-specific
+   * world-supply machinery auditable before worlds are handed to alpha-mu.
+   */
 WorldGenerationExplanation ExplainPossibleWorldGeneration(
     const vector<ParsedWorld>& worlds,
     const BridgeInformationState& information)
@@ -2440,6 +2483,24 @@ int EvaluateSingleWorld(
     }
     return best;
   }
+  /**
+   * Execute the paper-faithful alpha-mu recursion on the toy tree.
+   *
+   * This function is the clearest statement of the algorithm in the repository:
+   *
+   * - Max nodes use union/merge of child fronts.
+   * - Min nodes use product/min combination of child fronts.
+   * - Useful worlds are maintained after each Min backup.
+   * - Optimistic completion is used when comparing sparse intermediate fronts.
+   * - Early cut checks the nearest Max ancestor.
+   * - Deep alpha cut checks earlier Max ancestors.
+   * - Cut-on-win stops a Max node once a child wins in all useful worlds.
+   * - Root cut stops iterative deepening once the root `mu` value stabilizes.
+   * - The transposition table stores only exact fronts.
+   *
+   * Together, those items correspond to the original alpha-mu paper plus the
+   * later optimization paper discussed in `docs/alpha-mu.md`.
+   */
 ParetoFront SearchToy(
     const ToyNode& node,
     const int maxMoves,
@@ -2505,6 +2566,13 @@ ParetoFront SearchToy(
 
     if (node.type == TOY_MIN)
     {
+      /*
+       * Optimization-paper path:
+       *   1. combine children with MinProduct,
+       *   2. shrink the useful-world set after each child,
+       *   3. compare an optimistically completed sparse front against ancestor
+       *      Max fronts for early/deep alpha cuts.
+       */
       ParetoFront mini(node.leafFront.worldCount);
       bool initialized = false;
       bool complete = true;
@@ -2577,6 +2645,12 @@ ParetoFront SearchToy(
       return mini;
     }
 
+    /*
+     * Original-paper Max path plus optimization-paper cut-on-win/root-cut:
+     * merge each child front into the running front, stop early if a child now
+     * wins in every useful world, and at the root stop iterative deepening once
+     * the reported `mu` value stops changing.
+     */
     ParetoFront front(node.leafFront.worldCount);
     bool complete = true;
     vector<const ParetoFront *> childUpperMaxFronts(upperMaxFronts);
@@ -2628,6 +2702,12 @@ ParetoFront SearchToy(
     }
     return front;
   }
+  /**
+   * Iteratively deepen the toy alpha-mu search in number of Max moves.
+   *
+   * The root `mu` value from the previous iteration feeds the root-cut test in
+   * the next iteration, matching the prototype interpretation of the later paper.
+   */
 IterativeResult RunIterativeDeepening(
     const ToyNode& root,
     const int maxDepth)
