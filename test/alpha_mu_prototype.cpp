@@ -613,7 +613,17 @@ namespace
     CONSTRAINT_PARTNERSHIP_MIN_LENGTH = 8,
     CONSTRAINT_PARTNERSHIP_MIN_HCP = 9,
     CONSTRAINT_PARTNERSHIP_MAX_HCP = 10,
-    CONSTRAINT_PARTNERSHIP_MAX_LENGTH = 11
+    CONSTRAINT_PARTNERSHIP_MAX_LENGTH = 11,
+    CONSTRAINT_HAND_TYPE = 12
+  };
+
+
+  enum HandType
+  {
+    HAND_TYPE_BALANCED = 0,
+    HAND_TYPE_ONE_SUITER = 1,
+    HAND_TYPE_TWO_SUITER = 2,
+    HAND_TYPE_THREE_SUITER = 3
   };
 
 
@@ -870,9 +880,17 @@ namespace
     static WorldConstraint Balanced(
       const int playerArg)
     {
+      return HandTypeConstraint(playerArg, HAND_TYPE_BALANCED);
+    }
+
+    static WorldConstraint HandTypeConstraint(
+      const int playerArg,
+      const int handTypeArg)
+    {
       WorldConstraint c;
-      c.kind = CONSTRAINT_BALANCED;
+      c.kind = CONSTRAINT_HAND_TYPE;
       c.player = playerArg;
+      c.count = handTypeArg;
       return c;
     }
 
@@ -1352,9 +1370,72 @@ namespace
   }
 
 
-  static bool WorldHasBalancedShape(
+  static string HandTypeName(const int handType)
+  {
+    switch (handType)
+    {
+      case HAND_TYPE_BALANCED: return "balanced";
+      case HAND_TYPE_ONE_SUITER: return "one-suiter";
+      case HAND_TYPE_TWO_SUITER: return "two-suiter";
+      case HAND_TYPE_THREE_SUITER: return "three-suiter";
+      default: return "unknown hand type";
+    }
+  }
+
+
+  static bool LengthsMatchHandType(
+    const int lengths[4],
+    const int totalCards,
+    const int handType)
+  {
+    if (totalCards != 13)
+      return false;
+
+    int sortedLengths[4];
+    int suitsAtLeast4 = 0;
+    int suitsAtLeast5 = 0;
+    for (int suit = 0; suit < 4; suit++)
+    {
+      sortedLengths[suit] = lengths[suit];
+      if (lengths[suit] >= 4)
+        suitsAtLeast4++;
+      if (lengths[suit] >= 5)
+        suitsAtLeast5++;
+    }
+    sort(sortedLengths, sortedLengths + 4);
+
+    const bool balanced =
+      ((sortedLengths[0] == 2 && sortedLengths[1] == 3 &&
+        sortedLengths[2] == 3 && sortedLengths[3] == 5) ||
+       (sortedLengths[0] == 2 && sortedLengths[1] == 3 &&
+        sortedLengths[2] == 4 && sortedLengths[3] == 4) ||
+       (sortedLengths[0] == 3 && sortedLengths[1] == 3 &&
+        sortedLengths[2] == 3 && sortedLengths[3] == 4));
+
+    switch (handType)
+    {
+      case HAND_TYPE_BALANCED:
+        return balanced;
+
+      case HAND_TYPE_THREE_SUITER:
+        return ! balanced && suitsAtLeast4 >= 3;
+
+      case HAND_TYPE_TWO_SUITER:
+        return ! balanced && suitsAtLeast4 < 3 && suitsAtLeast5 >= 2;
+
+      case HAND_TYPE_ONE_SUITER:
+        return ! balanced && suitsAtLeast4 < 3 && suitsAtLeast5 == 1;
+
+      default:
+        throw runtime_error("Unknown hand type");
+    }
+  }
+
+
+  static bool WorldHasHandType(
     const ParsedWorld& world,
-    const int player)
+    const int player,
+    const int handType)
   {
     int lengths[4];
     int totalCards = 0;
@@ -1363,14 +1444,23 @@ namespace
       lengths[suit] = WorldSuitLength(world, player, suit);
       totalCards += lengths[suit];
     }
+    return LengthsMatchHandType(lengths, totalCards, handType);
+  }
 
-    if (totalCards != 13)
-      return false;
 
-    sort(lengths, lengths + 4);
-    return ((lengths[0] == 2 && lengths[1] == 3 && lengths[2] == 3 && lengths[3] == 5) ||
-      (lengths[0] == 2 && lengths[1] == 3 && lengths[2] == 4 && lengths[3] == 4) ||
-      (lengths[0] == 3 && lengths[1] == 3 && lengths[2] == 3 && lengths[3] == 4));
+  static bool WorldHasBalancedShape(
+    const ParsedWorld& world,
+    const int player)
+  {
+    return WorldHasHandType(world, player, HAND_TYPE_BALANCED);
+  }
+
+
+  static int ConstraintHandType(const WorldConstraint& constraint)
+  {
+    if (constraint.kind == CONSTRAINT_BALANCED)
+      return HAND_TYPE_BALANCED;
+    return constraint.count;
   }
 
 
@@ -1553,6 +1643,10 @@ namespace
 
       case CONSTRAINT_BALANCED:
         oss << "must have a balanced shape";
+        break;
+
+      case CONSTRAINT_HAND_TYPE:
+        oss << "must have hand type " << HandTypeName(constraint.count);
         break;
 
       case CONSTRAINT_PARTNERSHIP_MIN_LENGTH:
@@ -2243,7 +2337,8 @@ namespace
     const vector<HiddenCardCandidate>& hiddenCards,
     const unsigned nextIndex,
     const int seat,
-    const int targetCount)
+    const int targetCount,
+    const int handType)
   {
     if (targetCount != 13)
       return true;
@@ -2257,36 +2352,21 @@ namespace
         PotentialRemainingSuitCardsForSeat(hiddenCards, nextIndex, seat, suit);
     }
 
-    const int balancedPatterns[3][4] = {
-      { 5, 3, 3, 2 },
-      { 4, 4, 3, 2 },
-      { 4, 3, 3, 3 }
-    };
-
-    for (int patternIndex = 0; patternIndex < 3; patternIndex++)
+    for (int suit0 = currentLengths[0]; suit0 <= maxLengths[0]; suit0++)
     {
-      vector<int> pattern(
-        balancedPatterns[patternIndex],
-        balancedPatterns[patternIndex] + 4);
-      sort(pattern.begin(), pattern.end());
-      do
+      for (int suit1 = currentLengths[1]; suit1 <= maxLengths[1]; suit1++)
       {
-        bool fits = true;
-        for (int suit = 0; suit < 4; suit++)
+        for (int suit2 = currentLengths[2]; suit2 <= maxLengths[2]; suit2++)
         {
-          const int targetLength = pattern[static_cast<unsigned>(suit)];
-          if (currentLengths[suit] > targetLength ||
-              maxLengths[suit] < targetLength)
-          {
-            fits = false;
-            break;
-          }
-        }
+          const int suit3 = 13 - suit0 - suit1 - suit2;
+          if (suit3 < currentLengths[3] || suit3 > maxLengths[3])
+            continue;
 
-        if (fits)
-          return true;
+          const int lengths[4] = { suit0, suit1, suit2, suit3 };
+          if (LengthsMatchHandType(lengths, 13, handType))
+            return true;
+        }
       }
-      while (next_permutation(pattern.begin(), pattern.end()));
     }
 
     return false;
@@ -2307,11 +2387,13 @@ namespace
       if (! VectorContainsSeat(hiddenSeats, constraint.player))
         continue;
 
-      if (constraint.kind != CONSTRAINT_BALANCED)
+      if (constraint.kind != CONSTRAINT_BALANCED &&
+          constraint.kind != CONSTRAINT_HAND_TYPE)
         continue;
 
       if (! PartialSeatCanStillReachBalancedShape(current, hiddenCards,
-            nextIndex, constraint.player, finalSeatCounts[constraint.player]))
+            nextIndex, constraint.player, finalSeatCounts[constraint.player],
+            ConstraintHandType(constraint)))
       {
         return false;
       }
@@ -2526,7 +2608,8 @@ namespace
       if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
         continue;
 
-      if (constraint.kind != CONSTRAINT_BALANCED)
+      if (constraint.kind != CONSTRAINT_BALANCED &&
+          constraint.kind != CONSTRAINT_HAND_TYPE)
         continue;
 
       if (! WorldMatchesConstraint(world, constraint))
@@ -2600,7 +2683,8 @@ namespace
       if (! ConstructorConstraintTouchesHiddenSeats(hiddenSeats, constraint))
         continue;
 
-      if (constraint.kind != CONSTRAINT_BALANCED)
+      if (constraint.kind != CONSTRAINT_BALANCED &&
+          constraint.kind != CONSTRAINT_HAND_TYPE)
         continue;
 
       if (! WorldMatchesConstraint(world, constraint))
@@ -3212,7 +3296,10 @@ namespace
           constraint.count;
 
       case CONSTRAINT_BALANCED:
-        return WorldHasBalancedShape(world, constraint.player);
+        return WorldHasHandType(world, constraint.player, HAND_TYPE_BALANCED);
+
+      case CONSTRAINT_HAND_TYPE:
+        return WorldHasHandType(world, constraint.player, constraint.count);
 
       case CONSTRAINT_PARTNERSHIP_MIN_LENGTH:
         return WorldSuitLength(world, constraint.player, constraint.suit) +
@@ -5009,6 +5096,25 @@ namespace
     Check(! WorldHasBalancedShape(biddingWorlds[3], SEAT_EAST),
       "bidding-style world generation should reject clearly unbalanced hand shapes");
 
+    vector<ParsedWorld> handTypeWorlds;
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJ.T98.765.432 ... ..."));
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT4.9.654.432 ... ..."));
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT.98765.4.32 ... ..."));
+    handTypeWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJ.T987.6543.2 ... ..."));
+
+    Check(WorldHasHandType(handTypeWorlds[0], SEAT_EAST, HAND_TYPE_BALANCED),
+      "hand-type classification should recognize a balanced East hand");
+    Check(WorldHasHandType(handTypeWorlds[1], SEAT_EAST, HAND_TYPE_ONE_SUITER),
+      "hand-type classification should recognize a one-suiter East hand");
+    Check(WorldHasHandType(handTypeWorlds[2], SEAT_EAST, HAND_TYPE_TWO_SUITER),
+      "hand-type classification should recognize a two-suiter East hand");
+    Check(WorldHasHandType(handTypeWorlds[3], SEAT_EAST, HAND_TYPE_THREE_SUITER),
+      "hand-type classification should recognize a three-suiter East hand");
+
     BridgeInformationState oneNoTrumpInfo;
     oneNoTrumpInfo.biddingConstraints.push_back(
       WorldConstraint::Balanced(SEAT_EAST));
@@ -5024,6 +5130,24 @@ namespace
     Check(oneNoTrumpStats.afterBiddingCount == 2,
       "bidding-style HCP and balanced-shape constraints should leave exactly two matching worlds");
 
+    BridgeInformationState handTypeInfo;
+    handTypeInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_TWO_SUITER));
+    WorldGenerationStats handTypeStats;
+    const WorldMask handTypeMask = GeneratePossibleWorlds(handTypeWorlds,
+      handTypeInfo, &handTypeStats);
+    Check(handTypeMask == WorldMask(4, 0x4U),
+      "hand-type-only bidding constraints should keep only the two-suiter world");
+    Check(handTypeStats.afterBiddingCount == 1,
+      "hand-type-only bidding constraints should narrow the world pool during the bidding stage");
+
+    const WorldGenerationExplanation handTypeExplanation =
+      ExplainPossibleWorldGeneration(handTypeWorlds, handTypeInfo);
+    Check(! handTypeExplanation.worlds[0].accepted &&
+          handTypeExplanation.worlds[0].rejectionStage == "bidding" &&
+          handTypeExplanation.worlds[0].rejectionReason.find("two-suiter") != string::npos,
+      "hand-type-only explanation should reject non-matching hand types at the bidding stage");
+
     BridgeInformationState biddingInfo;
     biddingInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
       SEAT_EAST, SUIT_SPADES, 5));
@@ -5036,6 +5160,45 @@ namespace
       "world-generation stats should count the initial candidate pool");
     Check(biddingStats.afterBiddingCount == 2,
       "world-generation stats should record the post-bidding surviving worlds");
+
+    BridgeInformationState lengthRangeInfo;
+    lengthRangeInfo.biddingConstraints.push_back(WorldConstraint::MinLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    lengthRangeInfo.biddingConstraints.push_back(WorldConstraint::MaxLength(
+      SEAT_EAST, SUIT_SPADES, 5));
+    lengthRangeInfo.biddingConstraints.push_back(WorldConstraint::MaxLength(
+      SEAT_EAST, SUIT_HEARTS, 0));
+    WorldGenerationStats lengthRangeStats;
+    const WorldMask lengthRangeMask = GeneratePossibleWorlds(worlds,
+      lengthRangeInfo, &lengthRangeStats);
+    Check(lengthRangeMask == WorldMask(4, 0x8U),
+      "suit-length-only bidding constraints should keep only the world matching the supplied East suit-length bounds");
+    Check(lengthRangeStats.afterBiddingCount == 1,
+      "suit-length-range bidding constraints should narrow the world pool during the bidding stage");
+
+    vector<ParsedWorld> combinedAuctionWorlds;
+    combinedAuctionWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT4.9.654.432 ... ..."));
+    combinedAuctionWorlds.push_back(ParsePBNWorld(
+      "N:... AKQJT.98765.4.32 ... ..."));
+    combinedAuctionWorlds.push_back(ParsePBNWorld(
+      "N:... KQJT9.9.7654.432 ... ..."));
+
+    BridgeInformationState combinedAuctionInfo;
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 10));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 10));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_ONE_SUITER));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 5));
+    combinedAuctionInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_SPADES, 5));
+    const WorldMask combinedAuctionMask = GeneratePossibleWorlds(
+      combinedAuctionWorlds, combinedAuctionInfo, NULL);
+    Check(combinedAuctionMask == WorldMask(3, 0x1U),
+      "combined HCP, hand-type, and suit-length bidding constraints should identify a single matching world");
 
     vector<ParsedWorld> partnershipWorlds;
     partnershipWorlds.push_back(ParsePBNWorld(
@@ -6159,6 +6322,104 @@ namespace
       "the world surviving constructor-local balanced pruning should also survive the later staged filters");
     Check(stats.afterBiddingCount == 1,
       "later bidding-stage filtering should see only the constructor-pruned balanced-shape survivor");
+  }
+
+
+  static void TestHistoryDerivedConstructionUsesBiddingHandType()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:A3.AKT7.AKT7.A32 QJ98.QJ98.QJ9.QJ K2.65432.65432.K T7654..8.T987654");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    const auto addHasCards =
+      [&](const int seat, const int suit, const string& ranks)
+      {
+        for (unsigned i = 0; i < ranks.size(); i++)
+        {
+          unconstrainedInfo.biddingConstraints.push_back(
+            WorldConstraint::HasCard(seat, suit, ranks[i]));
+        }
+      };
+
+    addHasCards(SEAT_EAST, SUIT_SPADES, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_HEARTS, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_DIAMONDS, "QJ9");
+    addHasCards(SEAT_EAST, SUIT_CLUBS, "Q");
+    addHasCards(SEAT_WEST, SUIT_SPADES, "7654");
+    addHasCards(SEAT_WEST, SUIT_DIAMONDS, "8");
+    addHasCards(SEAT_WEST, SUIT_CLUBS, "T987654");
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local hand-type pruning the full hidden-hand fixture should keep the two legal ambiguous spade-versus-club worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_ONE_SUITER));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local hand-type pruning should keep only the world where East remains a one-suiter");
+    Check(WorldHasHandType(constrained.worlds[0], SEAT_EAST, HAND_TYPE_ONE_SUITER),
+      "the world surviving constructor-local hand-type pruning should classify East as a one-suiter");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_SPADES, 'T'),
+      "constructor-local hand-type pruning should keep the world where East receives the ambiguous spade instead of the ambiguous club");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    Check(explanation.stats.afterConstructorLengthCount == 2 &&
+          explanation.stats.afterConstructorHCPCount == 2 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local hand-type explanation should preserve both full-hand candidates through length and HCP stages, then narrow to one at the hand-type stage");
+  }
+
+
+  static void TestHistoryDerivedConstructionHandTypeDefersOnIncompleteHands()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A.9.. K.Q.. 2.8.. J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'K')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::HandTypeConstraint(SEAT_EAST, HAND_TYPE_ONE_SUITER));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 2,
+      "constructor-local hand-type pruning should defer on incomplete hidden hands instead of pruning the short toy fixture early");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(2, 0x0ULL),
+      "the later full bidding filter should still reject incomplete short hidden-hand worlds for a hand-type requirement");
+    Check(stats.afterBiddingCount == 0,
+      "later bidding-stage filtering should reject every incomplete short hidden-hand world under a hand-type requirement");
   }
 
 
@@ -7475,8 +7736,14 @@ int main(int argc, char ** argv)
   TestHistoryDerivedConstructionUsesBiddingBalancedShape();
   cout << "alpha_mu_prototype: history-derived bidding balanced construction OK\n";
 
+  TestHistoryDerivedConstructionUsesBiddingHandType();
+  cout << "alpha_mu_prototype: history-derived bidding hand-type construction OK\n";
+
   TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands();
   cout << "alpha_mu_prototype: history-derived balanced deferral on incomplete hands OK\n";
+
+  TestHistoryDerivedConstructionHandTypeDefersOnIncompleteHands();
+  cout << "alpha_mu_prototype: history-derived hand-type deferral on incomplete hands OK\n";
 
   TestHistoryDerivedConstructionUsesDerivedFollowSuitLength();
   cout << "alpha_mu_prototype: history-derived follow-suit construction OK\n";
