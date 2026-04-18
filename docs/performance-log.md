@@ -194,3 +194,24 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 - Per-board timings for `alpha_mu_prototype_list10_depth2` (s): `33.676, 424.807, 18.545, 33.332, 14.847, 29.519, 9.362, 50.346, 18.946, 13.711`
 
+## 2026-04-18 08:46:32 — pre-parallelisation depth-3 alpha-mu baseline
+
+- Output log: `test/build/list10_alpha_mu_depth3_skip2_long.log`
+- Status sidecar: `test/build/list10_alpha_mu_depth3_skip2_long.log.status.json`
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Command: `./build/alpha_mu_prototype benchmark_alpha hands/list10.txt 3 0 2`
+- Checkpoint interval: `60 s`
+- Heartbeat interval: `60 s`
+- Result: `returncode=0`, `mismatches=0`
+- Note: Skip spec `2` skipped board `2`, so the run covered boards `1, 3, 4, 5, 6, 7, 8, 9, 10`.
+
+| Workload | Boards | Total (s) | Per board (s) |
+| --- | ---: | ---: | ---: |
+| `alpha_mu_prototype_list10_depth3_skip2` | 9 | 42065.418 | 4673.935 |
+
+- Per-board timings for `alpha_mu_prototype_list10_depth3_skip2` (s): `4559.504, 3883.365, 4634.658, 3851.057, 7581.362, 2623.548, 5916.843, 5429.650, 3585.430`
+- Fastest board: `7` at `2623.548 s`
+- Slowest board: `6` at `7581.362 s`
+- Conclusion: the nearly `3x` spread between boards makes this a strong pre-parallelisation baseline for PR 2 and argues for dynamic queue-based board scheduling rather than static board partitioning.
+

@@ -115,3 +115,6 @@ Routine standardized runs are recorded in:
 Raw per-run logs and machine-readable summaries are written to:
 
 - `test/build/performance_runs/<timestamp>/`
+
+For deeper alpha-mu benchmarks outside the standardized suite, see the recorded serial baseline in `docs/performance-log.md` dated `2026-04-18 08:46:32`, which captures the `hands/list10.txt` depth-3 pre-parallelisation run and its strong board-to-board timing skew.
+
