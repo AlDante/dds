@@ -5,9 +5,6 @@ This page captures two things:
 1. the earliest preserved performance history visible in this repository, and
 2. the standardized post-change performance routine we now use after important code changes.
 
-For profiling-specific build targets and a macOS Instruments workflow, see
-`profiling.md`.
-
 ## Earliest preserved performance records
 
 The oldest performance note currently preserved in-tree is in `ChangeLog` under **DDS 1.0.1**.

@@ -14,8 +14,6 @@ namespace alpha_mu_prototype
   const char kPrototypeMessagePrefix[] = "alpha_mu_prototype: ";
   const char kAlphaMuPlayHandFile[] = "hands/alpha_mu_play.txt";
 
-  BenchmarkBoardProgressContext * gBenchmarkBoardProgress = NULL;
-
 void Fail(const string& msg)
   {
     cerr << kPrototypeMessagePrefix << msg << "\n";
@@ -25,6 +23,61 @@ void Check(const bool condition, const string& msg)
   {
     if (! condition)
       Fail(msg);
+  }
+string AlphaMuParallelModeName(const AlphaMuParallelMode mode)
+  {
+    switch (mode)
+    {
+      case ALPHA_MU_PARALLEL_SERIAL:
+        return "serial";
+
+      case ALPHA_MU_PARALLEL_BOARD:
+        return "board";
+
+      case ALPHA_MU_PARALLEL_ROOT:
+        return "root";
+
+      default:
+        throw runtime_error("Unknown alpha-mu parallel mode");
+    }
+  }
+AlphaMuParallelMode ParseAlphaMuParallelModeName(const string& text)
+  {
+    if (text == "serial")
+      return ALPHA_MU_PARALLEL_SERIAL;
+    else if (text == "board")
+      return ALPHA_MU_PARALLEL_BOARD;
+    else if (text == "root")
+      return ALPHA_MU_PARALLEL_ROOT;
+
+    throw runtime_error("Unknown alpha-mu parallel mode");
+  }
+SearchExecutionContext MakeSearchExecutionContext(
+    const int ddsThreadId,
+    BenchmarkBoardProgressContext * benchmarkProgress,
+    const AlphaMuParallelMode parallelMode,
+    const int boardWorkers,
+    const int rootWorkers)
+  {
+    SearchExecutionContext context;
+    context.ddsThreadId = ddsThreadId;
+    context.parallelMode = parallelMode;
+    context.boardWorkers = boardWorkers;
+    context.rootWorkers = rootWorkers;
+    context.benchmarkProgress = benchmarkProgress;
+    return context;
+  }
+AlphaMuBenchmarkOptions NormalizeAlphaMuBenchmarkOptions(
+    const AlphaMuBenchmarkOptions& options)
+  {
+    AlphaMuBenchmarkOptions normalized(options);
+    if (normalized.boardWorkers < 1)
+      normalized.boardWorkers = 1;
+    if (normalized.rootWorkers < 1)
+      normalized.rootWorkers = 1;
+    if (normalized.ddsThreadId < 0)
+      normalized.ddsThreadId = 0;
+    return normalized;
   }
 bool SameOutcome(
     const OutcomeVector& left,
@@ -1724,7 +1777,8 @@ ParetoFront MakeZeroFront(const unsigned worldCount);
   void CheckDDS(const int ret, const string& tag);
   void MaybeReportBenchmarkBoardProgress(
     const BridgeState& state,
-    const int tricksRemaining);
+    const int tricksRemaining,
+    const SearchExecutionContext& context);
 ParetoFront MakeBridgeTerminalFront(const BridgeState& state)
   {
     ParetoFront front(state.possibleWorlds.count);
@@ -1746,7 +1800,9 @@ ParetoFront MakeBridgeTerminalFront(const BridgeState& state)
    * continuation search above it stays in imperfect-information space, while DDS
    * supplies the exact score once the prototype reaches its leaf horizon.
    */
-ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state)
+ParetoFront MakeBridgeDDSLeafFront(
+    const BridgeState& state,
+    const SearchExecutionContext& context)
   {
     vector<unsigned> active;
     for (unsigned i = 0; i < state.worlds.size(); i++)
@@ -1781,11 +1837,12 @@ ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state)
       futureTricks fut;
       memset(&fut, 0, sizeof(fut));
 
-      if (gBenchmarkBoardProgress != NULL)
-        gBenchmarkBoardProgress->ddsLeafCalls++;
+      if (context.benchmarkProgress != NULL)
+        context.benchmarkProgress->ddsLeafCalls++;
 
       const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
-      const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut, 0);
+      const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut,
+        context.ddsThreadId);
       ostringstream ddsTag;
       ddsTag << "SolveBoardPBN bridge DDS leaf"
              << " world=" << worldIndex
@@ -1806,6 +1863,10 @@ ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state)
     front.Insert(vec);
     return front;
   }
+ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state)
+  {
+    return MakeBridgeDDSLeafFront(state, SearchExecutionContext());
+  }
 int BridgeDepthCost(
     const BridgeState& state,
     const BridgeState& child)
@@ -1822,19 +1883,20 @@ int BridgeDepthCost(
    */
 ParetoFront SearchBridgeStateInternal(
     const BridgeState& state,
-    const int tricksRemaining)
+    const int tricksRemaining,
+    const SearchExecutionContext& context)
   {
-    MaybeReportBenchmarkBoardProgress(state, tricksRemaining);
+    MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
     if (state.possibleWorlds.Empty())
       return MakeZeroFront(state.possibleWorlds.count);
 
     if (tricksRemaining <= 0)
-      return MakeBridgeDDSLeafFront(state);
+      return MakeBridgeDDSLeafFront(state, context);
 
     const vector<BridgeChild> children = ExpandBridgeChildren(state);
     if (children.empty())
-      return MakeBridgeDDSLeafFront(state);
+      return MakeBridgeDDSLeafFront(state, context);
 
     if (SeatSide(state.playerToMove) == state.maxSide)
     {
@@ -1844,7 +1906,7 @@ ParetoFront SearchBridgeStateInternal(
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateInternal(children[i].state, nextDepth));
+          SearchBridgeStateInternal(children[i].state, nextDepth, context));
       }
       return front;
     }
@@ -1857,7 +1919,8 @@ ParetoFront SearchBridgeStateInternal(
         children[i].state);
       const ParetoFront childFront = SearchBridgeStateInternal(
         children[i].state,
-        nextDepth);
+        nextDepth,
+        context);
       if (! initialized)
       {
         front = childFront;
@@ -1868,15 +1931,31 @@ ParetoFront SearchBridgeStateInternal(
     }
     return front;
   }
+ParetoFront SearchBridgeStateInternal(
+    const BridgeState& state,
+    const int tricksRemaining)
+  {
+    return SearchBridgeStateInternal(state, tricksRemaining,
+      SearchExecutionContext());
+  }
+ParetoFront SearchBridgeState(
+    const BridgeState& state,
+    const int tricksRemaining,
+    const SearchExecutionContext& context)
+  {
+    return SearchBridgeStateInternal(state, tricksRemaining, context);
+  }
 ParetoFront SearchBridgeState(
     const BridgeState& state,
     const int tricksRemaining)
   {
-    return SearchBridgeStateInternal(state, tricksRemaining);
+    return SearchBridgeStateInternal(state, tricksRemaining,
+      SearchExecutionContext());
   }
 BridgeRootReport AnalyzeBridgeRoot(
     const BridgeState& state,
-    const int tricksRemaining)
+    const int tricksRemaining,
+    const SearchExecutionContext& context)
   {
     BridgeRootReport report(state.possibleWorlds.count);
     if (state.possibleWorlds.Empty())
@@ -1889,7 +1968,8 @@ BridgeRootReport AnalyzeBridgeRoot(
       childReport.move = children[i].move;
       const int nextDepth = tricksRemaining - BridgeDepthCost(state,
         children[i].state);
-      childReport.front = SearchBridgeState(children[i].state, nextDepth);
+      childReport.front = SearchBridgeState(children[i].state, nextDepth,
+        context);
       childReport.validWorlds = childReport.front.ValidWorlds();
       childReport.usefulWorlds = childReport.front.UsefulWorlds();
       report.children.push_back(childReport);
@@ -1898,6 +1978,12 @@ BridgeRootReport AnalyzeBridgeRoot(
     }
 
     return report;
+  }
+BridgeRootReport AnalyzeBridgeRoot(
+    const BridgeState& state,
+    const int tricksRemaining)
+  {
+    return AnalyzeBridgeRoot(state, tricksRemaining, SearchExecutionContext());
   }
 bool WorldMatchesConstraint(
     const ParsedWorld& world,
@@ -2769,13 +2855,15 @@ void CheckDDS(const int ret, const string& tag)
   }
 int ExactBridgeDDSScoreForWorld(
     const BridgeState& state,
-    const unsigned worldIndex)
+    const unsigned worldIndex,
+    const SearchExecutionContext& context)
   {
     futureTricks fut;
     memset(&fut, 0, sizeof(fut));
 
     const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
-    const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut, 0);
+    const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut,
+      context.ddsThreadId);
     CheckDDS(ret, "SolveBoardPBN exact bridge DDS score");
 
     const int best = BestScore(fut);
@@ -2785,6 +2873,13 @@ int ExactBridgeDDSScoreForWorld(
       (SeatSide(state.playerToMove) == state.maxSide ?
         best : tricksRemaining - best);
     return state.maxTricksWon + maxAdditional;
+  }
+int ExactBridgeDDSScoreForWorld(
+    const BridgeState& state,
+    const unsigned worldIndex)
+  {
+    return ExactBridgeDDSScoreForWorld(state, worldIndex,
+      SearchExecutionContext());
   }
 void LoadHandFile(
     const string& fname,
@@ -2961,26 +3056,25 @@ BenchmarkMethodSummary BenchmarkDDSExactBoards(
     return summary;
   }
 BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
-    const string& handFile,
-    const int depth,
-    const int maxBoards,
-    const string& skipSpec)
+    const AlphaMuBenchmarkOptions& rawOptions)
   {
-    Check(depth >= 0,
+    const AlphaMuBenchmarkOptions options =
+      NormalizeAlphaMuBenchmarkOptions(rawOptions);
+    Check(options.depth >= 0,
       "alpha-mu benchmark depth should be non-negative");
 
     HandFileData data;
-    LoadHandFile(handFile, data);
+    LoadHandFile(options.handFile, data);
     Check(data.number > 0,
       "alpha-mu benchmark requires at least one board in the selected hand file");
 
     BenchmarkMethodSummary summary;
     summary.method = "alpha_mu";
-    summary.handFile = ResolvePath(handFile);
-    const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data, maxBoards,
-      skipSpec);
+    summary.handFile = ResolvePath(options.handFile);
+    const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data,
+      options.maxBoards, options.skipSpec);
     summary.boardsTested = static_cast<unsigned>(boardNumbers.size());
-    summary.depth = depth;
+    summary.depth = options.depth;
     Check(summary.boardsTested > 0,
       "alpha-mu benchmark selected zero boards to test");
 
@@ -3001,17 +3095,22 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
       progress.handFile = summary.handFile;
       progress.boardNumber = boardNumber;
       progress.totalBoards = summary.boardsTested;
-      progress.depth = depth;
+      progress.depth = options.depth;
       progress.reportIntervalSeconds = BenchmarkProgressIntervalSeconds();
       progress.totalStart = start;
       progress.boardStart = boardStart;
       progress.nextReportSeconds = progress.reportIntervalSeconds;
-      gBenchmarkBoardProgress = (progress.reportIntervalSeconds > 0.0 ? &progress : NULL);
+      const SearchExecutionContext searchContext = MakeSearchExecutionContext(
+        options.ddsThreadId,
+        (progress.reportIntervalSeconds > 0.0 ? &progress : NULL),
+        options.parallelMode,
+        options.boardWorkers,
+        options.rootWorkers);
 
-      const ParetoFront front = SearchBridgeState(state, depth);
-      gBenchmarkBoardProgress = NULL;
+      const ParetoFront front = SearchBridgeState(state, options.depth,
+        searchContext);
 
-      const int alphaScore = SingleWorldFrontScore(front, depth,
+      const int alphaScore = SingleWorldFrontScore(front, options.depth,
         static_cast<int>(boardIndex));
       if (alphaScore != BestScore(data.futList[boardIndex]))
         summary.mismatches++;
@@ -3036,6 +3135,19 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
     const chrono::steady_clock::time_point end = chrono::steady_clock::now();
     summary.elapsedSeconds = chrono::duration<double>(end - start).count();
     return summary;
+  }
+BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
+    const string& handFile,
+    const int depth,
+    const int maxBoards,
+    const string& skipSpec)
+  {
+    AlphaMuBenchmarkOptions options;
+    options.handFile = handFile;
+    options.depth = depth;
+    options.maxBoards = maxBoards;
+    options.skipSpec = skipSpec;
+    return BenchmarkAlphaMuExactBoards(options);
   }
 void ReportBenchmarkMethodSummary(
     const BenchmarkMethodSummary& summary)
@@ -3084,38 +3196,39 @@ double BenchmarkProgressIntervalSeconds()
   }
 void MaybeReportBenchmarkBoardProgress(
     const BridgeState& state,
-    const int tricksRemaining)
+    const int tricksRemaining,
+    const SearchExecutionContext& context)
   {
-    if (gBenchmarkBoardProgress == NULL ||
-        gBenchmarkBoardProgress->reportIntervalSeconds <= 0.0)
+    BenchmarkBoardProgressContext * progress = context.benchmarkProgress;
+    if (progress == NULL || progress->reportIntervalSeconds <= 0.0)
     {
       return;
     }
 
-    gBenchmarkBoardProgress->recursiveCalls++;
-    if ((gBenchmarkBoardProgress->recursiveCalls & 0x3FFULL) != 0ULL)
+    progress->recursiveCalls++;
+    if ((progress->recursiveCalls & 0x3FFULL) != 0ULL)
       return;
 
     const double boardElapsed = chrono::duration<double>(
-      chrono::steady_clock::now() - gBenchmarkBoardProgress->boardStart).count();
-    if (boardElapsed < gBenchmarkBoardProgress->nextReportSeconds)
+      chrono::steady_clock::now() - progress->boardStart).count();
+    if (boardElapsed < progress->nextReportSeconds)
       return;
 
     const double totalElapsed = chrono::duration<double>(
-      chrono::steady_clock::now() - gBenchmarkBoardProgress->totalStart).count();
+      chrono::steady_clock::now() - progress->totalStart).count();
 
     cout.setf(ios::fixed);
     cout << setprecision(6);
     cout << "ALPHA_MU_BENCHMARK_PROGRESS method="
-         << gBenchmarkBoardProgress->method
-         << " file=" << gBenchmarkBoardProgress->handFile
-         << " board=" << gBenchmarkBoardProgress->boardNumber
-         << " total_boards=" << gBenchmarkBoardProgress->totalBoards
-         << " depth=" << gBenchmarkBoardProgress->depth
+         << progress->method
+         << " file=" << progress->handFile
+         << " board=" << progress->boardNumber
+         << " total_boards=" << progress->totalBoards
+         << " depth=" << progress->depth
          << " board_elapsed_seconds=" << boardElapsed
          << " elapsed_seconds=" << totalElapsed
-         << " recursive_calls=" << gBenchmarkBoardProgress->recursiveCalls
-         << " dds_leaf_calls=" << gBenchmarkBoardProgress->ddsLeafCalls
+         << " recursive_calls=" << progress->recursiveCalls
+         << " dds_leaf_calls=" << progress->ddsLeafCalls
          << " tricks_remaining=" << tricksRemaining
          << " active_worlds=" << state.possibleWorlds.PopCount()
          << " current_trick_size=" << state.currentTrick.size()
@@ -3124,10 +3237,9 @@ void MaybeReportBenchmarkBoardProgress(
 
     do
     {
-      gBenchmarkBoardProgress->nextReportSeconds +=
-        gBenchmarkBoardProgress->reportIntervalSeconds;
+      progress->nextReportSeconds += progress->reportIntervalSeconds;
     }
-    while (boardElapsed >= gBenchmarkBoardProgress->nextReportSeconds);
+    while (boardElapsed >= progress->nextReportSeconds);
   }
 void ReportBenchmarkCheckpoint(
     const BenchmarkMethodSummary& summary,

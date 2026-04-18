@@ -10,6 +10,7 @@ This documentation set combines curated Markdown guides with generated API pages
 - [Key data structures](data-structures.md)
 - [API overview](api-overview.md)
 - [Alpha-mu and DDS](alpha-mu.md)
+- [Alpha-mu multicore plan](alpha-mu-multicore-plan.md)
 - [Alpha-mu test set](alpha-mu-test-set.md)
 - [Profiling procedure](profiling.md)
 - [Implementation plan](implementation-plan.md)

@@ -14,6 +14,10 @@ using namespace alpha_mu_prototype;
 
 namespace
 {
+  bool IsLongOption(const char * text)
+  {
+	return text != NULL && strncmp(text, "--", 2) == 0;
+  }
   /** @brief Parse an integer CLI argument with full-string validation. */
   bool TryParseIntArgument(
 	const char * text,
@@ -51,6 +55,62 @@ namespace
 	  description + " should be a valid integer");
 	return value;
   }
+  AlphaMuBenchmarkOptions ParseBenchmarkAlphaOptions(
+	const int argc,
+	char ** argv)
+  {
+	Check(argc >= 3,
+	  "benchmark_alpha mode requires a hand-file path argument");
+
+	AlphaMuBenchmarkOptions options;
+	options.handFile = argv[2];
+	options.depth = ParseOptionalIntArgument(
+	  argc, argv, 3, 0, "benchmark_alpha depth");
+	options.maxBoards = ParseOptionalIntArgument(
+	  argc, argv, 4, 0, "benchmark_alpha max boards");
+
+	int index = 5;
+	if (argc > index && ! IsLongOption(argv[index]))
+	{
+	  options.skipSpec = argv[index];
+	  index++;
+	}
+
+	while (index < argc)
+	{
+	  const string flag(argv[index]);
+	  Check(index + 1 < argc,
+		string("benchmark_alpha option ") + flag +
+		" requires a value");
+
+	  if (flag == "--parallel")
+	    options.parallelMode = ParseAlphaMuParallelModeName(argv[index + 1]);
+	  else if (flag == "--board-workers")
+	  {
+	    Check(TryParseIntArgument(argv[index + 1], options.boardWorkers),
+		  "benchmark_alpha board-workers should be a valid integer");
+	  }
+	  else if (flag == "--root-workers")
+	  {
+	    Check(TryParseIntArgument(argv[index + 1], options.rootWorkers),
+		  "benchmark_alpha root-workers should be a valid integer");
+	  }
+	  else if (flag == "--dds-thread-id")
+	  {
+	    Check(TryParseIntArgument(argv[index + 1], options.ddsThreadId),
+		  "benchmark_alpha dds-thread-id should be a valid integer");
+	  }
+	  else
+	  {
+	    Check(false,
+		  string("benchmark_alpha does not recognize option ") + flag);
+	  }
+
+	  index += 2;
+	}
+
+	return NormalizeAlphaMuBenchmarkOptions(options);
+	}
 }
 
 
@@ -82,17 +142,10 @@ int main(int argc, char ** argv)
 	}
 	if (mode == "benchmark_alpha")
 	{
-	  Check(argc >= 3,
-		"benchmark_alpha mode requires a hand-file path argument");
-
-	  const string handFile(argv[2]);
-	  const int depth = ParseOptionalIntArgument(
-		argc, argv, 3, 0, "benchmark_alpha depth");
-	  const int maxBoards = ParseOptionalIntArgument(
-		argc, argv, 4, 0, "benchmark_alpha max boards");
-	  const string skipSpec = (argc >= 6 ? argv[5] : "");
-	  const BenchmarkMethodSummary summary = BenchmarkAlphaMuExactBoards(
-		handFile, depth, maxBoards, skipSpec);
+	  const AlphaMuBenchmarkOptions options =
+		ParseBenchmarkAlphaOptions(argc, argv);
+	  const BenchmarkMethodSummary summary =
+		BenchmarkAlphaMuExactBoards(options);
 	  ReportBenchmarkMethodSummary(summary);
 	  PrintPrototypeStatus("alpha-mu exact benchmark OK");
 	  return 0;

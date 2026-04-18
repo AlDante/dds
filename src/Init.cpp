@@ -153,6 +153,15 @@ void STDCALL SetResources(
     noOfSmallThreads = thrMax - noOfLargeThreads;
   }
 
+  if (noOfThreads < 1)
+  {
+    noOfThreads = 1;
+    noOfLargeThreads = 0;
+    noOfSmallThreads = 1;
+    if (memMaxMB < THREADMEM_SMALL_MAX_MB)
+      memMaxMB = THREADMEM_SMALL_MAX_MB;
+  }
+
   sysdep.RegisterParams(noOfThreads, memMaxMB);
 
   scheduler.RegisterThreads(noOfThreads);

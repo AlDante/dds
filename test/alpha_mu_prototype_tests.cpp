@@ -2833,6 +2833,124 @@ namespace alpha_mu_prototype
       "parallel DDS leaf evaluation should not configure more worker slots than worlds");
   }
 
+
+  static void TestBridgeSearchExplicitExecutionContext()
+  {
+    SetMaxThreads(0);
+
+    HandFileData data;
+    LoadHandFile(kAlphaMuPlayHandFile, data);
+    Check(data.number >= 1,
+      "explicit execution-context parity test requires at least one bridge DDS fixture");
+
+    const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[0]);
+    const SearchExecutionContext context = MakeSearchExecutionContext(0, NULL,
+      ALPHA_MU_PARALLEL_SERIAL, 1, 1);
+
+    const ParetoFront defaultLeafFront = SearchBridgeState(state, 0);
+    const ParetoFront explicitLeafFront = SearchBridgeState(state, 0, context);
+    Check(defaultLeafFront.ToString() == explicitLeafFront.ToString(),
+      "explicit serial execution context should preserve the direct bridge DDS leaf front");
+
+    const ParetoFront defaultFront = SearchBridgeState(state, 1);
+    const ParetoFront explicitFront = SearchBridgeState(state, 1, context);
+    Check(defaultFront.ToString() == explicitFront.ToString(),
+      "explicit serial execution context should preserve bridge search fronts");
+
+    Check(ExactBridgeDDSScoreForWorld(state, 0) ==
+          ExactBridgeDDSScoreForWorld(state, 0, context),
+      "explicit serial execution context should preserve exact bridge DDS leaf scores");
+  }
+
+
+  static void TestAlphaMuBenchmarkOptionNormalization()
+  {
+    AlphaMuBenchmarkOptions options;
+    options.handFile = "../hands/list1.txt";
+    options.depth = 2;
+    options.maxBoards = 3;
+    options.skipSpec = "2";
+    options.parallelMode = ALPHA_MU_PARALLEL_ROOT;
+    options.boardWorkers = 0;
+    options.rootWorkers = -7;
+    options.ddsThreadId = -3;
+
+    const AlphaMuBenchmarkOptions normalized =
+      NormalizeAlphaMuBenchmarkOptions(options);
+    Check(normalized.handFile == options.handFile &&
+          normalized.depth == options.depth &&
+          normalized.maxBoards == options.maxBoards &&
+          normalized.skipSpec == options.skipSpec,
+      "benchmark option normalization should preserve workload-selection fields");
+    Check(normalized.parallelMode == ALPHA_MU_PARALLEL_ROOT,
+      "benchmark option normalization should preserve the requested parallel mode");
+    Check(normalized.boardWorkers == 1,
+      "benchmark option normalization should clamp board workers to at least one");
+    Check(normalized.rootWorkers == 1,
+      "benchmark option normalization should clamp root workers to at least one");
+    Check(normalized.ddsThreadId == 0,
+      "benchmark option normalization should clamp DDS thread slots to a non-negative id");
+
+    Check(AlphaMuParallelModeName(ALPHA_MU_PARALLEL_SERIAL) == "serial" &&
+          AlphaMuParallelModeName(ALPHA_MU_PARALLEL_BOARD) == "board" &&
+          AlphaMuParallelModeName(ALPHA_MU_PARALLEL_ROOT) == "root",
+      "parallel-mode names should render in command-line-friendly text");
+    Check(ParseAlphaMuParallelModeName("serial") == ALPHA_MU_PARALLEL_SERIAL &&
+          ParseAlphaMuParallelModeName("board") == ALPHA_MU_PARALLEL_BOARD &&
+          ParseAlphaMuParallelModeName("root") == ALPHA_MU_PARALLEL_ROOT,
+      "parallel-mode parsing should accept the supported serial, board, and root names");
+  }
+
+
+  static void TestAlphaMuBenchmarkOptionsOverloadParity()
+  {
+    SetMaxThreads(0);
+
+    AlphaMuBenchmarkOptions options;
+    options.handFile = "../hands/list1.txt";
+    options.depth = 0;
+    options.maxBoards = 1;
+
+    const BenchmarkMethodSummary legacy = BenchmarkAlphaMuExactBoards(
+      options.handFile, options.depth, options.maxBoards, options.skipSpec);
+    const BenchmarkMethodSummary explicitSummary =
+      BenchmarkAlphaMuExactBoards(options);
+
+    Check(legacy.method == explicitSummary.method &&
+          legacy.handFile == explicitSummary.handFile &&
+          legacy.boardsTested == explicitSummary.boardsTested &&
+          legacy.depth == explicitSummary.depth &&
+          legacy.mismatches == explicitSummary.mismatches,
+      "benchmark options overload should preserve the legacy benchmark summary fields");
+    Check(legacy.perBoardSeconds.size() == explicitSummary.perBoardSeconds.size(),
+      "benchmark options overload should preserve the number of measured per-board timings");
+    Check(legacy.mismatches == 0 && explicitSummary.mismatches == 0,
+      "benchmark options overload should preserve exact alpha-mu benchmark scores");
+  }
+
+
+  static void TestRepeatedDDSReinitializationKeepsThreadContext()
+  {
+    HandFileData data;
+    LoadHandFile(kAlphaMuPlayHandFile, data);
+    Check(data.number >= 1,
+      "repeated DDS reinitialization test requires at least one bridge DDS fixture");
+
+    const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[0]);
+    for (int i = 0; i < 16; i++)
+    {
+      SetMaxThreads(0);
+      const SearchExecutionContext context = MakeSearchExecutionContext(0, NULL,
+        ALPHA_MU_PARALLEL_SERIAL, 1, 1);
+      const ParetoFront front = SearchBridgeState(state, 0, context);
+      Check(! front.vectors.empty(),
+        "repeated DDS reinitialization should leave a valid bridge DDS leaf front available");
+      const int exactScore = ExactBridgeDDSScoreForWorld(state, 0, context);
+      Check(exactScore >= 0,
+        "repeated DDS reinitialization should keep an exact bridge DDS score available on thread slot zero");
+    }
+  }
+
   namespace
   {
     struct NamedTest
@@ -2891,7 +3009,11 @@ namespace alpha_mu_prototype
       {"deep alpha cuts OK", &TestDeepAlphaCut},
       {"cut on win OK", &TestCutOnWin},
       {"root cut toy search OK", &TestRootCutExample},
-      {"DDS leaf demo and leaf parallelization OK", &TestDDSLeafDemo}
+       {"DDS leaf demo and leaf parallelization OK", &TestDDSLeafDemo},
+       {"bridge search execution context parity OK", &TestBridgeSearchExplicitExecutionContext},
+       {"benchmark option normalization OK", &TestAlphaMuBenchmarkOptionNormalization},
+       {"benchmark overload parity OK", &TestAlphaMuBenchmarkOptionsOverloadParity},
+       {"repeated DDS reinitialization OK", &TestRepeatedDDSReinitializationKeepsThreadContext}
     };
 
     for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)

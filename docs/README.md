@@ -47,6 +47,7 @@ The generated site includes:
 - `api-overview.md` — key public APIs and usage patterns
 - `data-structures.md` — important internal and public data structures
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
+- `alpha-mu-multicore-plan.md` — staged plan for multicore alpha-mu implementation and regression validation
 - `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from prototype to full alpha-mu engine
 - `alpha-mu-test-set.md` — paper-derived alpha-mu test families and hand sets
 - `profiling.md` — profiling build targets, Instruments workflow, and hotspot checklist

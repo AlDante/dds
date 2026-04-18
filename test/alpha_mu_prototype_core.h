@@ -1450,10 +1450,74 @@ namespace alpha_mu_prototype
     }
   };
 
+
+  /** @brief Requested concurrency strategy for alpha-mu benchmark/search entry points. */
+  enum AlphaMuParallelMode
+  {
+    ALPHA_MU_PARALLEL_SERIAL = 0,
+    ALPHA_MU_PARALLEL_BOARD = 1,
+    ALPHA_MU_PARALLEL_ROOT = 2
+  };
+
+
+  /** @brief Explicit execution context carried through bridge search and DDS leaf calls. */
+  struct SearchExecutionContext
+  {
+    int ddsThreadId;
+    AlphaMuParallelMode parallelMode;
+    int boardWorkers;
+    int rootWorkers;
+    BenchmarkBoardProgressContext * benchmarkProgress;
+
+    SearchExecutionContext() :
+      ddsThreadId(0),
+      parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      boardWorkers(1),
+      rootWorkers(1),
+      benchmarkProgress(NULL)
+    {
+    }
+  };
+
+
+  /** @brief Benchmark-mode options normalized before the actual workload starts. */
+  struct AlphaMuBenchmarkOptions
+  {
+    string handFile;
+    int depth;
+    int maxBoards;
+    string skipSpec;
+    AlphaMuParallelMode parallelMode;
+    int boardWorkers;
+    int rootWorkers;
+    int ddsThreadId;
+
+    AlphaMuBenchmarkOptions() :
+      handFile(),
+      depth(0),
+      maxBoards(0),
+      skipSpec(),
+      parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      boardWorkers(1),
+      rootWorkers(1),
+      ddsThreadId(0)
+    {
+    }
+  };
+
   /** @brief Prefix used by prototype status and failure messages. */
   extern const char kPrototypeMessagePrefix[];
   /** @brief Default hand-file used by the alpha-mu DDS leaf regressions. */
   extern const char kAlphaMuPlayHandFile[];
+
+  /** @brief Render a parallel-mode enum in command-line and log-friendly text. */
+  string AlphaMuParallelModeName(const AlphaMuParallelMode mode);
+  /** @brief Parse a command-line parallel-mode token. */
+  AlphaMuParallelMode ParseAlphaMuParallelModeName(const string& text);
+  /** @brief Construct an explicit search execution context. */
+  SearchExecutionContext MakeSearchExecutionContext( const int ddsThreadId, BenchmarkBoardProgressContext * benchmarkProgress, const AlphaMuParallelMode parallelMode = ALPHA_MU_PARALLEL_SERIAL, const int boardWorkers = 1, const int rootWorkers = 1);
+  /** @brief Clamp benchmark execution options into a future-proof serial-safe baseline. */
+  AlphaMuBenchmarkOptions NormalizeAlphaMuBenchmarkOptions( const AlphaMuBenchmarkOptions& options);
 
   /** @brief Abort the current run with a prototype-prefixed fatal message. */
   void Fail(const string& msg);
@@ -1615,7 +1679,7 @@ namespace alpha_mu_prototype
   ParetoFront MakeZeroFront(const unsigned worldCount);
   int BestScore(const futureTricks& fut);
   void CheckDDS(const int ret, const string& tag);
-  void MaybeReportBenchmarkBoardProgress( const BridgeState& state, const int tricksRemaining);
+  void MaybeReportBenchmarkBoardProgress( const BridgeState& state, const int tricksRemaining, const SearchExecutionContext& context);
   /** @brief Terminal bridge front when no further DDS solve is required. */
   ParetoFront MakeBridgeTerminalFront(const BridgeState& state);
   /**
@@ -1623,6 +1687,8 @@ namespace alpha_mu_prototype
    *
    * DDS acts as the perfect-information oracle beneath the alpha-mu layer.
    */
+  ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state, const SearchExecutionContext& context);
+  /** @brief Compatibility wrapper using the default serial search execution context. */
   ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state);
   /** @brief Charge one unit of alpha-mu depth when a full trick has just completed. */
   int BridgeDepthCost( const BridgeState& state, const BridgeState& child);
@@ -1633,10 +1699,16 @@ namespace alpha_mu_prototype
    * aggressive paper optimizations; it focuses on validating front propagation
    * and DDS leaf handoff over realistic card play.
    */
+  ParetoFront SearchBridgeStateInternal( const BridgeState& state, const int tricksRemaining, const SearchExecutionContext& context);
+  /** @brief Compatibility wrapper using the default serial search execution context. */
   ParetoFront SearchBridgeStateInternal( const BridgeState& state, const int tricksRemaining);
   /** @brief Public bridge-search wrapper for multi-trick continuation analysis. */
+  ParetoFront SearchBridgeState( const BridgeState& state, const int tricksRemaining, const SearchExecutionContext& context);
+  /** @brief Compatibility wrapper using the default serial search execution context. */
   ParetoFront SearchBridgeState( const BridgeState& state, const int tricksRemaining);
   /** @brief Analyze every legal root move and report its child front summary. */
+  BridgeRootReport AnalyzeBridgeRoot( const BridgeState& state, const int tricksRemaining, const SearchExecutionContext& context);
+  /** @brief Compatibility wrapper using the default serial search execution context. */
   BridgeRootReport AnalyzeBridgeRoot( const BridgeState& state, const int tricksRemaining);
   /** @brief Check a world against all supplied constraints. */
   bool WorldMatchesAllConstraints( const ParsedWorld& world, const vector<WorldConstraint>& constraints);
@@ -1696,6 +1768,8 @@ namespace alpha_mu_prototype
   /** @brief Iteratively deepen the toy search in number of Max moves. */
   IterativeResult RunIterativeDeepening( const ToyNode& root, const int maxDepth);
   /** @brief Exact DDS score for one bridge world from the current continuation state. */
+  int ExactBridgeDDSScoreForWorld( const BridgeState& state, const unsigned worldIndex, const SearchExecutionContext& context);
+  /** @brief Compatibility wrapper using the default serial search execution context. */
   int ExactBridgeDDSScoreForWorld( const BridgeState& state, const unsigned worldIndex);
   /** @brief Parse a DDS hand file into owned arrays for benchmark or comparison modes. */
   void LoadHandFile( const string& fname, HandFileData& data);
@@ -1718,6 +1792,8 @@ namespace alpha_mu_prototype
   /** @brief Benchmark exact DDS solves over a chosen hand-file workload. */
   BenchmarkMethodSummary BenchmarkDDSExactBoards( const string& handFile, const int maxBoards, const string& skipSpec);
   /** @brief Benchmark one-world exact alpha-mu solves over a chosen hand-file workload. */
+  BenchmarkMethodSummary BenchmarkAlphaMuExactBoards( const AlphaMuBenchmarkOptions& options);
+  /** @brief Compatibility wrapper preserving the legacy positional benchmark API. */
   BenchmarkMethodSummary BenchmarkAlphaMuExactBoards( const string& handFile, const int depth, const int maxBoards, const string& skipSpec);
   /** @brief Print a machine-readable benchmark summary line for one method. */
   void ReportBenchmarkMethodSummary( const BenchmarkMethodSummary& summary);
