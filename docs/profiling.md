@@ -38,6 +38,72 @@ cd /Users/david/Documents/dev/CLionProjects/dds
 make profile-clean
 ```
 
+## Build toggles related to profiling and comparison runs
+
+The Mac Makefiles now expose two important build toggles that matter when you
+compare hotspot captures or benchmark results.
+
+### `M1_MAX_BUILD`
+
+- `src/Makefile` and `test/Makefiles/Makefile_Mac_clang` default to `M1_MAX_BUILD=1` on Apple `arm64`
+- the same Makefiles default to `M1_MAX_BUILD=0` on other hosts
+- when enabled, the build adds `DDS_TARGET_APPLE_M1_MAX` and selects the separate M1 Max-specific `ABsearch*` implementation
+
+To force the portable path for an apples-to-apples comparison run, build both
+the library and test binaries with the same override:
+
+```zsh
+cd /Users/david/Documents/dev/CLionProjects/dds/src
+make M1_MAX_BUILD=0 macos
+cd /Users/david/Documents/dev/CLionProjects/dds/test
+make -f Makefiles/Makefile_Mac_clang M1_MAX_BUILD=0 alpha_mu_prototype
+```
+
+The same override also works with `PROFILE_BUILD=1` and `PGO_MODE=...` when
+you want portable versus M1 Max-specific comparison data under those build
+variants.
+
+### `PGO_MODE`
+
+The Mac Makefiles accept three modes:
+
+- `PGO_MODE=none` — normal release build
+- `PGO_MODE=generate` — instrumented build that emits `.profraw`
+- `PGO_MODE=use` — optimized build that consumes merged profile data
+
+The dedicated targets are:
+
+- `src/Makefile`: `macos_pgo_generate`, `macos_pgo_use`, `pgo_merge`
+- `test/Makefiles/Makefile_Mac_clang`: `pgo_generate_binaries`, `pgo_use_binaries`
+
+Default output locations:
+
+- instrumented library: `src/build-pgo-generate/libdds.so`
+- instrumented test binaries: `test/build-pgo-generate/`
+- merged profile data: `src/build-pgo-generate/pgo-data/default.profdata`
+- profile-using library: `src/build-pgo-use/libdds.so`
+- profile-using test binaries: `test/build-pgo-use/`
+
+Typical PGO workflow:
+
+```zsh
+cd /Users/david/Documents/dev/CLionProjects/dds/src
+make macos_pgo_generate
+cd /Users/david/Documents/dev/CLionProjects/dds/test
+make -f Makefiles/Makefile_Mac_clang pgo_generate_binaries
+export DYLD_LIBRARY_PATH=../src/build-pgo-generate
+export LLVM_PROFILE_FILE=../src/build-pgo-generate/pgo-data/alpha_mu_%p.profraw
+./build-pgo-generate/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10
+cd /Users/david/Documents/dev/CLionProjects/dds/src
+make pgo_merge
+make macos_pgo_use
+cd /Users/david/Documents/dev/CLionProjects/dds/test
+make -f Makefiles/Makefile_Mac_clang pgo_use_binaries
+```
+
+If you override `PGO_PROFILE_DIR` or `PGO_PROFILE_DATA`, keep the same values
+for both the library and the test-binary builds.
+
 ## Profiling build characteristics
 
 The profiling targets currently use:

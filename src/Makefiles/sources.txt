@@ -2,6 +2,7 @@ SOURCE_FILES    =               \
         dds.cpp                 \
         dump.cpp                \
         ABsearch.cpp            \
+        ABsearch_m1max.cpp      \
         ABstats.cpp             \
         CalcTables.cpp          \
         DealerPar.cpp           \

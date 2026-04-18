@@ -13,6 +13,10 @@
 #include <sstream>
 #include <string.h>
 
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
+
 #include "SolveBoard.h"
 #include "CalcTables.h"
 #include "PlayAnalyser.h"
@@ -25,6 +29,23 @@
 extern Scheduler scheduler;
 extern Memory memory;
 extern ThreadMgr threadMgr;
+
+
+namespace
+{
+#ifdef __APPLE__
+  // Bias macOS worker threads toward performance cores without relying on
+  // unsupported affinity pinning APIs.
+  void DDSSetWorkerQoS()
+  {
+    (void) pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+  }
+#else
+  void DDSSetWorkerQoS()
+  {
+  }
+#endif
+}
 
 
 const vector<string> DDS_SYSTEM_PLATFORM =
@@ -425,9 +446,10 @@ int System::RunThreadsGCD()
 {
 #ifdef DDS_THREADS_GCD
   dispatch_apply(static_cast<size_t>(numThreads),
-    dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0),
+    dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0),
     ^(size_t t)
   {
+    DDSSetWorkerQoS();
     int thrId = static_cast<int>(t);
     (*fptr)(thrId);
   });
@@ -450,7 +472,14 @@ int System::RunThreadsBoost()
   threads.resize(nu);
 
   for (unsigned k = 0; k < nu; k++)
-    threads[k] = new boost::thread(fptr, k);
+  {
+    threads[k] = new boost::thread(
+      [this, k]()
+      {
+        DDSSetWorkerQoS();
+        (*fptr)(static_cast<int>(k));
+      });
+  }
 
   for (unsigned k = 0; k < nu; k++)
   {
@@ -480,7 +509,14 @@ int System::RunThreadsSTL()
   threads.resize(nu);
 
   for (unsigned k = 0; k < nu; k++)
-    threads[k] = new thread(fptr, k);
+  {
+    threads[k] = new thread(
+      [this, k]()
+      {
+        DDSSetWorkerQoS();
+        (*fptr)(static_cast<int>(k));
+      });
+  }
 
   for (unsigned k = 0; k < nu; k++)
   {
@@ -508,6 +544,7 @@ int System::RunThreadsSTLIMPL()
   for_each(std::execution::par, uniques.begin(), uniques.end(),
     [&](int &bno)
   {
+    DDSSetWorkerQoS();
     thread_local int thrId = -1;
     thread_local int realThrId;
     if (thrId == -1)

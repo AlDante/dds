@@ -215,3 +215,51 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 - Slowest board: `6` at `7581.362 s`
 - Conclusion: the nearly `3x` spread between boards makes this a strong pre-parallelisation baseline for PR 2 and argues for dynamic queue-based board scheduling rather than static board partitioning.
 
+## 2026-04-18 10:10:43 — multicore profiling run for `list9` depth 2
+
+- Output log: `test/build-profile/list9_alpha_mu_depth2_board10_profile.log`
+- Sample profile: `test/build-profile/list9_alpha_mu_depth2_board10_profile.sample.txt`
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
+- Command: `./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`
+- Result: `mismatches=0`
+- Note: `hands/list9.txt` contains `9` boards, so the run requested `10` board workers but correctly clamped to `configured_board_workers=9`.
+
+| Workload | Boards | Total (s) | Per board (s) |
+| --- | ---: | ---: | ---: |
+| `alpha_mu_prototype_list9_depth2_board_parallel_profile` | 9 | 60.683 | 35.109 |
+
+- Per-board timings for `alpha_mu_prototype_list9_depth2_board_parallel_profile` (s): `44.944, 29.038, 43.490, 27.337, 43.830, 15.335, 60.678, 28.566, 22.766`
+- Fastest board: `6` at `15.335 s`
+- Slowest board: `7` at `60.678 s`
+- Conclusion: with one board worker per board, total wall time almost exactly matched the slowest board, which confirms that the board-parallel scheduler is distributing the `list9` depth-2 workload effectively.
+- Profiling takeaway: the sampled hot path was `SearchBridgeStateInternal -> MakeBridgeDDSLeafFront -> SolveBoardPBN -> SolveBoardInternal -> ABsearch*`, so DDS-side optimisation should focus first on `ABsearch*`; `QuickTricks` and move generation appeared mainly as subordinate work inside that search subtree rather than as separate top-level bottlenecks.
+
+## 2026-04-18 12:04:48 — M1 Max-specific `ABsearch` follow-up on `list9` depth 2
+
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Workload: `../hands/list9.txt`, depth `2`, `--parallel board --board-workers 10`
+- Result: all three runs completed with `mismatches=0`
+- Baseline output log: `test/build/list9_alpha_mu_depth2_board10_release_baseline.log`
+- Tuned output log: `test/build/list9_alpha_mu_depth2_board10_release_m1max.log`
+- PGO training log: `test/build-pgo-generate/list9_alpha_mu_depth2_board10_pgo_training.log`
+- PGO output log: `test/build-pgo-use/list9_alpha_mu_depth2_board10_pgo_use.log`
+- Build notes:
+  - Baseline and tuned release runs used `build/libdds.so` with the normal release flags.
+  - The tuned run added the new `DDS_TARGET_APPLE_M1_MAX` path for `ABsearch*`.
+  - The PGO run used clang `-fprofile-instr-use` with profile data collected from the same workload via `build-pgo-generate`.
+
+| Variant | Build | Boards | Total (s) | Per board (s) | Delta vs baseline |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Portable baseline | `build` | 9 | 67.985 | 38.471 | baseline |
+| M1 Max `ABsearch` | `build` | 9 | 53.891 | 28.191 | `-20.7%` wall time |
+| M1 Max `ABsearch` + PGO | `build-pgo-use` | 9 | 55.437 | 31.485 | `-18.5%` wall time |
+
+- Per-board timings for the portable baseline (s): `49.668, 31.486, 48.284, 27.865, 44.125, 18.637, 67.983, 32.115, 26.079`
+- Per-board timings for the M1 Max `ABsearch` run (s): `38.254, 21.486, 36.181, 18.102, 33.645, 12.295, 53.891, 22.558, 17.307`
+- Per-board timings for the M1 Max `ABsearch` + PGO run (s): `41.131, 25.747, 39.115, 22.597, 36.021, 15.141, 55.436, 26.368, 21.810`
+- Fastest measured variant on this workload: the non-PGO M1 Max-specific `ABsearch` build at `53.891 s` total.
+- PGO observation: on this single workload-specific run, PGO still beat the original portable baseline but trailed the non-PGO M1 Max build by about `2.9%`, so the new PGO target is useful for experimentation but should not replace the normal release build unless repeated runs confirm a net win.
+

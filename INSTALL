@@ -74,6 +74,120 @@ Linux and Mac).
 local install to ../test and ../examples, not a system-wide one).
 
 
+Build toggles and output directories
+====================================
+
+The current Mac Makefiles also support a small set of build toggles for
+machine-specific experiments and profile-guided optimisation.
+
+M1_MAX_BUILD
+------------
+
+On Apple arm64 hosts, both `src/Makefile` and
+`test/Makefiles/Makefile_Mac_clang` default to:
+
+    M1_MAX_BUILD=1
+
+This adds the compile definition `DDS_TARGET_APPLE_M1_MAX`, which enables
+the separate M1 Max-specific `ABsearch` implementation while leaving the
+portable DDS implementation in place.
+
+The current `src/CMakeLists.txt` mirrors this behaviour by automatically
+adding `DDS_TARGET_APPLE_M1_MAX` on Apple arm64 builds.
+
+On non-arm64 hosts the default is:
+
+    M1_MAX_BUILD=0
+
+You can override the default explicitly when comparing the portable and
+machine-specific paths.  The library and test binaries should be built with
+the same setting.  For example, from the repository root:
+
+    make -C src M1_MAX_BUILD=0 macos
+    make -C test -f Makefiles/Makefile_Mac_clang M1_MAX_BUILD=0 alpha_mu_prototype
+
+The normal release outputs are written to:
+
+    src/build/
+    test/build/
+
+Profiling builds
+----------------
+
+The profiling build keeps symbols and frame pointers and writes outputs to
+separate directories.  From the repository root:
+
+    make profile
+
+This delegates to:
+
+    make -C src macos_profile
+    make -C test -f Makefiles/Makefile_Mac_clang profile_binaries
+
+The profiling outputs are written to:
+
+    src/build-profile/
+    test/build-profile/
+
+Clean them with:
+
+    make profile-clean
+
+PGO_MODE
+--------
+
+The Mac Makefiles accept:
+
+    PGO_MODE=none
+    PGO_MODE=generate
+    PGO_MODE=use
+
+`none` is the default normal release build.
+
+To build instrumented binaries that emit LLVM profile data:
+
+    make -C src macos_pgo_generate
+    make -C test -f Makefiles/Makefile_Mac_clang pgo_generate_binaries
+
+This writes outputs to:
+
+    src/build-pgo-generate/
+    test/build-pgo-generate/
+
+By default the raw profiles and merged profile data live under:
+
+    src/build-pgo-generate/pgo-data/
+
+Run the instrumented program with `LLVM_PROFILE_FILE` pointing into that
+directory.  For example:
+
+    cd test
+    export DYLD_LIBRARY_PATH=../src/build-pgo-generate
+    export LLVM_PROFILE_FILE=../src/build-pgo-generate/pgo-data/alpha_mu_%p.profraw
+    ./build-pgo-generate/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10
+
+Merge the resulting `.profraw` files with:
+
+    make -C src pgo_merge
+
+This produces the default merged profile data file:
+
+    src/build-pgo-generate/pgo-data/default.profdata
+
+Then build the profile-using binaries with:
+
+    make -C src macos_pgo_use
+    make -C test -f Makefiles/Makefile_Mac_clang pgo_use_binaries
+
+These outputs are written to:
+
+    src/build-pgo-use/
+    test/build-pgo-use/
+
+If you keep profile data somewhere else, override `PGO_PROFILE_DIR` and
+`PGO_PROFILE_DATA` consistently for the library and the test binaries.
+
+
 System-specific data
 ====================
 

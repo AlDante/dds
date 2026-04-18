@@ -32,6 +32,10 @@ The generated HTML site will be written to:
 build/html/index.html
 ```
 
+For DDS library and test-binary build variants, including `M1_MAX_BUILD`,
+profiling outputs, and `PGO_MODE=generate/use`, see the repository-level
+`INSTALL` guide together with `profiling.md`.
+
 ## Clean
 
 ```sh

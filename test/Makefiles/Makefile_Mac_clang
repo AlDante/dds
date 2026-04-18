@@ -22,6 +22,18 @@ THR_STL		= -DDDS_THREADS_STL
 
 THREADING	= $(THR_GCD) $(THR_STL)
 
+HOST_ARCH	:= $(shell uname -m 2>/dev/null)
+ifeq ($(HOST_ARCH),arm64)
+M1_MAX_BUILD	?=	1
+else
+M1_MAX_BUILD	?=	0
+endif
+
+M1_MAX_FLAGS	=
+ifeq ($(M1_MAX_BUILD),1)
+M1_MAX_FLAGS	+= -DDDS_TARGET_APPLE_M1_MAX
+endif
+
 THREAD_LINK	=
 
 # ----------------------- OFTEN OK    ------------------------------
@@ -37,6 +49,8 @@ INCL_OWN_SOURCE	= Makefiles/own_sources.txt
 CC		= clang++
 
 PROFILE_BUILD	?=	0
+PGO_MODE	?=	none
+PGO_PROFILE_DATA	?=	$(CURDIR)/../src/build-pgo-generate/pgo-data/default.profdata
 
 # We compile with aggressive warnings, but we have to turn off some
 # of them as they appear in libraries in great numbers...
@@ -72,6 +86,18 @@ OPT_FLAGS	= $(PROFILE_OPT_FLAGS)
 BUILD_DIR	= build-profile
 DDS_BUILD_DIR	= ../src/build-profile
 RPATH_DIR	= @loader_path/../../src/build-profile
+else ifeq ($(PGO_MODE),generate)
+OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-generate
+BUILD_DIR	= build-pgo-generate
+DDS_BUILD_DIR	= ../src/build-pgo-generate
+RPATH_DIR	= @loader_path/../../src/build-pgo-generate
+PGO_LINK_FLAGS	= -fprofile-instr-generate
+else ifeq ($(PGO_MODE),use)
+	OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-use=$(PGO_PROFILE_DATA) -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date
+BUILD_DIR	= build-pgo-use
+DDS_BUILD_DIR	= ../src/build-pgo-use
+RPATH_DIR	= @loader_path/../../src/build-pgo-use
+PGO_LINK_FLAGS	= -fprofile-instr-use=$(PGO_PROFILE_DATA)
 else
 OPT_FLAGS	= $(RELEASE_OPT_FLAGS)
 BUILD_DIR	= build
@@ -79,8 +105,10 @@ DDS_BUILD_DIR	= ../src/build
 RPATH_DIR	= @loader_path/../../src/build
 endif
 
+PGO_LINK_FLAGS	?=
+
 COMPILE_FLAGS	= $(OPT_FLAGS) -mtune=generic \
-		$(WARN_FLAGS) -std=c++11 $(THREADING)
+		$(WARN_FLAGS) -std=c++11 $(THREADING) $(M1_MAX_FLAGS)
 
 .PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu_prototype itest profile_binaries depend clean
 
@@ -91,10 +119,10 @@ DLIB 		= $(DLLBASE).lib
 OBJ_DIR		= $(BUILD_DIR)/obj
 
 LINK1_FLAGS	=
-LINK2_FLAGS	= $(THREAD_LINK) \
+LINK2_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) \
 		-L$(DDS_BUILD_DIR) -l$(DLLBASE) \
 		-Wl,-rpath,$(RPATH_DIR)
-LINK3_FLAGS	= $(THREAD_LINK)
+LINK3_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS)
 
 # This is in addition to $(DTEST).cpp
 
@@ -169,6 +197,12 @@ alpha_mu_prototype:	$(ALPHAMU_BIN)
 
 profile_binaries:
 	$(MAKE) -f Makefiles/Makefile_Mac_clang PROFILE_BUILD=1 regression_api dtest play_analysis_benchmark alpha_mu_prototype
+
+pgo_generate_binaries:
+	$(MAKE) -f Makefiles/Makefile_Mac_clang PGO_MODE=generate regression_api dtest play_analysis_benchmark alpha_mu_prototype
+
+pgo_use_binaries:
+	$(MAKE) -f Makefiles/Makefile_Mac_clang PGO_MODE=use regression_api dtest play_analysis_benchmark alpha_mu_prototype
 
 itest:	$(ITEST_BIN)
 

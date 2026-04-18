@@ -83,6 +83,30 @@ DDS tries to figure out the available number of cores and the available memory. 
 
 DDS on Windows calls SetMaxThreads itself when it is attached to a process, so you don't have to.  On Unix-like systems we use an equivalent mechanism, but we have had a report that this does not always happen in the right order of things, so you may want to call SetMaxThreads explicitly.
 
+
+Build variants
+==============
+
+The current Mac build uses Makefile-controlled variants with separate output
+directories:
+
+* normal release builds write to `src/build/` and `test/build/`
+* profiling builds write to `src/build-profile/` and `test/build-profile/`
+* PGO instrumented builds write to `src/build-pgo-generate/` and `test/build-pgo-generate/`
+* PGO use builds write to `src/build-pgo-use/` and `test/build-pgo-use/`
+
+On Apple `arm64`, the Makefiles now default `M1_MAX_BUILD=1`, which enables
+the machine-specific `DDS_TARGET_APPLE_M1_MAX` path while keeping the portable
+DDS code available.  Set `M1_MAX_BUILD=0` to force the portable path for
+comparison runs.
+
+For profiling on macOS from the repository root, use:
+
+    make profile
+
+For the full toggle details, including `PGO_MODE=generate` and
+`PGO_MODE=use`, see the `INSTALL` file and `docs/profiling.md`.
+
 Docs
 ====
 The maintained documentation entry point is the `docs/` directory, which combines curated Markdown pages with a Doxygen build. Historical interface and algorithm documentation remains in `doc/`.

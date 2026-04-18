@@ -36,7 +36,25 @@ SCHEDULER	= -DDDS_SCHEDULER
 # All that matters from no. 2 and no. 3 is the following.  Here you
 # can add $(SMALL_MEMORY) etc.
 
-DDS_BEHAVIOR	=
+HOST_ARCH	:= $(shell uname -m 2>/dev/null)
+ifeq ($(HOST_ARCH),arm64)
+M1_MAX_BUILD	?=	1
+else
+M1_MAX_BUILD	?=	0
+endif
+
+M1_MAX_FLAGS	=
+ifeq ($(M1_MAX_BUILD),1)
+M1_MAX_FLAGS	+= -DDDS_TARGET_APPLE_M1_MAX
+endif
+
+PGO_MODE	?=	none
+PGO_PROFILE_DIR	?=	$(CURDIR)/build-pgo-generate/pgo-data
+PGO_PROFILE_DATA	?=	$(PGO_PROFILE_DIR)/default.profdata
+PGO_COMPILE_FLAGS	=
+PGO_LINK_FLAGS	=
+
+DDS_BEHAVIOR	= $(M1_MAX_FLAGS)
 
 # ----------------------- OFTEN OK    ------------------------------
 
@@ -83,6 +101,14 @@ PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
 ifeq ($(PROFILE_BUILD),1)
 OPT_FLAGS	= $(PROFILE_OPT_FLAGS)
 BUILD_DIR	= build-profile
+else ifeq ($(PGO_MODE),generate)
+OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-generate
+BUILD_DIR	= build-pgo-generate
+PGO_LINK_FLAGS	= -fprofile-instr-generate
+else ifeq ($(PGO_MODE),use)
+	OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-use=$(PGO_PROFILE_DATA) -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date
+BUILD_DIR	= build-pgo-use
+PGO_LINK_FLAGS	= -fprofile-instr-use=$(PGO_PROFILE_DATA)
 else
 OPT_FLAGS	= $(RELEASE_OPT_FLAGS)
 BUILD_DIR	= build
@@ -97,6 +123,7 @@ DLLBASE		= dds
 LINK_FLAGS	=		\
 	-shared			\
 	$(THREAD_LINK)		\
+	$(PGO_LINK_FLAGS)	\
 	-fPIC
 
 include $(INCL_SOURCE)
@@ -114,6 +141,16 @@ macos:	$(O_FILES)
 
 macos_profile:
 	$(MAKE) PROFILE_BUILD=1 macos
+
+macos_pgo_generate:
+	$(MAKE) PGO_MODE=generate macos
+
+macos_pgo_use:
+	$(MAKE) PGO_MODE=use macos
+
+pgo_merge:
+	mkdir -p $(PGO_PROFILE_DIR)
+	xcrun llvm-profdata merge -output=$(PGO_PROFILE_DATA) $(PGO_PROFILE_DIR)/*.profraw
 
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)

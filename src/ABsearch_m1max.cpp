@@ -5,11 +5,9 @@
    2014-2018 by Bo Haglund & Soren Hein.
 
    See LICENSE and README.
-*/
+ */
 
-#include <iostream>
-#include <sstream>
-#include <assert.h>
+#include <cstring>
 
 #include "TransTable.h"
 #include "Moves.h"
@@ -21,24 +19,13 @@
 #include "dump.h"
 #include "debug.h"
 
-
-void Make3Simple(
-  pos * posPoint,
-  unsigned short trickCards[DDS_SUITS],
-  const int depth,
-  moveType const * mply,
-  ThreadData * thrp);
+#ifdef DDS_TARGET_APPLE_M1_MAX
 
 void Undo0(
   pos * posPoint,
   const int depth,
   const moveType& mply,
   ThreadData const * thrp);
-
-void Undo0Simple(
-  pos * posPoint,
-  const int depth,
-  const moveType& mply);
 
 void Undo1(
   pos * posPoint,
@@ -55,23 +42,114 @@ void Undo3(
   const int depth,
   const moveType& mply);
 
+namespace
+{
+  inline bool DDSM1Unlikely(const bool value)
+  {
+    return __builtin_expect(value ? 1 : 0, 0);
+  }
 
-const int handDelta[DDS_SUITS] = { 256, 16, 1, 0 };
+  inline void DDSM1ZeroLowestWin(
+    ThreadData * thrp,
+    const int depth)
+  {
+    thrp->lowestWin[depth][0] = 0;
+    thrp->lowestWin[depth][1] = 0;
+    thrp->lowestWin[depth][2] = 0;
+    thrp->lowestWin[depth][3] = 0;
+  }
+
+  inline void DDSM1ZeroWinRanks(
+    pos * posPoint,
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = 0;
+    posPoint->winRanks[depth][1] = 0;
+    posPoint->winRanks[depth][2] = 0;
+    posPoint->winRanks[depth][3] = 0;
+  }
+
+  inline void DDSM1CopyChildWinRanks(
+    pos * posPoint,
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = posPoint->winRanks[depth - 1][0];
+    posPoint->winRanks[depth][1] = posPoint->winRanks[depth - 1][1];
+    posPoint->winRanks[depth][2] = posPoint->winRanks[depth - 1][2];
+    posPoint->winRanks[depth][3] = posPoint->winRanks[depth - 1][3];
+  }
+
+  inline void DDSM1OrChildWinRanks(
+    pos * posPoint,
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][0] | posPoint->winRanks[depth - 1][0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][1] | posPoint->winRanks[depth - 1][1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][2] | posPoint->winRanks[depth - 1][2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][3] | posPoint->winRanks[depth - 1][3]);
+  }
+
+  inline void DDSM1CopyMakeWinRanks(
+    pos * posPoint,
+    unsigned short makeWinRank[DDS_SUITS],
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
+  }
+
+  inline void DDSM1OrMakeWinRanks(
+    pos * posPoint,
+    unsigned short makeWinRank[DDS_SUITS],
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][0] |
+      posPoint->winRanks[depth - 1][0] |
+      makeWinRank[0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][1] |
+      posPoint->winRanks[depth - 1][1] |
+      makeWinRank[1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][2] |
+      posPoint->winRanks[depth - 1][2] |
+      makeWinRank[2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][3] |
+      posPoint->winRanks[depth - 1][3] |
+      makeWinRank[3]);
+  }
+
+  inline void DDSM1PrefetchChild(
+    pos * posPoint,
+    ThreadData * thrp,
+    const int childDepth)
+  {
+    __builtin_prefetch(&posPoint->winRanks[childDepth][0], 1, 3);
+    __builtin_prefetch(&thrp->lowestWin[childDepth][0], 1, 3);
+    __builtin_prefetch(&thrp->bestMove[childDepth], 1, 2);
+    __builtin_prefetch(&thrp->bestMoveTT[childDepth], 1, 2);
+  }
+}
 
 
-#ifndef DDS_TARGET_APPLE_M1_MAX
 bool ABsearch(
   pos * posPoint,
   const int target,
   const int depth,
   ThreadData * thrp)
 {
-  /* posPoint points to the current look-ahead position,
-     target is number of tricks to take for the player,
-     depth is the remaining search length, must be positive,
-     the value of the subtree is returned.
-     This is a specialized AB function for handRelFirst == 0. */
-
   int hand = posPoint->first[depth];
   int tricks = depth >> 2;
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
@@ -82,8 +160,7 @@ bool ABsearch(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    thrp->lowestWin[depth][ss] = 0;
+  DDSM1ZeroLowestWin(thrp, depth);
 
   thrp->moves.MoveGen0(
     tricks,
@@ -95,8 +172,7 @@ bool ABsearch(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    posPoint->winRanks[depth][ss] = 0;
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   while (1)
   {
@@ -113,6 +189,7 @@ bool ABsearch(
 
     Make0(posPoint, depth, mply);
 
+    DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch1(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
@@ -121,11 +198,9 @@ bool ABsearch(
     Undo1(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
-    if (value == success) /* A cut-off? */
+    if (DDSM1Unlikely(value == success))
     {
-      for (int ss = 0; ss < DDS_SUITS; ss++)
-        posPoint->winRanks[depth][ss] =
-          posPoint->winRanks[depth - 1][ss];
+      DDSM1CopyChildWinRanks(posPoint, depth);
 
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
@@ -133,16 +208,14 @@ bool ABsearch(
 #endif
       goto ABexit;
     }
-    for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] |=
-        posPoint->winRanks[depth - 1][ss];
+
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-
   AB_COUNT(AB_MOVE_LOOP, value, depth);
 #ifdef DDS_AB_STATS
   thrp->ABStats.PrintStats(thrp->fileABstats.GetStream());
@@ -158,12 +231,6 @@ bool ABsearch0(
   const int depth,
   ThreadData * thrp)
 {
-  /* posPoint points to the current look-ahead position,
-     target is number of tricks to take for the player,
-     depth is the remaining search length, must be positive,
-     the value of the subtree is returned.
-     This is a specialized AB function for handRelFirst == 0. */
-
   int trump = thrp->trump;
   int hand = posPoint->first[depth];
   int tricks = depth >> 2;
@@ -172,12 +239,10 @@ bool ABsearch0(
   thrp->nodes++;
 #endif
 
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    posPoint->winRanks[depth][ss] = 0;
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   if (depth >= 20)
   {
-    /* Find node that fits the suit lengths */
     int limit;
     if (thrp->nodeTypeStore[0] == MAXNODE)
       limit = target - posPoint->tricksMAX - 1;
@@ -195,7 +260,7 @@ bool ABsearch0(
     if (cardsP)
     {
 #ifdef DDS_AB_HITS
-      DumpRetrieved(thrp->fileRetrieved.GetStream(), 
+      DumpRetrieved(thrp->fileRetrieved.GetStream(),
         * posPoint, cardsP, target, depth);
 #endif
 
@@ -228,7 +293,7 @@ bool ABsearch0(
     AB_COUNT(AB_TARGET_REACHED, false, depth);
     return false;
   }
-  else if (depth == 0) /* Maximum depth? */
+  else if (depth == 0)
   {
     TIMER_START(TIMER_NO_EVALUATE, depth);
     evalType evalData = Evaluate(posPoint, trump, thrp);
@@ -236,8 +301,10 @@ bool ABsearch0(
 
     bool value = (evalData.tricks >= target ? true : false);
 
-    for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] = evalData.winRanks[ss];
+    posPoint->winRanks[depth][0] = evalData.winRanks[0];
+    posPoint->winRanks[depth][1] = evalData.winRanks[1];
+    posPoint->winRanks[depth][2] = evalData.winRanks[2];
+    posPoint->winRanks[depth][3] = evalData.winRanks[3];
 
     AB_COUNT(AB_DEPTH_ZERO, value, depth);
     return value;
@@ -251,7 +318,7 @@ bool ABsearch0(
 
   if (thrp->nodeTypeStore[hand] == MAXNODE)
   {
-    if (res)
+    if (DDSM1Unlikely(res))
     {
       AB_COUNT(AB_QUICKTRICKS, 1, depth);
       return (qtricks == 0 ? false : true);
@@ -263,14 +330,13 @@ bool ABsearch0(
 
     if (! res)
     {
-      // Is 1 right here?!
       AB_COUNT(AB_LATERTRICKS, true, depth);
       return false;
     }
   }
   else
   {
-    if (res)
+    if (DDSM1Unlikely(res))
     {
       AB_COUNT(AB_QUICKTRICKS, false, depth);
       return (qtricks == 0 ? true : false);
@@ -289,7 +355,6 @@ bool ABsearch0(
 
   if (depth < 20)
   {
-    /* Find node that fits the suit lengths */
     int limit;
     if (thrp->nodeTypeStore[0] == MAXNODE)
       limit = target - posPoint->tricksMAX - 1;
@@ -307,7 +372,7 @@ bool ABsearch0(
     if (cardsP)
     {
 #ifdef DDS_AB_HITS
-      DumpRetrieved(thrp->fileRetrieved.GetStream(), 
+      DumpRetrieved(thrp->fileRetrieved.GetStream(),
         * posPoint, * cardsP, target, depth);
 #endif
 
@@ -334,8 +399,7 @@ bool ABsearch0(
   bool value = ! success;
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    thrp->lowestWin[depth][ss] = 0;
+  DDSM1ZeroLowestWin(thrp, depth);
 
   thrp->moves.MoveGen0(
     tricks,
@@ -346,8 +410,7 @@ bool ABsearch0(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    posPoint->winRanks[depth][ss] = 0;
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   while (1)
   {
@@ -364,6 +427,7 @@ bool ABsearch0(
 
     Make0(posPoint, depth, mply);
 
+    DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch1(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
@@ -372,11 +436,9 @@ bool ABsearch0(
     Undo1(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
-    if (value == success) /* A cut-off? */
+    if (DDSM1Unlikely(value == success))
     {
-      for (int ss = 0; ss < DDS_SUITS; ss++)
-        posPoint->winRanks[depth][ss] =
-          posPoint->winRanks[depth - 1][ss];
+      DDSM1CopyChildWinRanks(posPoint, depth);
 
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
@@ -384,9 +446,8 @@ bool ABsearch0(
 #endif
       goto ABexit;
     }
-    for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] |=
-        posPoint->winRanks[depth - 1][ss];
+
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
@@ -443,7 +504,7 @@ ABexit:
   TIMER_END(TIMER_NO_BUILD, depth);
 
 #ifdef DDS_AB_HITS
-  DumpStored(thrp->fileStored.GetStream(), 
+  DumpStored(thrp->fileStored.GetStream(),
     * posPoint, thrp->moves, first, target, depth);
 #endif
 
@@ -472,15 +533,14 @@ bool ABsearch1(
   int res = QuickTricksSecondHand(* posPoint, hand, depth, target,
      trump, * thrp);
   TIMER_END(TIMER_NO_QT, depth);
-  if (res) 
+  if (DDSM1Unlikely(res))
   {
     AB_COUNT(AB_QUICKTRICKS_2ND, true, depth);
     return success;
   }
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    thrp->lowestWin[depth][ss] = 0;
+  DDSM1ZeroLowestWin(thrp, depth);
 
   thrp->moves.MoveGen123(tricks, 1, * posPoint);
   if (depth == thrp->iniDepth)
@@ -488,8 +548,7 @@ bool ABsearch1(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    posPoint->winRanks[depth][ss] = 0;
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   while (1)
   {
@@ -506,6 +565,7 @@ bool ABsearch1(
 
     Make1(posPoint, depth, mply);
 
+    DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch2(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
@@ -514,11 +574,9 @@ bool ABsearch1(
     Undo2(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
-    if (value == success) /* A cut-off? */
+    if (DDSM1Unlikely(value == success))
     {
-      for (int ss = 0; ss < DDS_SUITS; ss++)
-        posPoint->winRanks[depth][ss] =
-          posPoint->winRanks[depth - 1][ss];
+      DDSM1CopyChildWinRanks(posPoint, depth);
 
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
@@ -527,9 +585,7 @@ bool ABsearch1(
       goto ABexit;
     }
 
-    for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] |=
-        posPoint->winRanks[depth - 1][ss];
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
@@ -557,8 +613,7 @@ bool ABsearch2(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    thrp->lowestWin[depth][ss] = 0;
+  DDSM1ZeroLowestWin(thrp, depth);
 
   thrp->moves.MoveGen123(tricks, 2, * posPoint);
   if (depth == thrp->iniDepth)
@@ -566,8 +621,7 @@ bool ABsearch2(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    posPoint->winRanks[depth][ss] = 0;
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   while (1)
   {
@@ -585,6 +639,7 @@ bool ABsearch2(
 #endif
     TIMER_END(TIMER_NO_MAKE, depth);
 
+    DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch3(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
@@ -593,12 +648,9 @@ bool ABsearch2(
     Undo3(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
-
-    if (value == success) /* A cut-off? */
+    if (DDSM1Unlikely(value == success))
     {
-      for (int ss = 0; ss < DDS_SUITS; ss++)
-        posPoint->winRanks[depth][ss] =
-          posPoint->winRanks[depth - 1][ss];
+      DDSM1CopyChildWinRanks(posPoint, depth);
 
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
@@ -607,9 +659,7 @@ bool ABsearch2(
       goto ABexit;
     }
 
-    for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] |=
-        posPoint->winRanks[depth - 1][ss];
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
@@ -627,8 +677,6 @@ bool ABsearch3(
   const int depth,
   ThreadData * thrp)
 {
-  /* This is a specialized AB function for handRelFirst == 3. */
-
   unsigned short int makeWinRank[DDS_SUITS];
 
   int hand = handId(posPoint->first[depth], 3);
@@ -640,8 +688,7 @@ bool ABsearch3(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    thrp->lowestWin[depth][ss] = 0;
+  DDSM1ZeroLowestWin(thrp, depth);
   int tricks = (depth + 3) >> 2;
 
   thrp->moves.MoveGen123(tricks, 3, * posPoint);
@@ -650,8 +697,7 @@ bool ABsearch3(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
-  for (int ss = 0; ss < DDS_SUITS; ss++)
-    posPoint->winRanks[depth][ss] = 0;
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   while (1)
   {
@@ -668,11 +714,12 @@ bool ABsearch3(
 
     Make3(posPoint, makeWinRank, depth, mply, thrp);
 
-    thrp->trickNodes++; // As handRelFirst == 0
+    thrp->trickNodes++;
 
     if (thrp->nodeTypeStore[posPoint->first[depth - 1]] == MAXNODE)
       posPoint->tricksMAX++;
 
+    DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch0(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
@@ -685,11 +732,9 @@ bool ABsearch3(
 
     TIMER_END(TIMER_NO_UNDO, depth);
 
-    if (value == success) /* A cut-off? */
+    if (DDSM1Unlikely(value == success))
     {
-      for (int ss = 0; ss < DDS_SUITS; ss++)
-        posPoint->winRanks[depth][ss] = static_cast<unsigned short>(
-                                          posPoint->winRanks[depth - 1][ss] | makeWinRank[ss]);
+      DDSM1CopyMakeWinRanks(posPoint, makeWinRank, depth);
 
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
@@ -697,9 +742,8 @@ bool ABsearch3(
 #endif
       goto ABexit;
     }
-    for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] |=
-        posPoint->winRanks[depth - 1][ss] | makeWinRank[ss];
+
+    DDSM1OrMakeWinRanks(posPoint, makeWinRank, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
@@ -709,337 +753,6 @@ ABexit:
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }
+
 #endif
-
-
-void Make0(
-  pos * posPoint,
-  const int depth,
-  moveType const * mply)
-{
-  /* First hand is not changed in next move */
-  int h = posPoint->first[depth];
-  int s = mply->suit;
-  int r = mply->rank;
-
-  posPoint->first[depth - 1] = h;
-  posPoint->move[depth] = * mply;
-
-  posPoint->rankInSuit[h][s] &= (~bitMapRank[r]);
-  posPoint->aggr[s] ^= bitMapRank[r];
-  posPoint->handDist[h] -= handDelta[s];
-  posPoint->length[h][s]--;
-}
-
-
-void Make1(
-  pos * posPoint,
-  const int depth,
-  moveType const * mply)
-{
-  /* First hand is not changed in next move */
-  int firstHand = posPoint->first[depth];
-  posPoint->first[depth - 1] = firstHand;
-
-  int h = handId(firstHand, 1);
-  int s = mply->suit;
-  int r = mply->rank;
-
-  posPoint->rankInSuit[h][s] &= (~bitMapRank[r]);
-  posPoint->aggr[s] ^= bitMapRank[r];
-  posPoint->handDist[h] -= handDelta[s];
-  posPoint->length[h][s]--;
-}
-
-
-void Make2(
-  pos * posPoint,
-  const int depth,
-  moveType const * mply)
-{
-  /* First hand is not changed in next move */
-  int firstHand = posPoint->first[depth];
-  posPoint->first[depth - 1] = firstHand;
-
-  int h = handId(firstHand, 2);
-  int s = mply->suit;
-  int r = mply->rank;
-
-  posPoint->rankInSuit[h][s] &= (~bitMapRank[r]);
-  posPoint->aggr[s] ^= bitMapRank[r];
-  posPoint->handDist[h] -= handDelta[s];
-  posPoint->length[h][s]--;
-}
-
-
-void Make3(
-  pos * posPoint,
-  unsigned short trickCards[DDS_SUITS],
-  const int depth,
-  moveType const * mply,
-  ThreadData * thrp)
-{
-  int firstHand = posPoint->first[depth];
-
-  const trickDataType& data = thrp->moves.GetTrickData((depth + 3) >> 2);
-
-  posPoint->first[depth - 1] = handId(firstHand, data.relWinner);
-  /* Defines who is first in the next move */
-
-  int h = handId(firstHand, 3);
-  /* Hand pointed to by posPoint->first will lead the next trick */
-
-  for (int suit = 0; suit < DDS_SUITS; suit++)
-    trickCards[suit] = 0;
-
-  int ss = data.bestSuit;
-  if (data.playCount[ss] >= 2)
-  {
-    // Win by rank when some else played that suit, too.
-    int rr = data.bestRank;
-    trickCards[ss] = static_cast<unsigned short>
-      (bitMapRank[rr] | data.bestSequence);
-  }
-
-  int r = mply->rank;
-  int s = mply->suit;
-  posPoint->rankInSuit[h][s] &= (~bitMapRank[r]);
-  posPoint->aggr[s] ^= bitMapRank[r];
-  posPoint->handDist[h] -= handDelta[s];
-  posPoint->length[h][s]--;
-
-  // Changes that we may have to undo.
-  WinnersType * wp = &thrp->winners[ (depth + 3) >> 2];
-  wp->number = 0;
-
-  for (int st = 0; st < 4; st++)
-  {
-    if (data.playCount[st])
-    {
-      int n = wp->number;
-      wp->winner[n].suit = st;
-      wp->winner[n].winnerRank = posPoint->winner[st].rank;
-      wp->winner[n].winnerHand = posPoint->winner[st].hand;
-      wp->winner[n].secondRank = posPoint->secondBest[st].rank;
-      wp->winner[n].secondHand = posPoint->secondBest[st].hand;
-      wp->number++;
-
-      int aggr = posPoint->aggr[st];
-
-      posPoint->winner[st].rank = thrp->rel[aggr].absRank[1][st].rank;
-      posPoint->winner[st].hand = thrp->rel[aggr].absRank[1][st].hand;
-      posPoint->secondBest[st].rank = thrp->rel[aggr].absRank[2][st].rank;
-      posPoint->secondBest[st].hand = thrp->rel[aggr].absRank[2][st].hand;
-
-    }
-  }
-}
-
-
-void Make3Simple(
-  pos * posPoint,
-  unsigned short trickCards[DDS_SUITS],
-  const int depth,
-  moveType const * mply,
-  ThreadData * thrp)
-{
-  const trickDataType& data = thrp->moves.GetTrickData((depth + 3) >> 2);
-
-  int firstHand = posPoint->first[depth];
-
-  // Leader of next trick
-  posPoint->first[depth - 1] = handId(firstHand, data.relWinner);
-
-  for (int suit = 0; suit < DDS_SUITS; suit++)
-    trickCards[suit] = 0;
-
-  int s = data.bestSuit;
-  if (data.playCount[s] >= 2)
-  {
-    // Win by rank when some else played that suit, too.
-    int r = data.bestRank;
-    trickCards[s] = static_cast<unsigned short>
-      (bitMapRank[r] | data.bestSequence);
-  }
-
-  int h = handId(firstHand, 3);
-  int r = mply->rank;
-  s = mply->suit;
-
-  posPoint->aggr[s] ^= bitMapRank[r];
-  posPoint->handDist[h] -= handDelta[s];
-}
-
-
-void Undo0(
-  pos * posPoint,
-  const int depth,
-  const moveType& mply,
-  ThreadData const * thrp)
-{
-  int h = handId(posPoint->first[depth], 3);
-  int s = mply.suit;
-  int r = mply.rank;
-
-  posPoint->rankInSuit[h][s] |= bitMapRank[r];
-  posPoint->aggr[s] |= bitMapRank[r];
-  posPoint->handDist[h] += handDelta[s];
-  posPoint->length[h][s]++;
-
-  // Changes that we now undo.
-  WinnersType const * wp = &thrp->winners[ (depth + 3) >> 2];
-
-  for (int n = 0; n < wp->number; n++)
-  {
-    int st = wp->winner[n].suit;
-    posPoint->winner[st].rank = wp->winner[n].winnerRank;
-    posPoint->winner[st].hand = wp->winner[n].winnerHand;
-    posPoint->secondBest[st].rank = wp->winner[n].secondRank;
-    posPoint->secondBest[st].hand = wp->winner[n].secondHand;
-  }
-}
-
-
-void Undo0Simple(
-  pos * posPoint,
-  const int depth,
-  const moveType& mply)
-{
-  int h = handId(posPoint->first[depth], 3);
-  int s = mply.suit;
-  int r = mply.rank;
-
-  posPoint->aggr[s] |= bitMapRank[r];
-  posPoint->handDist[h] += handDelta[s];
-}
-
-
-void Undo1(
-  pos * posPoint,
-  const int depth,
-  const moveType& mply)
-{
-  int h = posPoint->first[depth];
-  int s = mply.suit;
-  int r = mply.rank;
-
-  posPoint->rankInSuit[h][s] |= bitMapRank[r];
-  posPoint->aggr[s] |= bitMapRank[r];
-  posPoint->handDist[h] += handDelta[s];
-  posPoint->length[h][s]++;
-}
-
-
-void Undo2(
-  pos * posPoint,
-  const int depth,
-  const moveType& mply)
-{
-  int h = handId(posPoint->first[depth], 1);
-  int s = mply.suit;
-  int r = mply.rank;
-
-  posPoint->rankInSuit[h][s] |= bitMapRank[r];
-  posPoint->aggr[s] |= bitMapRank[r];
-  posPoint->handDist[h] += handDelta[s];
-  posPoint->length[h][s]++;
-}
-
-
-void Undo3(
-  pos * posPoint,
-  const int depth,
-  const moveType& mply)
-{
-  int h = handId(posPoint->first[depth], 2);
-  int s = mply.suit;
-  int r = mply.rank;
-
-  posPoint->rankInSuit[h][s] |= bitMapRank[r];
-  posPoint->aggr[s] |= bitMapRank[r];
-  posPoint->handDist[h] += handDelta[s];
-  posPoint->length[h][s]++;
-}
-
-
-evalType Evaluate(
-  pos const * posPoint,
-  const int trump,
-  ThreadData const * thrp)
-{
-  int s, h, hmax = 0, count = 0, k = 0;
-  unsigned short rmax = 0;
-  evalType eval;
-
-  int firstHand = posPoint->first[0];
-  assert((firstHand >= 0) && (firstHand <= 3));
-
-  for (s = 0; s < DDS_SUITS; s++)
-    eval.winRanks[s] = 0;
-
-  /* Who wins the last trick? */
-  if (trump != DDS_NOTRUMP) /* Highest trump card wins */
-  {
-    for (h = 0; h < DDS_HANDS; h++)
-    {
-      if (posPoint->rankInSuit[h][trump] != 0)
-        count++;
-      if (posPoint->rankInSuit[h][trump] > rmax)
-      {
-        hmax = h;
-        rmax = posPoint->rankInSuit[h][trump];
-      }
-    }
-
-    if (rmax > 0) /* Trumpcard wins */
-    {
-      if (count >= 2)
-        eval.winRanks[trump] = rmax;
-
-      if (thrp->nodeTypeStore[hmax] == MAXNODE)
-        goto maxexit;
-      else
-        goto minexit;
-    }
-  }
-
-  /* Who has the highest card in the suit played by 1st hand? */
-
-  k = 0;
-  while (k <= 3) /* Find the card the 1st hand played */
-  {
-    if (posPoint->rankInSuit[firstHand][k] != 0) /* Is this the card? */
-      break;
-    k++;
-  }
-
-  assert(k < 4);
-
-  for (h = 0; h < DDS_HANDS; h++)
-  {
-    if (posPoint->rankInSuit[h][k] != 0)
-      count++;
-    if (posPoint->rankInSuit[h][k] > rmax)
-    {
-      hmax = h;
-      rmax = posPoint->rankInSuit[h][k];
-    }
-  }
-
-  if (count >= 2)
-    eval.winRanks[k] = rmax;
-
-  if (thrp->nodeTypeStore[hmax] == MAXNODE)
-    goto maxexit;
-  else
-    goto minexit;
-
-maxexit:
-  eval.tricks = posPoint->tricksMAX + 1;
-  return eval;
-
-minexit:
-  eval.tricks = posPoint->tricksMAX;
-  return eval;
-}
 
