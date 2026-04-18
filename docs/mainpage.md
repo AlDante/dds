@@ -11,6 +11,7 @@ This documentation set combines curated Markdown guides with generated API pages
 - [API overview](api-overview.md)
 - [Alpha-mu and DDS](alpha-mu.md)
 - [Alpha-mu test set](alpha-mu-test-set.md)
+- [Profiling procedure](profiling.md)
 - [Implementation plan](implementation-plan.md)
 - [Concrete action plan](action-plan.md)
 - [Legacy and existing documentation](legacy-docs.md)

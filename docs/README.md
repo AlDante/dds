@@ -17,7 +17,7 @@ Install `doxygen` and ensure it is available on your `PATH`.
 From the repository root:
 
 ```sh
-make -C docs html
+make docs
 ```
 
 Or from inside this directory:
@@ -49,6 +49,7 @@ The generated site includes:
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
 - `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from prototype to full alpha-mu engine
 - `alpha-mu-test-set.md` — paper-derived alpha-mu test families and hand sets
+- `profiling.md` — profiling build targets, Instruments workflow, and hotspot checklist
 - `implementation-plan.md` — staged implementation roadmap
 - `action-plan.md` — concrete next-cycle execution checklist
 - `performance.md` — historical performance notes and the standardized post-change benchmark workflow
