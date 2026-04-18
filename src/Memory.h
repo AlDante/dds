@@ -53,7 +53,7 @@ struct WinnersType
 };
 
 
-struct ThreadData
+struct ThreadDataHot
 {
   int nodeTypeStore[DDS_HANDS];
   int iniDepth;
@@ -63,14 +63,10 @@ struct ThreadData
   int trump;
 
   pos lookAheadPos; // Recursive alpha-beta data
-  bool analysisFlag;
-  unsigned short int lowestWin[50][DDS_SUITS];
   WinnersType winners[13];
   moveType forbiddenMoves[14];
   moveType bestMove[50];
   moveType bestMoveTT[50];
-
-  double memUsed;
   int nodes;
   int trickNodes;
 
@@ -81,6 +77,14 @@ struct ThreadData
   TransTable * transTable;
 
   Moves moves;
+
+};
+
+
+struct ThreadDataCold
+{
+  bool analysisFlag;
+  double memUsed;
 
 #ifdef DDS_TOP_LEVEL
   File fileTopLevel;
@@ -109,6 +113,13 @@ struct ThreadData
   File fileMoves;
 #endif
 
+};
+
+
+struct ThreadData:
+  public ThreadDataHot,
+  public ThreadDataCold
+{
 };
 
 

@@ -77,12 +77,14 @@ extern moveGroupType groupData[8192];
 
 struct moveType
 {
-  int suit;
-  int rank;
-  int sequence; /* Whether or not this move is the
-                                     first in a sequence */
-  int weight; /* Weight used at sorting */
+  short suit;
+  short rank;
+  short sequence; /* Whether or not this move is the
+                                       first in a sequence */
+  short weight; /* Weight used at sorting */
 };
+
+static_assert(sizeof(moveType) == 8, "moveType should remain compact");
 
 struct movePlyType
 {
@@ -105,20 +107,20 @@ struct pos
   unsigned char length[DDS_HANDS][DDS_SUITS];
   int handDist[DDS_HANDS];
 
-  unsigned short int winRanks[50][DDS_SUITS];
-  /* Cards that win by rank, firstindex is depth. */
-  int first[50];
-  /* Hand that leads the trick for each ply */
-  moveType move[50];
-  /* Presently winning move */
-  int handRelFirst;
-  /* The current hand, relative first hand */
-  int tricksMAX;
-  /* Aggregated tricks won by MAX */
   highCardType winner[DDS_SUITS];
   /* Winning rank of trick. */
   highCardType secondBest[DDS_SUITS];
   /* Second best rank. */
+  int first[50];
+  /* Hand that leads the trick for each ply */
+  moveType move[50];
+  /* Presently winning move */
+  unsigned short int winRanks[50][DDS_SUITS];
+  /* Cards that win by rank, firstindex is depth. */
+  int tricksMAX;
+  /* Aggregated tricks won by MAX */
+  int handRelFirst;
+  /* The current hand, relative first hand */
 };
 
 

@@ -14,6 +14,13 @@
 #include "Memory.h"
 
 
+struct DepthLocal
+{
+  unsigned short winRanks[DDS_SUITS];
+  moveType bestMove;
+};
+
+
 bool ABsearch(
   pos * posPoint,
   const int target,
