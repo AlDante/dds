@@ -2929,6 +2929,40 @@ namespace alpha_mu_prototype
   }
 
 
+  static void TestBoardParallelBenchmarkParity()
+  {
+    SetMaxThreads(0);
+
+    AlphaMuBenchmarkOptions serialOptions;
+    serialOptions.handFile = "../hands/list2.txt";
+    serialOptions.depth = 0;
+    serialOptions.maxBoards = 2;
+
+    AlphaMuBenchmarkOptions parallelOptions(serialOptions);
+    parallelOptions.parallelMode = ALPHA_MU_PARALLEL_BOARD;
+    parallelOptions.boardWorkers = 2;
+
+    const BenchmarkMethodSummary serialSummary =
+      BenchmarkAlphaMuExactBoards(serialOptions);
+    const BenchmarkMethodSummary parallelSummary =
+      BenchmarkAlphaMuExactBoards(parallelOptions);
+
+    Check(serialSummary.method == parallelSummary.method &&
+          serialSummary.handFile == parallelSummary.handFile &&
+          serialSummary.boardsTested == parallelSummary.boardsTested &&
+          serialSummary.depth == parallelSummary.depth,
+      "board-parallel benchmark mode should preserve the benchmark identity fields from the serial path");
+    Check(serialSummary.boardsTested == 2 &&
+          parallelSummary.boardsTested == 2,
+      "board-parallel benchmark parity test should exercise a tiny two-board workload");
+    Check(serialSummary.mismatches == 0 && parallelSummary.mismatches == 0,
+      "board-parallel benchmark mode should preserve exact alpha-mu scores on every tested board");
+    Check(serialSummary.perBoardSeconds.size() == 2 &&
+          parallelSummary.perBoardSeconds.size() == 2,
+      "board-parallel benchmark mode should still report one per-board timing per selected board");
+  }
+
+
   static void TestRepeatedDDSReinitializationKeepsThreadContext()
   {
     HandFileData data;
@@ -3013,6 +3047,7 @@ namespace alpha_mu_prototype
        {"bridge search execution context parity OK", &TestBridgeSearchExplicitExecutionContext},
        {"benchmark option normalization OK", &TestAlphaMuBenchmarkOptionNormalization},
        {"benchmark overload parity OK", &TestAlphaMuBenchmarkOptionsOverloadParity},
+       {"board-parallel benchmark parity OK", &TestBoardParallelBenchmarkParity},
        {"repeated DDS reinitialization OK", &TestRepeatedDDSReinitializationKeepsThreadContext}
     };
 

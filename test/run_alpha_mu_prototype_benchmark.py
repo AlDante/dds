@@ -30,7 +30,17 @@ def default_log_path(method: str, hand_file: str, depth: int) -> Path:
     return BUILD_DIR / name
 
 
-def build_command(method: str, hand_file: str, depth: int, max_boards: int, skip_boards: str) -> list[str]:
+def build_command(
+    method: str,
+    hand_file: str,
+    depth: int,
+    max_boards: int,
+    skip_boards: str,
+    parallel: str,
+    board_workers: int,
+    root_workers: int,
+    dds_thread_id: int,
+) -> list[str]:
     if method == "dds":
         command = ["./build/alpha_mu_prototype", "benchmark_dds", hand_file, str(max_boards)]
         if skip_boards:
@@ -45,6 +55,18 @@ def build_command(method: str, hand_file: str, depth: int, max_boards: int, skip
     ]
     if skip_boards:
         command.append(skip_boards)
+    command.extend(
+        [
+            "--parallel",
+            parallel,
+            "--board-workers",
+            str(board_workers),
+            "--root-workers",
+            str(root_workers),
+            "--dds-thread-id",
+            str(dds_thread_id),
+        ]
+    )
     return command
 
 
@@ -81,6 +103,10 @@ def main() -> int:
     parser.add_argument("--checkpoint-seconds", type=float, default=30.0)
     parser.add_argument("--heartbeat-seconds", type=float, default=30.0)
     parser.add_argument("--skip-boards", default="")
+    parser.add_argument("--parallel", choices=["serial", "board", "root"], default="serial")
+    parser.add_argument("--board-workers", type=int, default=1)
+    parser.add_argument("--root-workers", type=int, default=1)
+    parser.add_argument("--dds-thread-id", type=int, default=0)
     parser.add_argument("--log-path", default="")
     args = parser.parse_args()
 
@@ -92,12 +118,28 @@ def main() -> int:
         raise SystemExit("--checkpoint-seconds must be non-negative")
     if args.heartbeat_seconds <= 0.0:
         raise SystemExit("--heartbeat-seconds must be positive")
+    if args.board_workers < 1:
+        raise SystemExit("--board-workers must be positive")
+    if args.root_workers < 1:
+        raise SystemExit("--root-workers must be positive")
+    if args.dds_thread_id < 0:
+        raise SystemExit("--dds-thread-id must be non-negative")
 
     log_path = Path(args.log_path).resolve() if args.log_path else default_log_path(
         args.method, args.hand_file, args.depth
     )
     status_path = Path(f"{log_path}.status.json")
-    command = build_command(args.method, args.hand_file, args.depth, args.max_boards, args.skip_boards)
+    command = build_command(
+        args.method,
+        args.hand_file,
+        args.depth,
+        args.max_boards,
+        args.skip_boards,
+        args.parallel,
+        args.board_workers,
+        args.root_workers,
+        args.dds_thread_id,
+    )
 
     env = os.environ.copy()
     env["DYLD_LIBRARY_PATH"] = str(ROOT / "src" / "build")
@@ -115,6 +157,10 @@ def main() -> int:
         f"depth={args.depth}\n",
         f"max_boards={args.max_boards}\n",
         f"skip_boards={args.skip_boards}\n",
+        f"parallel={args.parallel}\n",
+        f"board_workers={args.board_workers}\n",
+        f"root_workers={args.root_workers}\n",
+        f"dds_thread_id={args.dds_thread_id}\n",
         f"checkpoint_seconds={args.checkpoint_seconds:.6f}\n",
         f"heartbeat_seconds={args.heartbeat_seconds:.6f}\n",
         f"command={' '.join(command)}\n",
@@ -141,6 +187,10 @@ def main() -> int:
         "depth": args.depth,
         "max_boards": args.max_boards,
         "skip_boards": args.skip_boards,
+        "parallel": args.parallel,
+        "board_workers": args.board_workers,
+        "root_workers": args.root_workers,
+        "dds_thread_id": args.dds_thread_id,
         "command": command,
         "pid": proc.pid,
         "log_path": str(log_path),

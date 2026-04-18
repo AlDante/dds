@@ -7,6 +7,10 @@
 
 #include "alpha_mu_prototype_core.h"
 
+#include <atomic>
+#include <mutex>
+#include <thread>
+
 namespace alpha_mu_prototype
 {
   using namespace std;
@@ -2990,6 +2994,115 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
     }
     return selectedBoards;
   }
+
+  namespace
+  {
+    struct AlphaMuBenchmarkBoardResult
+    {
+      unsigned boardNumber;
+      double boardElapsedSeconds;
+      double completionElapsedSeconds;
+      unsigned mismatches;
+
+      AlphaMuBenchmarkBoardResult() :
+        boardNumber(0),
+        boardElapsedSeconds(0.0),
+        completionElapsedSeconds(0.0),
+        mismatches(0)
+      {
+      }
+    };
+
+    int ClampDDSBenchmarkThreadId(
+      const int requestedThreadId,
+      const int configuredThreads)
+    {
+      if (configuredThreads <= 1)
+        return 0;
+
+      return min(max(0, requestedThreadId), configuredThreads - 1);
+    }
+
+    unsigned DetermineAlphaMuBoardWorkerCount(
+      const AlphaMuBenchmarkOptions& options,
+      const unsigned boardsToTest,
+      int& baseThreadId)
+    {
+      if (options.parallelMode != ALPHA_MU_PARALLEL_BOARD || boardsToTest <= 1U)
+      {
+        baseThreadId = max(0, options.ddsThreadId);
+        return 1U;
+      }
+
+      SetMaxThreads(max(1, options.boardWorkers));
+
+      DDSInfo info;
+      memset(&info, 0, sizeof(info));
+      GetDDSInfo(&info);
+
+      const int configuredThreads = max(1, info.noOfThreads);
+      baseThreadId = ClampDDSBenchmarkThreadId(options.ddsThreadId,
+        configuredThreads);
+      const unsigned availableWorkers = static_cast<unsigned>(
+        max(1, configuredThreads - baseThreadId));
+      const unsigned requestedWorkers = static_cast<unsigned>(
+        max(1, options.boardWorkers));
+      return min(boardsToTest, min(requestedWorkers, availableWorkers));
+    }
+
+    AlphaMuBenchmarkBoardResult RunAlphaMuBenchmarkBoard(
+      const HandFileData& data,
+      const string& resolvedHandFile,
+      const unsigned totalBoards,
+      const unsigned boardNumber,
+      const AlphaMuBenchmarkOptions& options,
+      const int ddsThreadId,
+      const chrono::steady_clock::time_point benchmarkStart,
+      const bool enableProgress)
+    {
+      const unsigned boardIndex = boardNumber - 1U;
+      const chrono::steady_clock::time_point boardStart =
+        chrono::steady_clock::now();
+      const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[boardIndex]);
+
+      BenchmarkBoardProgressContext progress;
+      if (enableProgress)
+      {
+        progress.method = "alpha_mu";
+        progress.handFile = resolvedHandFile;
+        progress.boardNumber = boardNumber;
+        progress.totalBoards = totalBoards;
+        progress.depth = options.depth;
+        progress.reportIntervalSeconds = BenchmarkProgressIntervalSeconds();
+        progress.totalStart = benchmarkStart;
+        progress.boardStart = boardStart;
+        progress.nextReportSeconds = progress.reportIntervalSeconds;
+      }
+
+      const SearchExecutionContext searchContext = MakeSearchExecutionContext(
+        ddsThreadId,
+        (enableProgress && progress.reportIntervalSeconds > 0.0 ? &progress : NULL),
+        options.parallelMode,
+        options.boardWorkers,
+        options.rootWorkers);
+
+      const ParetoFront front = SearchBridgeState(state, options.depth,
+        searchContext);
+      const int alphaScore = SingleWorldFrontScore(front, options.depth,
+        static_cast<int>(boardIndex));
+
+      AlphaMuBenchmarkBoardResult result;
+      result.boardNumber = boardNumber;
+      result.boardElapsedSeconds = chrono::duration<double>(
+        chrono::steady_clock::now() - boardStart).count();
+      result.completionElapsedSeconds = chrono::duration<double>(
+        chrono::steady_clock::now() - benchmarkStart).count();
+      result.mismatches = static_cast<unsigned>(
+        alphaScore != BestScore(data.futList[boardIndex]));
+      return result;
+    }
+  }
+
 double BenchmarkCheckpointIntervalSeconds();
 void ReportBenchmarkCheckpoint(
     const BenchmarkMethodSummary& summary,
@@ -3078,60 +3191,109 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
     Check(summary.boardsTested > 0,
       "alpha-mu benchmark selected zero boards to test");
 
-    SetMaxThreads(0);
+    int baseThreadId = 0;
+    const unsigned boardWorkerCount = DetermineAlphaMuBoardWorkerCount(options,
+      summary.boardsTested, baseThreadId);
+    if (boardWorkerCount <= 1U)
+      SetMaxThreads(0);
+
+    DDSInfo info;
+    memset(&info, 0, sizeof(info));
+    GetDDSInfo(&info);
+    baseThreadId = ClampDDSBenchmarkThreadId(baseThreadId,
+      max(1, info.noOfThreads));
+
     const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
     double lastCheckpoint = 0.0;
-    for (unsigned i = 0; i < boardNumbers.size(); i++)
+
+    if (boardWorkerCount <= 1U)
     {
-      const unsigned boardNumber = boardNumbers[i];
-      const unsigned boardIndex = boardNumber - 1U;
-      const chrono::steady_clock::time_point boardStart =
-        chrono::steady_clock::now();
-      const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[boardIndex]);
-
-      BenchmarkBoardProgressContext progress;
-      progress.method = summary.method;
-      progress.handFile = summary.handFile;
-      progress.boardNumber = boardNumber;
-      progress.totalBoards = summary.boardsTested;
-      progress.depth = options.depth;
-      progress.reportIntervalSeconds = BenchmarkProgressIntervalSeconds();
-      progress.totalStart = start;
-      progress.boardStart = boardStart;
-      progress.nextReportSeconds = progress.reportIntervalSeconds;
-      const SearchExecutionContext searchContext = MakeSearchExecutionContext(
-        options.ddsThreadId,
-        (progress.reportIntervalSeconds > 0.0 ? &progress : NULL),
-        options.parallelMode,
-        options.boardWorkers,
-        options.rootWorkers);
-
-      const ParetoFront front = SearchBridgeState(state, options.depth,
-        searchContext);
-
-      const int alphaScore = SingleWorldFrontScore(front, options.depth,
-        static_cast<int>(boardIndex));
-      if (alphaScore != BestScore(data.futList[boardIndex]))
-        summary.mismatches++;
-
-      const double boardElapsed = chrono::duration<double>(
-        chrono::steady_clock::now() - boardStart).count();
-      summary.perBoardSeconds.push_back(boardElapsed);
-      const double elapsed = chrono::duration<double>(
-        chrono::steady_clock::now() - start).count();
-      ReportBenchmarkBoardTiming(summary, boardNumber, boardElapsed, elapsed);
-
-      if (checkpointSeconds > 0.0)
+      for (unsigned i = 0; i < boardNumbers.size(); i++)
       {
-        if ((elapsed - lastCheckpoint >= checkpointSeconds) ||
-            (i + 1 == boardNumbers.size()))
+        const AlphaMuBenchmarkBoardResult result = RunAlphaMuBenchmarkBoard(data,
+          summary.handFile, summary.boardsTested, boardNumbers[i], options,
+          baseThreadId, start, true);
+        summary.mismatches += result.mismatches;
+        summary.perBoardSeconds.push_back(result.boardElapsedSeconds);
+        ReportBenchmarkBoardTiming(summary, result.boardNumber,
+          result.boardElapsedSeconds, result.completionElapsedSeconds);
+
+        if (checkpointSeconds > 0.0)
         {
-          ReportBenchmarkCheckpoint(summary, i + 1, elapsed);
-          lastCheckpoint = elapsed;
+          if ((result.completionElapsedSeconds - lastCheckpoint >= checkpointSeconds) ||
+              (i + 1 == boardNumbers.size()))
+          {
+            ReportBenchmarkCheckpoint(summary, i + 1,
+              result.completionElapsedSeconds);
+            lastCheckpoint = result.completionElapsedSeconds;
+          }
         }
       }
     }
+    else
+    {
+      vector<AlphaMuBenchmarkBoardResult> results(boardNumbers.size());
+      atomic<unsigned> nextBoardIndex(0U);
+      exception_ptr workerFailure;
+      mutex workerFailureMutex;
+
+      const auto worker = [&](const unsigned workerIndex)
+      {
+        try
+        {
+          while (true)
+          {
+            const unsigned index = nextBoardIndex.fetch_add(1U);
+            if (index >= boardNumbers.size())
+              break;
+
+            results[index] = RunAlphaMuBenchmarkBoard(data, summary.handFile,
+              summary.boardsTested, boardNumbers[index], options,
+              baseThreadId + static_cast<int>(workerIndex), start, false);
+          }
+        }
+        catch (...)
+        {
+          lock_guard<mutex> lock(workerFailureMutex);
+          if (workerFailure == NULL)
+            workerFailure = current_exception();
+        }
+      };
+
+      vector<thread> workers;
+      workers.reserve(boardWorkerCount);
+      for (unsigned workerIndex = 0; workerIndex < boardWorkerCount; workerIndex++)
+        workers.push_back(thread(worker, workerIndex));
+
+      for (unsigned i = 0; i < workers.size(); i++)
+        workers[i].join();
+
+      if (workerFailure != NULL)
+        rethrow_exception(workerFailure);
+
+      double reportedElapsedSeconds = 0.0;
+      for (unsigned i = 0; i < results.size(); i++)
+      {
+        summary.mismatches += results[i].mismatches;
+        summary.perBoardSeconds.push_back(results[i].boardElapsedSeconds);
+        reportedElapsedSeconds = max(reportedElapsedSeconds,
+          results[i].completionElapsedSeconds);
+        ReportBenchmarkBoardTiming(summary, results[i].boardNumber,
+          results[i].boardElapsedSeconds, reportedElapsedSeconds);
+
+        if (checkpointSeconds > 0.0)
+        {
+          if ((reportedElapsedSeconds - lastCheckpoint >= checkpointSeconds) ||
+              (i + 1 == results.size()))
+          {
+            ReportBenchmarkCheckpoint(summary, i + 1, reportedElapsedSeconds);
+            lastCheckpoint = reportedElapsedSeconds;
+          }
+        }
+      }
+    }
+
     const chrono::steady_clock::time_point end = chrono::steady_clock::now();
     summary.elapsedSeconds = chrono::duration<double>(end - start).count();
     return summary;
