@@ -100,10 +100,16 @@ For a stronger comparison run, increase the requested repeat count explicitly, f
 python3 test/standard_performance.py --repeats 3
 ```
 
-For deeper alpha-mu root instrumentation, keep using the separate specialized runner:
+For deeper alpha-mu benchmark instrumentation, keep using the dedicated runner:
 
 ```zsh
-python3 test/alpha_mu_benchmark.py
+python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2
+```
+
+For board-parallel throughput experiments, pass the parallel settings explicitly, for example:
+
+```zsh
+python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --board-workers 4
 ```
 
 ## Recorded results
@@ -116,5 +122,5 @@ Raw per-run logs and machine-readable summaries are written to:
 
 - `test/build/performance_runs/<timestamp>/`
 
-For deeper alpha-mu benchmarks outside the standardized suite, see the recorded serial baseline in `docs/performance-log.md` dated `2026-04-18 08:46:32`, which captures the `hands/list10.txt` depth-3 pre-parallelisation run and its strong board-to-board timing skew.
+For deeper alpha-mu benchmarks outside the standardized suite, see the recorded serial baseline in `docs/performance-log.md` dated `2026-04-18 08:46:32`, which captures the `hands/list10.txt` depth-3 pre-parallelisation run and its strong board-to-board timing skew. Board-parallel runs recorded through `test/run_alpha_mu_prototype_benchmark.py` also preserve the reported parallel mode and worker counts in their log and status outputs.
 

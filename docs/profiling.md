@@ -96,6 +96,15 @@ This means:
 - all boards in the file
 - skip board `2`
 
+For board-parallel throughput profiling on the same workload, use explicit benchmark options:
+
+```zsh
+cd /Users/david/Documents/dev/CLionProjects/dds/test
+DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list10.txt 3 0 2 --parallel board --board-workers 4
+```
+
+The machine-readable benchmark output now records the reported `parallel`, `board_workers`, `root_workers`, `dds_thread_id`, and `configured_board_workers` fields on progress, per-board, checkpoint, and summary lines. In board-parallel mode, recursive progress lines are intentionally suppressed so worker output does not interleave unpredictably.
+
 ## Profiling DDS solving instead of alpha-mu
 
 For core DDS solve-path profiling:

@@ -1395,6 +1395,15 @@ namespace alpha_mu_prototype
   };
 
 
+  /** @brief Requested concurrency strategy for alpha-mu benchmark/search entry points. */
+  enum AlphaMuParallelMode
+  {
+    ALPHA_MU_PARALLEL_SERIAL = 0,
+    ALPHA_MU_PARALLEL_BOARD = 1,
+    ALPHA_MU_PARALLEL_ROOT = 2
+  };
+
+
   /** @brief Summary for one exact benchmark method over a hand-file workload. */
   struct BenchmarkMethodSummary
   {
@@ -1402,6 +1411,11 @@ namespace alpha_mu_prototype
     string handFile;
     unsigned boardsTested;
     int depth;
+    AlphaMuParallelMode parallelMode;
+    int boardWorkers;
+    int rootWorkers;
+    int ddsThreadId;
+    int configuredBoardWorkers;
     double elapsedSeconds;
     unsigned mismatches;
     vector<double> perBoardSeconds;
@@ -1411,6 +1425,11 @@ namespace alpha_mu_prototype
       handFile(),
       boardsTested(0),
       depth(0),
+      parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      boardWorkers(1),
+      rootWorkers(1),
+      ddsThreadId(0),
+      configuredBoardWorkers(1),
       elapsedSeconds(0.0),
       mismatches(0),
       perBoardSeconds()
@@ -1427,6 +1446,11 @@ namespace alpha_mu_prototype
     unsigned boardNumber;
     unsigned totalBoards;
     int depth;
+    AlphaMuParallelMode parallelMode;
+    int boardWorkers;
+    int rootWorkers;
+    int ddsThreadId;
+    int configuredBoardWorkers;
     double reportIntervalSeconds;
     chrono::steady_clock::time_point totalStart;
     chrono::steady_clock::time_point boardStart;
@@ -1440,6 +1464,11 @@ namespace alpha_mu_prototype
       boardNumber(0),
       totalBoards(0),
       depth(0),
+      parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      boardWorkers(1),
+      rootWorkers(1),
+      ddsThreadId(0),
+      configuredBoardWorkers(1),
       reportIntervalSeconds(0.0),
       totalStart(),
       boardStart(),
@@ -1450,14 +1479,6 @@ namespace alpha_mu_prototype
     }
   };
 
-
-  /** @brief Requested concurrency strategy for alpha-mu benchmark/search entry points. */
-  enum AlphaMuParallelMode
-  {
-    ALPHA_MU_PARALLEL_SERIAL = 0,
-    ALPHA_MU_PARALLEL_BOARD = 1,
-    ALPHA_MU_PARALLEL_ROOT = 2
-  };
 
 
   /** @brief Explicit execution context carried through bridge search and DDS leaf calls. */

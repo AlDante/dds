@@ -2920,8 +2920,13 @@ namespace alpha_mu_prototype
           legacy.handFile == explicitSummary.handFile &&
           legacy.boardsTested == explicitSummary.boardsTested &&
           legacy.depth == explicitSummary.depth &&
+          legacy.parallelMode == explicitSummary.parallelMode &&
+          legacy.boardWorkers == explicitSummary.boardWorkers &&
+          legacy.rootWorkers == explicitSummary.rootWorkers &&
+          legacy.ddsThreadId == explicitSummary.ddsThreadId &&
+          legacy.configuredBoardWorkers == explicitSummary.configuredBoardWorkers &&
           legacy.mismatches == explicitSummary.mismatches,
-      "benchmark options overload should preserve the legacy benchmark summary fields");
+      "benchmark options overload should preserve the legacy benchmark summary fields and serial execution metadata");
     Check(legacy.perBoardSeconds.size() == explicitSummary.perBoardSeconds.size(),
       "benchmark options overload should preserve the number of measured per-board timings");
     Check(legacy.mismatches == 0 && explicitSummary.mismatches == 0,
@@ -2952,6 +2957,18 @@ namespace alpha_mu_prototype
           serialSummary.boardsTested == parallelSummary.boardsTested &&
           serialSummary.depth == parallelSummary.depth,
       "board-parallel benchmark mode should preserve the benchmark identity fields from the serial path");
+    Check(serialSummary.parallelMode == ALPHA_MU_PARALLEL_SERIAL &&
+          serialSummary.boardWorkers == 1 &&
+          serialSummary.rootWorkers == 1 &&
+          serialSummary.configuredBoardWorkers == 1,
+      "serial benchmark summaries should report serial execution metadata");
+    Check(parallelSummary.parallelMode == ALPHA_MU_PARALLEL_BOARD &&
+          parallelSummary.boardWorkers == 2 &&
+          parallelSummary.rootWorkers == 1 &&
+          parallelSummary.ddsThreadId >= 0 &&
+          parallelSummary.configuredBoardWorkers >= 1 &&
+          parallelSummary.configuredBoardWorkers <= 2,
+      "board-parallel benchmark summaries should report the requested mode and the configured worker count");
     Check(serialSummary.boardsTested == 2 &&
           parallelSummary.boardsTested == 2,
       "board-parallel benchmark parity test should exercise a tiny two-board workload");

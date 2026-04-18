@@ -3056,6 +3056,7 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
       const unsigned totalBoards,
       const unsigned boardNumber,
       const AlphaMuBenchmarkOptions& options,
+      const int configuredBoardWorkers,
       const int ddsThreadId,
       const chrono::steady_clock::time_point benchmarkStart,
       const bool enableProgress)
@@ -3073,6 +3074,11 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
         progress.boardNumber = boardNumber;
         progress.totalBoards = totalBoards;
         progress.depth = options.depth;
+        progress.parallelMode = options.parallelMode;
+        progress.boardWorkers = options.boardWorkers;
+        progress.rootWorkers = options.rootWorkers;
+        progress.ddsThreadId = ddsThreadId;
+        progress.configuredBoardWorkers = configuredBoardWorkers;
         progress.reportIntervalSeconds = BenchmarkProgressIntervalSeconds();
         progress.totalStart = benchmarkStart;
         progress.boardStart = boardStart;
@@ -3127,6 +3133,11 @@ BenchmarkMethodSummary BenchmarkDDSExactBoards(
     BenchmarkMethodSummary summary;
     summary.method = "dds";
     summary.handFile = ResolvePath(handFile);
+    summary.parallelMode = ALPHA_MU_PARALLEL_SERIAL;
+    summary.boardWorkers = 1;
+    summary.rootWorkers = 1;
+    summary.ddsThreadId = 0;
+    summary.configuredBoardWorkers = 1;
     const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data, maxBoards,
       skipSpec);
     summary.boardsTested = static_cast<unsigned>(boardNumbers.size());
@@ -3184,6 +3195,9 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
     BenchmarkMethodSummary summary;
     summary.method = "alpha_mu";
     summary.handFile = ResolvePath(options.handFile);
+    summary.parallelMode = options.parallelMode;
+    summary.boardWorkers = options.boardWorkers;
+    summary.rootWorkers = options.rootWorkers;
     const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data,
       options.maxBoards, options.skipSpec);
     summary.boardsTested = static_cast<unsigned>(boardNumbers.size());
@@ -3202,6 +3216,8 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
     GetDDSInfo(&info);
     baseThreadId = ClampDDSBenchmarkThreadId(baseThreadId,
       max(1, info.noOfThreads));
+    summary.ddsThreadId = baseThreadId;
+    summary.configuredBoardWorkers = static_cast<int>(boardWorkerCount);
 
     const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
@@ -3213,6 +3229,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
       {
         const AlphaMuBenchmarkBoardResult result = RunAlphaMuBenchmarkBoard(data,
           summary.handFile, summary.boardsTested, boardNumbers[i], options,
+          summary.configuredBoardWorkers,
           baseThreadId, start, true);
         summary.mismatches += result.mismatches;
         summary.perBoardSeconds.push_back(result.boardElapsedSeconds);
@@ -3250,6 +3267,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
 
             results[index] = RunAlphaMuBenchmarkBoard(data, summary.handFile,
               summary.boardsTested, boardNumbers[index], options,
+              summary.configuredBoardWorkers,
               baseThreadId + static_cast<int>(workerIndex), start, false);
           }
         }
@@ -3324,6 +3342,11 @@ void ReportBenchmarkMethodSummary(
          << " file=" << summary.handFile
          << " boards=" << summary.boardsTested
          << " depth=" << summary.depth
+         << " parallel=" << AlphaMuParallelModeName(summary.parallelMode)
+         << " board_workers=" << summary.boardWorkers
+         << " root_workers=" << summary.rootWorkers
+         << " dds_thread_id=" << summary.ddsThreadId
+         << " configured_board_workers=" << summary.configuredBoardWorkers
          << " total_seconds=" << summary.elapsedSeconds
          << " per_board_seconds="
          << (summary.perBoardSeconds.empty() ?
@@ -3387,6 +3410,11 @@ void MaybeReportBenchmarkBoardProgress(
          << " board=" << progress->boardNumber
          << " total_boards=" << progress->totalBoards
          << " depth=" << progress->depth
+         << " parallel=" << AlphaMuParallelModeName(progress->parallelMode)
+         << " board_workers=" << progress->boardWorkers
+         << " root_workers=" << progress->rootWorkers
+         << " dds_thread_id=" << progress->ddsThreadId
+         << " configured_board_workers=" << progress->configuredBoardWorkers
          << " board_elapsed_seconds=" << boardElapsed
          << " elapsed_seconds=" << totalElapsed
          << " recursive_calls=" << progress->recursiveCalls
@@ -3415,6 +3443,11 @@ void ReportBenchmarkCheckpoint(
          << " completed_boards=" << completedBoards
          << " total_boards=" << summary.boardsTested
          << " depth=" << summary.depth
+         << " parallel=" << AlphaMuParallelModeName(summary.parallelMode)
+         << " board_workers=" << summary.boardWorkers
+         << " root_workers=" << summary.rootWorkers
+         << " dds_thread_id=" << summary.ddsThreadId
+         << " configured_board_workers=" << summary.configuredBoardWorkers
          << " elapsed_seconds=" << elapsedSeconds
          << " mismatches=" << summary.mismatches
          << endl;
@@ -3432,6 +3465,11 @@ void ReportBenchmarkBoardTiming(
          << " board=" << boardNumber
          << " total_boards=" << summary.boardsTested
          << " depth=" << summary.depth
+         << " parallel=" << AlphaMuParallelModeName(summary.parallelMode)
+         << " board_workers=" << summary.boardWorkers
+         << " root_workers=" << summary.rootWorkers
+         << " dds_thread_id=" << summary.ddsThreadId
+         << " configured_board_workers=" << summary.configuredBoardWorkers
          << " board_seconds=" << boardElapsedSeconds
          << " elapsed_seconds=" << totalElapsedSeconds
          << " mismatches=" << summary.mismatches

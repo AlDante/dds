@@ -92,6 +92,28 @@ def stream_output(proc: subprocess.Popen[str], output_queue: queue.Queue[str | N
         output_queue.put(None)
 
 
+def update_reported_benchmark_settings(
+    status: dict[str, Any], fields: dict[str, str]
+) -> None:
+    parallel_value = fields.get("parallel")
+    if parallel_value is not None:
+        status["benchmark_parallel"] = parallel_value
+
+    for field_name, status_name in (
+        ("board_workers", "benchmark_board_workers"),
+        ("root_workers", "benchmark_root_workers"),
+        ("dds_thread_id", "benchmark_dds_thread_id"),
+        ("configured_board_workers", "benchmark_configured_board_workers"),
+    ):
+        raw_value = fields.get(field_name)
+        if raw_value is None:
+            continue
+        try:
+            status[status_name] = int(raw_value)
+        except ValueError:
+            status[status_name] = raw_value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run alpha_mu_prototype benchmark modes with live checkpoint logging."
@@ -196,6 +218,11 @@ def main() -> int:
         "log_path": str(log_path),
         "checkpoint_seconds": args.checkpoint_seconds,
         "heartbeat_seconds": args.heartbeat_seconds,
+        "benchmark_parallel": None,
+        "benchmark_board_workers": None,
+        "benchmark_root_workers": None,
+        "benchmark_dds_thread_id": None,
+        "benchmark_configured_board_workers": None,
         "last_checkpoint_line": "",
         "last_progress_line": "",
         "benchmark_summary_line": "",
@@ -262,6 +289,7 @@ def main() -> int:
                         progress[key] = value
                 else:
                     progress[key] = value
+            update_reported_benchmark_settings(status, fields)
             status["last_progress_line"] = item.rstrip("\n")
             status["current_board_progress"] = progress
         elif item.startswith("ALPHA_MU_BENCHMARK_BOARD "):
@@ -271,6 +299,7 @@ def main() -> int:
                     continue
                 key, value = token.split("=", 1)
                 fields[key] = value
+            update_reported_benchmark_settings(status, fields)
             board_value = fields.get("board_seconds")
             board_number_value = fields.get("board")
             if board_value is not None:
@@ -292,6 +321,13 @@ def main() -> int:
                 except ValueError:
                     pass
         elif item.startswith("ALPHA_MU_BENCHMARK "):
+            fields: dict[str, str] = {}
+            for token in item.strip().split()[1:]:
+                if "=" not in token:
+                    continue
+                key, value = token.split("=", 1)
+                fields[key] = value
+            update_reported_benchmark_settings(status, fields)
             status["benchmark_summary_line"] = item.rstrip("\n")
         write_status(status_path, status)
 
