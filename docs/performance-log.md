@@ -316,3 +316,54 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - Stage `3` sample: `8380`, `6697`, `6689` out of `12142`
 - Interpretation: this matched one-board serial profile **did not** reproduce the earlier all-board release regression for stages `2` and `3`; on board `7`, both remained at least as fast as stage `1`, and stage `3` was fastest. The severe slowdown only appeared in the current post-`8.3` tree, so on this board the first change set that clearly correlates with the regression is the stage-`4` / `8.3` depth-local scratch-pad integration rather than the earlier `8.5` or `8.4` layout changes.
 
+## 2026-04-19 — matched full-`list9` serial ladder across stages `1`/`2`/`3`/current
+
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
+- Workload: `../hands/list9.txt`, depth `2`, all `9` boards, `--parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0`
+- Purpose: broaden the earlier board-`7`-only profiling ladder to the full `list9` hand set while keeping the same serial profiling build and staged source states.
+- Reconstruction note: stage `1`, stage `2`, and stage `3` again used the detached scratch-worktree source snapshots from clean `170e566`; their resulting logs were copied into `test/build-profile/` for stable references below.
+
+| Variant | Change set | Output log | Total (s) | Per board (s) | Delta vs stage 1 |
+| --- | --- | --- | ---: | ---: | ---: |
+| Stage 1 | `8.1` hot/cold `ThreadData` only | `test/build-profile/list9_alpha_mu_depth2_all9_serial_profile_stage1.log` | 205.303 | 22.811 | baseline |
+| Stage 2 | stage 1 + `8.5` `pos` hot-field reorder | `test/build-profile/list9_alpha_mu_depth2_all9_serial_profile_stage2.log` | 208.374 | 23.153 | `+1.5%` |
+| Stage 3 | stage 2 + `8.4` packed `moveType` | `test/build-profile/list9_alpha_mu_depth2_all9_serial_profile_stage3.log` | 199.927 | 22.214 | `-2.6%` |
+| Current tree | current dirty post-`8.3` tree | `test/build-profile/list9_alpha_mu_depth2_all9_serial_profile_current.log` | 247.493 | 27.499 | `+20.5%` |
+
+- Per-board timings for stage `1` (s): `32.456, 16.439, 30.016, 14.064, 27.320, 8.735, 46.105, 17.296, 12.872`
+- Per-board timings for stage `2` (s): `32.046, 16.696, 29.909, 13.811, 27.356, 10.370, 47.999, 17.063, 13.124`
+- Per-board timings for stage `3` (s): `30.784, 15.869, 29.683, 13.577, 26.635, 8.677, 45.041, 16.918, 12.743`
+- Per-board timings for the current tree (s): `33.445, 17.887, 39.729, 20.883, 27.393, 9.066, 61.957, 17.654, 19.479`
+- Broader-set interpretation:
+  - the large regression still appears only in the current post-`8.3` tree, which trailed stage `1` by about `20.5%` and stage `3` by about `23.8%`
+  - unlike the board-`7`-only run, stage `2` was slightly slower than stage `1` on the full 9-board serial workload, so `8.5` still looks mixed on broader coverage
+  - stage `3` was the fastest staged variant on the full serial `list9` set, which suggests `8.4` recovered the mild stage-`2` slowdown and more on this workload
+  - board `7` remained the slowest discriminator (`46.105 s` stage `1`, `47.999 s` stage `2`, `45.041 s` stage `3`, `61.957 s` current), but the current tree also lost substantial time on other boards, especially `3`, `4`, and `9`
+
+## 2026-04-19 — matched full-`list9` board-parallel rerun with `10` requested workers
+
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
+- Workload: `../hands/list9.txt`, depth `2`, all `9` boards, `--parallel board --board-workers 10 --root-workers 1 --dds-thread-id 0`
+- Scheduler note: `list9` contains only `9` boards, so every run requested `10` board workers but correctly reported `configured_board_workers=9`; this is therefore the closest board-parallel rerun of the earlier `10`-worker setup without changing the hand set.
+
+| Variant | Change set | Output log | Total (s) | Reported per board (s) | Delta vs stage 1 |
+| --- | --- | --- | ---: | ---: | ---: |
+| Stage 1 | `8.1` hot/cold `ThreadData` only | `test/build-profile/list9_alpha_mu_depth2_all9_board10_profile_stage1.log` | 50.107 | 26.006 | baseline |
+| Stage 2 | stage 1 + `8.5` `pos` hot-field reorder | `test/build-profile/list9_alpha_mu_depth2_all9_board10_profile_stage2.log` | 49.466 | 25.636 | `-1.3%` |
+| Stage 3 | stage 2 + `8.4` packed `moveType` | `test/build-profile/list9_alpha_mu_depth2_all9_board10_profile_stage3.log` | 49.766 | 25.636 | `-0.7%` |
+| Current tree | current dirty post-`8.3` tree | `test/build-profile/list9_alpha_mu_depth2_all9_board10_profile_current.log` | 78.474 | 38.303 | `+56.6%` |
+
+- Per-board timings for stage `1` (s): `35.356, 19.227, 33.694, 16.873, 30.793, 11.595, 50.107, 20.516, 15.894`
+- Per-board timings for stage `2` (s): `35.326, 19.154, 33.448, 16.414, 30.592, 10.715, 49.466, 19.899, 15.713`
+- Per-board timings for stage `3` (s): `35.114, 19.032, 33.338, 16.582, 30.769, 10.633, 49.766, 20.010, 15.478`
+- Per-board timings for the current tree (s): `45.973, 27.784, 52.741, 31.203, 38.606, 11.184, 78.474, 28.802, 29.955`
+- Parallel rerun interpretation:
+  - under board-parallel execution, the current post-`8.3` tree again regressed dramatically and trailed every staged pre-`8.3` variant by a wide margin
+  - stages `2` and `3` were both slightly faster than stage `1` on this board-parallel rerun, with stage `2` the fastest by a small margin on this particular run
+  - the slowest board again dominated total wall time; board `7` remained decisive across all variants and widened sharply in the current tree (`50.107 s` stage `1`, `49.466 s` stage `2`, `49.766 s` stage `3`, `78.474 s` current)
+  - compared with the earlier serial all-`list9` rerun, the parallel result strengthens the main conclusion that the severe slowdown is tied to the post-`8.3` tree rather than to the earlier `8.5`/`8.4` staging steps
+
