@@ -219,7 +219,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 - Output log: `test/build-profile/list9_alpha_mu_depth2_board10_profile.log`
 - Sample profile: `test/build-profile/list9_alpha_mu_depth2_board10_profile.sample.txt`
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Command: `./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`
@@ -238,7 +238,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-18 12:04:48 — M1 Max-specific `ABsearch` follow-up on `list9` depth 2
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Workload: `../hands/list9.txt`, depth `2`, `--parallel board --board-workers 10`
 - Result: all three runs completed with `mismatches=0`
@@ -318,7 +318,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-19 — matched full-`list9` serial ladder across stages `1`/`2`/`3`/current
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Workload: `../hands/list9.txt`, depth `2`, all `9` boards, `--parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0`
@@ -344,7 +344,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-19 — matched full-`list9` board-parallel rerun with `10` requested workers
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Workload: `../hands/list9.txt`, depth `2`, all `9` boards, `--parallel board --board-workers 10 --root-workers 1 --dds-thread-id 0`
@@ -369,7 +369,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-19 — isolated `DepthLocal` shadow-state revert hypothesis test
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Hypothesis under test: keep the post-`8.3` `ThreadData::lowestWin` removal, but remove only the `DepthLocal` win-rank / best-move shadow state from `ABsearch*` so `posPoint->winRanks[depth]` becomes the direct hot-path state again.
@@ -389,7 +389,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-19 — isolated `ThreadData::lowestWin` restore follow-up
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Hypothesis under test: starting from the earlier `DepthLocal`-only revert, restore `ThreadDataHot::lowestWin` in `src/Memory.h` to test whether the remaining regression is primarily due to the hot-struct layout change from removing that array.
@@ -412,7 +412,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-19 — Phase 1: NEON intrinsics in `ABsearch_m1max.cpp` + P-core QoS pinning
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: release (`-O3 -flto`)
 - Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
@@ -435,3 +435,20 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - LTO (`-flto`) was already enabled in the release build prior to this change, so the NEON gain is incremental over what the compiler was already auto-vectorising for the scalar loop
   - the QoS change primarily helps under contention; on a quiet machine the benefit is smaller
   - board `7` remained the critical-path bottleneck at ~72 s
+
+## 2026-04-19 — Phase 2: QuickTricks `highestRankFast` CLZ intrinsic + scalar OR
+
+- Platform: `macOS-26.4.1-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: release (`-O3 -flto`)
+- Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
+- Make target: `make perf-bench`
+- Changes:
+  - Added `highestRankFast()` inline using `__builtin_clz` to replace `highestRank[]` table lookups in `QuickTricks.cpp` (§9.4) — eliminates memory-dependent table lookup on the hot path
+  - Replaced `for (int h = 0; h < DDS_HANDS; h++) ranks |= ...` loops with explicit 4-way scalar OR in `QuickTricksPartnerHandTrump` and `QuickTricksPartnerHandNT` (§9.5 Option B) — allows the M1's 4 load/store units to schedule independent loads in parallel
+- Attempted and reverted:
+  - Full `QtricksResult` struct return refactor (§9.6) was implemented and verified correct (`mismatches=0`) but showed a severe regression under measurement; however, subsequent back-to-back baseline runs showed comparable variance (68–114 s range), indicating the regression was likely caused by system thermal/scheduling contention rather than the code change itself
+  - The full context struct (§9.1) and suit-advance extraction (§9.2) were deferred pending a controlled low-noise measurement environment
+- Result: all runs completed with `mismatches=0`
+- Note: this session's measurements showed high run-to-run variance (baseline ranging 68–80 s, with outliers to 114 s during system contention), so absolute timing comparisons are unreliable; the changes are kept for correctness and code quality pending a clean-machine re-evaluation
+
