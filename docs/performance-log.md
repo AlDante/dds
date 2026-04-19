@@ -367,3 +367,46 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - the slowest board again dominated total wall time; board `7` remained decisive across all variants and widened sharply in the current tree (`50.107 s` stage `1`, `49.466 s` stage `2`, `49.766 s` stage `3`, `78.474 s` current)
   - compared with the earlier serial all-`list9` rerun, the parallel result strengthens the main conclusion that the severe slowdown is tied to the post-`8.3` tree rather than to the earlier `8.5`/`8.4` staging steps
 
+## 2026-04-19 — isolated `DepthLocal` shadow-state revert hypothesis test
+
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
+- Hypothesis under test: keep the post-`8.3` `ThreadData::lowestWin` removal, but remove only the `DepthLocal` win-rank / best-move shadow state from `ABsearch*` so `posPoint->winRanks[depth]` becomes the direct hot-path state again.
+- Code shape: `src/ABsearch.h`, `src/ABsearch.cpp`, and `src/ABsearch_m1max.cpp` reverted the `DepthLocal` layer only; `src/Memory.h` remained in the post-`8.3` state with `ThreadData::lowestWin` still absent.
+- Focused regression checks after the code-only revert: `build-profile/dtest -f ../hands/list10.txt -s solve` and `build-profile/play_analysis_benchmark`; both completed successfully.
+
+| Workload | Output log | Total (s) | Reference | Delta |
+| --- | --- | ---: | --- | ---: |
+| `list9` board `7`, serial | `test/build-profile/list9_alpha_mu_depth2_board7_profile_depthlocal_revert.log` | 66.616 | current post-`8.3` tree `74.161 s` | `-10.2%` |
+| `list9` all boards, `--parallel board --board-workers 10` | `test/build-profile/list9_alpha_mu_depth2_all9_board10_profile_depthlocal_revert.log` | 67.240 | current post-`8.3` tree `78.474 s` | `-14.3%` |
+
+- Per-board timings for the board-parallel rerun after removing only `DepthLocal` (s): `37.696, 21.192, 43.854, 24.389, 31.407, 11.353, 67.240, 21.737, 22.924`
+- Interpretation:
+  - removing only the `DepthLocal` shadow-state layer recovered a meaningful part of the regression on both the focused board-`7` serial run and the broader `list9` board-parallel rerun
+  - however, the revert did **not** return performance to the accepted pre-`8.3` staged range, which means the `DepthLocal` implementation is a real contributor to the slowdown but not the whole cause
+  - the remaining gap after this partial revert points next at the other half of `8.3`: the hot-struct layout change caused by removing `ThreadData::lowestWin`
+
+## 2026-04-19 — isolated `ThreadData::lowestWin` restore follow-up
+
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
+- Hypothesis under test: starting from the earlier `DepthLocal`-only revert, restore `ThreadDataHot::lowestWin` in `src/Memory.h` to test whether the remaining regression is primarily due to the hot-struct layout change from removing that array.
+- Code shape: `src/ABsearch.h`, `src/ABsearch.cpp`, and `src/ABsearch_m1max.cpp` stayed in the `DepthLocal`-reverted state; `src/Memory.h` restored `ThreadDataHot::lowestWin`.
+- Result: all three benchmark runs completed with `mismatches=0`.
+
+| Workload | Output log | Total (s) | Delta vs current post-`8.3` tree | Delta vs `DepthLocal`-only revert |
+| --- | --- | ---: | ---: | ---: |
+| `list9` board `7`, serial | `test/build-profile/list9_alpha_mu_depth2_board7_profile_depthlocal_revert_lowestwin_restore.log` | 63.452 | `-14.4%` | `-4.8%` |
+| `list9` all boards, serial | `test/build-profile/list9_alpha_mu_depth2_all9_serial_profile_depthlocal_revert_lowestwin_restore.log` | 256.667 | `+3.7%` | `—` |
+| `list9` all boards, `--parallel board --board-workers 10` | `test/build-profile/list9_alpha_mu_depth2_all9_board10_profile_depthlocal_revert_lowestwin_restore.log` | 72.991 | `-7.0%` | `+8.6%` |
+
+- Per-board timings for the serial all-board rerun (s): `35.091, 18.291, 40.962, 21.278, 27.574, 10.187, 65.127, 18.275, 19.880`
+- Per-board timings for the board-parallel rerun after restoring `lowestWin` (s): `41.623, 22.299, 48.054, 26.019, 35.143, 12.183, 72.990, 22.664, 24.319`
+- Interpretation:
+  - on the focused board-`7` serial run, restoring `lowestWin` improved further beyond the `DepthLocal`-only revert and recovered about `14.4%` versus the full current post-`8.3` tree
+  - on the broader board-parallel `list9` rerun, restoring `lowestWin` gave back part of the `DepthLocal`-only gain and remained clearly slower than that partial revert, even though it still beat the full current tree
+  - on the full serial `list9` rerun, restoring `lowestWin` was slightly slower than the full current tree, which suggests the effect of this layout change is workload-dependent rather than a consistent standalone win
+  - taken together with the earlier `DepthLocal`-only revert, these mixed results argue that the post-`8.3` slowdown is not explained by either half in isolation; the interaction between the `DepthLocal` rewrite and the `ThreadDataHot` layout change remains the most plausible next target
+

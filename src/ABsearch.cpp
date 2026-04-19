@@ -58,78 +58,6 @@ void Undo3(
 
 const int handDelta[DDS_SUITS] = { 256, 16, 1, 0 };
 
-namespace
-{
-  inline void DDSInitDepthLocal(
-    DepthLocal& dl,
-    const moveType& bestMove)
-  {
-    dl.winRanks[0] = 0;
-    dl.winRanks[1] = 0;
-    dl.winRanks[2] = 0;
-    dl.winRanks[3] = 0;
-    dl.bestMove = bestMove;
-  }
-
-  inline void DDSSetDepthLocalFromChild(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const int depth)
-  {
-    dl.winRanks[0] = posPoint->winRanks[depth - 1][0];
-    dl.winRanks[1] = posPoint->winRanks[depth - 1][1];
-    dl.winRanks[2] = posPoint->winRanks[depth - 1][2];
-    dl.winRanks[3] = posPoint->winRanks[depth - 1][3];
-  }
-
-  inline void DDSOrDepthLocalFromChild(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const int depth)
-  {
-    dl.winRanks[0] = static_cast<unsigned short>(dl.winRanks[0] | posPoint->winRanks[depth - 1][0]);
-    dl.winRanks[1] = static_cast<unsigned short>(dl.winRanks[1] | posPoint->winRanks[depth - 1][1]);
-    dl.winRanks[2] = static_cast<unsigned short>(dl.winRanks[2] | posPoint->winRanks[depth - 1][2]);
-    dl.winRanks[3] = static_cast<unsigned short>(dl.winRanks[3] | posPoint->winRanks[depth - 1][3]);
-  }
-
-  inline void DDSSetDepthLocalFromChildAndMake(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const unsigned short makeWinRank[DDS_SUITS],
-    const int depth)
-  {
-    dl.winRanks[0] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
-    dl.winRanks[1] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
-    dl.winRanks[2] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
-    dl.winRanks[3] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
-  }
-
-  inline void DDSOrDepthLocalFromChildAndMake(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const unsigned short makeWinRank[DDS_SUITS],
-    const int depth)
-  {
-    dl.winRanks[0] = static_cast<unsigned short>(dl.winRanks[0] | posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
-    dl.winRanks[1] = static_cast<unsigned short>(dl.winRanks[1] | posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
-    dl.winRanks[2] = static_cast<unsigned short>(dl.winRanks[2] | posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
-    dl.winRanks[3] = static_cast<unsigned short>(dl.winRanks[3] | posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
-  }
-
-  inline void DDSWriteDepthLocal(
-    pos * posPoint,
-    const int depth,
-    const DepthLocal& dl)
-  {
-    posPoint->winRanks[depth][0] = dl.winRanks[0];
-    posPoint->winRanks[depth][1] = dl.winRanks[1];
-    posPoint->winRanks[depth][2] = dl.winRanks[2];
-    posPoint->winRanks[depth][3] = dl.winRanks[3];
-  }
-}
-
-
 #ifndef DDS_TARGET_APPLE_M1_MAX
 bool ABsearch(
   pos * posPoint,
@@ -147,8 +75,6 @@ bool ABsearch(
   int tricks = depth >> 2;
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
-  DepthLocal dl;
-  DDSInitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -165,11 +91,14 @@ bool ABsearch(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    posPoint->winRanks[depth][ss] = 0;
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 0,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -190,23 +119,25 @@ bool ABsearch(
 
     if (value == success) /* A cut-off? */
     {
-      DDSSetDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      for (int ss = 0; ss < DDS_SUITS; ss++)
+        posPoint->winRanks[depth][ss] =
+          posPoint->winRanks[depth - 1][ss];
+
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
 #endif
       goto ABexit;
     }
-    DDSOrDepthLocalFromChild(dl, posPoint, depth);
+    for (int ss = 0; ss < DDS_SUITS; ss++)
+      posPoint->winRanks[depth][ss] |=
+        posPoint->winRanks[depth - 1][ss];
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-
-  DDSWriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
 
   AB_COUNT(AB_MOVE_LOOP, value, depth);
 #ifdef DDS_AB_STATS
@@ -232,8 +163,6 @@ bool ABsearch0(
   int trump = thrp->trump;
   int hand = posPoint->first[depth];
   int tricks = depth >> 2;
-  DepthLocal dl;
-  DDSInitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -410,11 +339,14 @@ bool ABsearch0(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    posPoint->winRanks[depth][ss] = 0;
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 0,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -435,22 +367,25 @@ bool ABsearch0(
 
     if (value == success) /* A cut-off? */
     {
-      DDSSetDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      for (int ss = 0; ss < DDS_SUITS; ss++)
+        posPoint->winRanks[depth][ss] =
+          posPoint->winRanks[depth - 1][ss];
+
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
 #endif
       goto ABexit;
     }
-    DDSOrDepthLocalFromChild(dl, posPoint, depth);
+    for (int ss = 0; ss < DDS_SUITS; ss++)
+      posPoint->winRanks[depth][ss] |=
+        posPoint->winRanks[depth - 1][ss];
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSWriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   nodeCardsType first;
   if (value)
   {
@@ -521,8 +456,6 @@ bool ABsearch1(
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
   int tricks = (depth + 3) >> 2;
-  DepthLocal dl;
-  DDSInitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -545,11 +478,14 @@ bool ABsearch1(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    posPoint->winRanks[depth][ss] = 0;
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 1,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -570,23 +506,26 @@ bool ABsearch1(
 
     if (value == success) /* A cut-off? */
     {
-      DDSSetDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      for (int ss = 0; ss < DDS_SUITS; ss++)
+        posPoint->winRanks[depth][ss] =
+          posPoint->winRanks[depth - 1][ss];
+
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 1);
 #endif
       goto ABexit;
     }
 
-    DDSOrDepthLocalFromChild(dl, posPoint, depth);
+    for (int ss = 0; ss < DDS_SUITS; ss++)
+      posPoint->winRanks[depth][ss] |=
+        posPoint->winRanks[depth - 1][ss];
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSWriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }
@@ -602,8 +541,6 @@ bool ABsearch2(
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
   int tricks = (depth + 3) >> 2;
-  DepthLocal dl;
-  DDSInitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -616,11 +553,14 @@ bool ABsearch2(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    posPoint->winRanks[depth][ss] = 0;
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 2,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 
     if (mply == NULL)
       break;
@@ -643,23 +583,26 @@ bool ABsearch2(
 
     if (value == success) /* A cut-off? */
     {
-      DDSSetDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      for (int ss = 0; ss < DDS_SUITS; ss++)
+        posPoint->winRanks[depth][ss] =
+          posPoint->winRanks[depth - 1][ss];
+
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 2);
 #endif
       goto ABexit;
     }
 
-    DDSOrDepthLocalFromChild(dl, posPoint, depth);
+    for (int ss = 0; ss < DDS_SUITS; ss++)
+      posPoint->winRanks[depth][ss] |=
+        posPoint->winRanks[depth - 1][ss];
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSWriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }
@@ -678,8 +621,6 @@ bool ABsearch3(
   int hand = handId(posPoint->first[depth], 3);
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
-  DepthLocal dl;
-  DDSInitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -694,11 +635,14 @@ bool ABsearch3(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    posPoint->winRanks[depth][ss] = 0;
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 3,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -728,22 +672,27 @@ bool ABsearch3(
 
     if (value == success) /* A cut-off? */
     {
-      DDSSetDepthLocalFromChildAndMake(dl, posPoint, makeWinRank, depth);
-      dl.bestMove = * mply;
+      for (int ss = 0; ss < DDS_SUITS; ss++)
+        posPoint->winRanks[depth][ss] = static_cast<unsigned short>(
+                                          posPoint->winRanks[depth - 1][ss] | makeWinRank[ss]);
+
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 3);
 #endif
       goto ABexit;
     }
-    DDSOrDepthLocalFromChildAndMake(dl, posPoint, makeWinRank, depth);
+    for (int ss = 0; ss < DDS_SUITS; ss++)
+      posPoint->winRanks[depth][ss] = static_cast<unsigned short>(
+                                        posPoint->winRanks[depth][ss] |
+                                        posPoint->winRanks[depth - 1][ss] |
+                                        makeWinRank[ss]);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSWriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }

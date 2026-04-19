@@ -49,82 +49,86 @@ namespace
     return __builtin_expect(value ? 1 : 0, 0);
   }
 
-  inline void DDSM1InitDepthLocal(
-    DepthLocal& dl,
-    const moveType& bestMove)
-  {
-    dl.winRanks[0] = 0;
-    dl.winRanks[1] = 0;
-    dl.winRanks[2] = 0;
-    dl.winRanks[3] = 0;
-    dl.bestMove = bestMove;
-  }
-
-  inline void DDSM1CopyDepthLocalFromChild(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const int depth)
-  {
-    dl.winRanks[0] = posPoint->winRanks[depth - 1][0];
-    dl.winRanks[1] = posPoint->winRanks[depth - 1][1];
-    dl.winRanks[2] = posPoint->winRanks[depth - 1][2];
-    dl.winRanks[3] = posPoint->winRanks[depth - 1][3];
-  }
-
-  inline void DDSM1OrDepthLocalFromChild(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const int depth)
-  {
-    dl.winRanks[0] = static_cast<unsigned short>(dl.winRanks[0] | posPoint->winRanks[depth - 1][0]);
-    dl.winRanks[1] = static_cast<unsigned short>(dl.winRanks[1] | posPoint->winRanks[depth - 1][1]);
-    dl.winRanks[2] = static_cast<unsigned short>(dl.winRanks[2] | posPoint->winRanks[depth - 1][2]);
-    dl.winRanks[3] = static_cast<unsigned short>(dl.winRanks[3] | posPoint->winRanks[depth - 1][3]);
-  }
-
-  inline void DDSM1CopyDepthLocalFromChildAndMake(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const unsigned short makeWinRank[DDS_SUITS],
-    const int depth)
-  {
-    dl.winRanks[0] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
-    dl.winRanks[1] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
-    dl.winRanks[2] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
-    dl.winRanks[3] = static_cast<unsigned short>(posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
-  }
-
-  inline void DDSM1OrDepthLocalFromChildAndMake(
-    DepthLocal& dl,
-    pos const * posPoint,
-    const unsigned short makeWinRank[DDS_SUITS],
-    const int depth)
-  {
-    dl.winRanks[0] = static_cast<unsigned short>(dl.winRanks[0] | posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
-    dl.winRanks[1] = static_cast<unsigned short>(dl.winRanks[1] | posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
-    dl.winRanks[2] = static_cast<unsigned short>(dl.winRanks[2] | posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
-    dl.winRanks[3] = static_cast<unsigned short>(dl.winRanks[3] | posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
-  }
-
-  inline void DDSM1WriteDepthLocal(
+  inline void DDSM1ZeroWinRanks(
     pos * posPoint,
-    const int depth,
-    const DepthLocal& dl)
+    const int depth)
   {
-    posPoint->winRanks[depth][0] = dl.winRanks[0];
-    posPoint->winRanks[depth][1] = dl.winRanks[1];
-    posPoint->winRanks[depth][2] = dl.winRanks[2];
-    posPoint->winRanks[depth][3] = dl.winRanks[3];
+    posPoint->winRanks[depth][0] = 0;
+    posPoint->winRanks[depth][1] = 0;
+    posPoint->winRanks[depth][2] = 0;
+    posPoint->winRanks[depth][3] = 0;
+  }
+
+  inline void DDSM1CopyChildWinRanks(
+    pos * posPoint,
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = posPoint->winRanks[depth - 1][0];
+    posPoint->winRanks[depth][1] = posPoint->winRanks[depth - 1][1];
+    posPoint->winRanks[depth][2] = posPoint->winRanks[depth - 1][2];
+    posPoint->winRanks[depth][3] = posPoint->winRanks[depth - 1][3];
+  }
+
+  inline void DDSM1OrChildWinRanks(
+    pos * posPoint,
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][0] | posPoint->winRanks[depth - 1][0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][1] | posPoint->winRanks[depth - 1][1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][2] | posPoint->winRanks[depth - 1][2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][3] | posPoint->winRanks[depth - 1][3]);
+  }
+
+  inline void DDSM1CopyMakeWinRanks(
+    pos * posPoint,
+    unsigned short makeWinRank[DDS_SUITS],
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
+  }
+
+  inline void DDSM1OrMakeWinRanks(
+    pos * posPoint,
+    unsigned short makeWinRank[DDS_SUITS],
+    const int depth)
+  {
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][0] |
+      posPoint->winRanks[depth - 1][0] |
+      makeWinRank[0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][1] |
+      posPoint->winRanks[depth - 1][1] |
+      makeWinRank[1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][2] |
+      posPoint->winRanks[depth - 1][2] |
+      makeWinRank[2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][3] |
+      posPoint->winRanks[depth - 1][3] |
+      makeWinRank[3]);
   }
 
   inline void DDSM1PrefetchChild(
     pos * posPoint,
     ThreadData * thrp,
-    const int depth)
+    const int childDepth)
   {
-    __builtin_prefetch(&posPoint->winRanks[depth][0], 1, 3);
-    __builtin_prefetch(&thrp->bestMove[depth], 1, 2);
-    __builtin_prefetch(&thrp->bestMoveTT[depth], 1, 2);
+    __builtin_prefetch(&posPoint->winRanks[childDepth][0], 1, 3);
+    __builtin_prefetch(&thrp->bestMove[childDepth], 1, 2);
+    __builtin_prefetch(&thrp->bestMoveTT[childDepth], 1, 2);
   }
 }
 
@@ -139,8 +143,6 @@ bool ABsearch(
   int tricks = depth >> 2;
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
-  DepthLocal dl;
-  DDSM1InitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -157,11 +159,13 @@ bool ABsearch(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  DDSM1ZeroWinRanks(posPoint, depth);
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 0,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -183,23 +187,21 @@ bool ABsearch(
 
     if (DDSM1Unlikely(value == success))
     {
-      DDSM1CopyDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      DDSM1CopyChildWinRanks(posPoint, depth);
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
 #endif
       goto ABexit;
     }
 
-    DDSM1OrDepthLocalFromChild(dl, posPoint, depth);
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSM1WriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
 #ifdef DDS_AB_STATS
   thrp->ABStats.PrintStats(thrp->fileABstats.GetStream());
@@ -218,8 +220,6 @@ bool ABsearch0(
   int trump = thrp->trump;
   int hand = posPoint->first[depth];
   int tricks = depth >> 2;
-  DepthLocal dl;
-  DDSM1InitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -393,11 +393,13 @@ bool ABsearch0(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  DDSM1ZeroWinRanks(posPoint, depth);
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 0,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -419,23 +421,21 @@ bool ABsearch0(
 
     if (DDSM1Unlikely(value == success))
     {
-      DDSM1CopyDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      DDSM1CopyChildWinRanks(posPoint, depth);
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
 #endif
       goto ABexit;
     }
 
-    DDSM1OrDepthLocalFromChild(dl, posPoint, depth);
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSM1WriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   nodeCardsType first;
   if (value)
   {
@@ -506,8 +506,6 @@ bool ABsearch1(
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
   int tricks = (depth + 3) >> 2;
-  DepthLocal dl;
-  DDSM1InitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -530,11 +528,13 @@ bool ABsearch1(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  DDSM1ZeroWinRanks(posPoint, depth);
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 1,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -556,23 +556,21 @@ bool ABsearch1(
 
     if (DDSM1Unlikely(value == success))
     {
-      DDSM1CopyDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      DDSM1CopyChildWinRanks(posPoint, depth);
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 1);
 #endif
       goto ABexit;
     }
 
-    DDSM1OrDepthLocalFromChild(dl, posPoint, depth);
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSM1WriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }
@@ -588,8 +586,6 @@ bool ABsearch2(
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
   int tricks = (depth + 3) >> 2;
-  DepthLocal dl;
-  DDSM1InitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -602,11 +598,13 @@ bool ABsearch2(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  DDSM1ZeroWinRanks(posPoint, depth);
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 2,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 
     if (mply == NULL)
       break;
@@ -629,23 +627,21 @@ bool ABsearch2(
 
     if (DDSM1Unlikely(value == success))
     {
-      DDSM1CopyDepthLocalFromChild(dl, posPoint, depth);
-      dl.bestMove = * mply;
+      DDSM1CopyChildWinRanks(posPoint, depth);
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 2);
 #endif
       goto ABexit;
     }
 
-    DDSM1OrDepthLocalFromChild(dl, posPoint, depth);
+    DDSM1OrChildWinRanks(posPoint, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSM1WriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }
@@ -662,8 +658,6 @@ bool ABsearch3(
   int hand = handId(posPoint->first[depth], 3);
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
   bool value = ! success;
-  DepthLocal dl;
-  DDSM1InitDepthLocal(dl, thrp->bestMove[depth]);
 
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
@@ -678,11 +672,13 @@ bool ABsearch3(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  DDSM1ZeroWinRanks(posPoint, depth);
+
   while (1)
   {
     TIMER_START(TIMER_NO_MAKE, depth);
     moveType const * mply = thrp->moves.MakeNext(tricks, 3,
-      dl.winRanks);
+      posPoint->winRanks[depth]);
 #ifdef DDS_AB_STATS
     thrp->ABStats.IncrNode(depth);
 #endif
@@ -713,23 +709,21 @@ bool ABsearch3(
 
     if (DDSM1Unlikely(value == success))
     {
-      DDSM1CopyDepthLocalFromChildAndMake(dl, posPoint, makeWinRank, depth);
-      dl.bestMove = * mply;
+      DDSM1CopyMakeWinRanks(posPoint, makeWinRank, depth);
+      thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 3);
 #endif
       goto ABexit;
     }
 
-    DDSM1OrDepthLocalFromChildAndMake(dl, posPoint, makeWinRank, depth);
+    DDSM1OrMakeWinRanks(posPoint, makeWinRank, depth);
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);
   }
 
 ABexit:
-  DDSM1WriteDepthLocal(posPoint, depth, dl);
-  thrp->bestMove[depth] = dl.bestMove;
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   return value;
 }

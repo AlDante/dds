@@ -63,6 +63,7 @@ struct ThreadDataHot
   int trump;
 
   pos lookAheadPos; // Recursive alpha-beta data
+  unsigned short int lowestWin[50][DDS_SUITS];
   WinnersType winners[13];
   moveType forbiddenMoves[14];
   moveType bestMove[50];
