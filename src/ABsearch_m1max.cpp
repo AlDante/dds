@@ -21,6 +21,8 @@
 
 #ifdef DDS_TARGET_APPLE_M1_MAX
 
+#include <arm_neon.h>
+
 void Undo0(
   pos * posPoint,
   const int depth,
@@ -53,34 +55,24 @@ namespace
     pos * posPoint,
     const int depth)
   {
-    posPoint->winRanks[depth][0] = 0;
-    posPoint->winRanks[depth][1] = 0;
-    posPoint->winRanks[depth][2] = 0;
-    posPoint->winRanks[depth][3] = 0;
+    vst1_u16(&posPoint->winRanks[depth][0], vdup_n_u16(0));
   }
 
   inline void DDSM1CopyChildWinRanks(
     pos * posPoint,
     const int depth)
   {
-    posPoint->winRanks[depth][0] = posPoint->winRanks[depth - 1][0];
-    posPoint->winRanks[depth][1] = posPoint->winRanks[depth - 1][1];
-    posPoint->winRanks[depth][2] = posPoint->winRanks[depth - 1][2];
-    posPoint->winRanks[depth][3] = posPoint->winRanks[depth - 1][3];
+    vst1_u16(&posPoint->winRanks[depth][0],
+             vld1_u16(&posPoint->winRanks[depth - 1][0]));
   }
 
   inline void DDSM1OrChildWinRanks(
     pos * posPoint,
     const int depth)
   {
-    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][0] | posPoint->winRanks[depth - 1][0]);
-    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][1] | posPoint->winRanks[depth - 1][1]);
-    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][2] | posPoint->winRanks[depth - 1][2]);
-    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][3] | posPoint->winRanks[depth - 1][3]);
+    uint16x4_t cur  = vld1_u16(&posPoint->winRanks[depth][0]);
+    uint16x4_t prev = vld1_u16(&posPoint->winRanks[depth - 1][0]);
+    vst1_u16(&posPoint->winRanks[depth][0], vorr_u16(cur, prev));
   }
 
   inline void DDSM1CopyMakeWinRanks(
@@ -88,14 +80,9 @@ namespace
     unsigned short makeWinRank[DDS_SUITS],
     const int depth)
   {
-    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
-      posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
-    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
-      posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
-    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
-      posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
-    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
-      posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
+    uint16x4_t prev = vld1_u16(&posPoint->winRanks[depth - 1][0]);
+    uint16x4_t make = vld1_u16(&makeWinRank[0]);
+    vst1_u16(&posPoint->winRanks[depth][0], vorr_u16(prev, make));
   }
 
   inline void DDSM1OrMakeWinRanks(
@@ -103,22 +90,11 @@ namespace
     unsigned short makeWinRank[DDS_SUITS],
     const int depth)
   {
-    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][0] |
-      posPoint->winRanks[depth - 1][0] |
-      makeWinRank[0]);
-    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][1] |
-      posPoint->winRanks[depth - 1][1] |
-      makeWinRank[1]);
-    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][2] |
-      posPoint->winRanks[depth - 1][2] |
-      makeWinRank[2]);
-    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
-      posPoint->winRanks[depth][3] |
-      posPoint->winRanks[depth - 1][3] |
-      makeWinRank[3]);
+    uint16x4_t cur  = vld1_u16(&posPoint->winRanks[depth][0]);
+    uint16x4_t prev = vld1_u16(&posPoint->winRanks[depth - 1][0]);
+    uint16x4_t make = vld1_u16(&makeWinRank[0]);
+    vst1_u16(&posPoint->winRanks[depth][0],
+             vorr_u16(vorr_u16(cur, prev), make));
   }
 
   inline void DDSM1PrefetchChild(

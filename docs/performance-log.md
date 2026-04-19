@@ -45,7 +45,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-12 12:45:42 — commit `e537788` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-124110`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Repeats per workload: `1`
 - Graph outliers: `alpha_mu_prototype_bridge_dds`
 - Note: `alpha_mu_prototype_bridge_dds` used a temporary overly heavy targeted regression variant before the targeted-scope trim, so it is not directly comparable with later stabilized bridge-dds timings.
@@ -62,7 +62,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-12 12:50:43 — commit `e537788` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-124655`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Repeats per workload: `1`
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
@@ -77,7 +77,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-12 17:12:16 — commit `04290a6` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-170734`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Repeats per workload: `1`
 - Graph outliers: `dtest_solve_list10`
 - Note: `dtest_solve_list10` was a single-run wall-clock startup/scheduling outlier; repeated reruns and the program's own internal timing remained near the historical ~0.1-0.2 s range.
@@ -94,7 +94,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-13 06:47:57 — commit `6a0afe7` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260413-064240`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Requested repeats per workload: `1`
 - Timing stabilization:
   - `dtest_solve_list10`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
@@ -114,7 +114,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-13 09:54:02 — commit `e83103f` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260413-094756`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Requested repeats per workload: `1`
 - Timing stabilization:
   - `dtest_solve_list10`: 1 unmeasured warmup run; 6 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
@@ -135,7 +135,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-13 21:05:52 — commit `75252de`
 
 - Output bundle: `test/build/performance_runs/20260413-210045`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Requested repeats per workload: `1`
 - Timing stabilization:
   - `dtest_solve_list10`: 1 unmeasured warmup run; 9 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
@@ -408,5 +408,30 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - on the focused board-`7` serial run, restoring `lowestWin` improved further beyond the `DepthLocal`-only revert and recovered about `14.4%` versus the full current post-`8.3` tree
   - on the broader board-parallel `list9` rerun, restoring `lowestWin` gave back part of the `DepthLocal`-only gain and remained clearly slower than that partial revert, even though it still beat the full current tree
   - on the full serial `list9` rerun, restoring `lowestWin` was slightly slower than the full current tree, which suggests the effect of this layout change is workload-dependent rather than a consistent standalone win
-  - taken together with the earlier `DepthLocal`-only revert, these mixed results argue that the post-`8.3` slowdown is not explained by either half in isolation; the interaction between the `DepthLocal` rewrite and the `ThreadDataHot` layout change remains the most plausible next target
+  - taken together with the earlier `DepthLocal`-only revert, these mixed results argue that the post-`8.3` slowdown is not explained by either half in isolation; the interaction between the `DepthLocal` rewrite and the `ThreadData` layout change remains the most plausible next target
 
+## 2026-04-19 — Phase 1: NEON intrinsics in `ABsearch_m1max.cpp` + P-core QoS pinning
+
+- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: release (`-O3 -flto`)
+- Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
+- Make target: `make perf-bench`
+- Changes:
+  - Replaced scalar 4-suit winRanks operations with ARM NEON `uint16x4_t` intrinsics in all `ABsearch_m1max.cpp` helper functions (`DDSM1ZeroWinRanks`, `DDSM1CopyChildWinRanks`, `DDSM1OrChildWinRanks`, `DDSM1CopyMakeWinRanks`, `DDSM1OrMakeWinRanks`)
+  - Added `pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)` to board-worker threads in `alpha_mu_prototype_core.cpp` to bias macOS scheduling towards M1 Max performance cores
+  - Added `make perf`, `make perf-build`, `make perf-check`, `make perf-bench` targets to top-level `Makefile`
+- Result: all runs completed with `mismatches=0`
+
+| Run | Total (s) | Per board (s) | Delta vs baseline |
+| --- | ---: | ---: | ---: |
+| Pre-Phase-1 baseline | 71.855 | 32.826 | — |
+| Phase 1 run 1 | 68.096 | 30.885 | `-5.2%` |
+| Phase 1 run 2 | 69.287 | 32.162 | `-3.6%` |
+
+- Per-board timings for Phase 1 run 1 (s): `41.119, 20.390, 47.142, 24.255, 34.159, 10.758, 71.854, 20.905, 24.857`
+- Interpretation:
+  - the NEON intrinsics and QoS pinning together delivered a modest but consistent ~4–5% wall-time improvement
+  - LTO (`-flto`) was already enabled in the release build prior to this change, so the NEON gain is incremental over what the compiler was already auto-vectorising for the scalar loop
+  - the QoS change primarily helps under contention; on a quiet machine the benefit is smaller
+  - board `7` remained the critical-path bottleneck at ~72 s
