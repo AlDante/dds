@@ -491,9 +491,18 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - Extracted `nextSuitSkipTrump()` and `advanceSuit()` inline helpers (§9.2) to replace 28 instances of the repeated suit-advancement pattern throughout `QuickTricks()`; the branchless `nextSuitSkipTrump` variant uses `suit += (suit == trump)` instead of a conditional branch
   - `QuickTricksSecondHand()` left unchanged (does not call sub-functions; independent hot path)
   - Net effect on code size: 423 insertions, 589 deletions (−166 lines net)
-- Regression test results:
+- Correctness results:
   - `regression_api ../hands/list100.txt ../hands/thomas1.txt ../hands/thomas2.txt` — **PASS** (102 hands, 0 mismatches)
   - `dtest -f ../hands/list100.txt -s solve` — **PASS** (100 hands, 1439 ms user time)
   - `dtest -f ../hands/list1000.txt -s solve` — **PASS** (1000 hands, 9235 ms user time, 9.23 ms/hand avg)
-- Note: full alpha-mu benchmark deferred due to high run-to-run variance in the current measurement environment; the context struct is a pure refactor with identical control flow, so performance is expected to be neutral or slightly positive from reduced parameter-passing overhead
+- Alpha-mu benchmark (`benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`):
+  - Log: `test/build/list9_alpha_mu_depth2_board10_quicktricks_ctx_clean.log`
+  - Total: **95.28 s**, per board: **39.43 s**, mismatches: **0**
+  - Compared to Stage 0 baseline (64.15 s total, 35.53 s/board): **+11.0%** slower on this single run.
+  - However, prior staged runs on the *same code* (Stage 0) varied from 29 s to 45 s per board across runs, so the +11% is within the ~20–30% run-to-run noise envelope of this benchmark/machine pair.
+- Performance note:
+  - The `dtest solve` times above (~9 ms/hand) measure single `SolveBoard` calls — a lightweight single-trick-target DD solve.  These are correctness smoke-tests, not the workload where parameter-passing overhead dominates.  The ~30 s/board alpha-mu `benchmark_alpha` workload performs a full multi-trick play analysis per board, calling `QuickTricks()` orders of magnitude more often.
+  - The context-struct change has identical control flow but changes the calling convention: the old signatures passed 13–16 arguments (ARM64 spills beyond 8 to the stack); the new code passes a single pointer.  At `-O3 -flto` the compiler may already be inlining the sub-functions, which would eliminate the parameter-passing overhead entirely — explaining why no measurable improvement was observed.
+  - Conclusion: the refactor is **performance-neutral** in practice.  Its value is code clarity (−166 lines net, elimination of 28 duplicated suit-advancement patterns) rather than runtime speedup.
+- **Reverted**: code changes to `src/QuickTricks.cpp` and `src/QuickTricks.h` reverted to pre-refactor state.  With no measurable performance benefit and a risk of regression in the noise band, the refactor is not justified.  The `nextSuitSkipTrump`/`advanceSuit` helpers and `QtricksContext`/`QtricksResult` structs can be re-introduced if a future profiling pass identifies parameter-passing as a genuine bottleneck.
 
