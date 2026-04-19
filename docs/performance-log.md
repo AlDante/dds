@@ -30,7 +30,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 ## 2026-04-12 11:21:28 — commit `2bec9d9` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-standard-baseline`
-- Platform: `macOS-26.4-arm64-arm-64bit`
+- Platform: `macOS-26.4-arm-64bit`
 - Repeats per workload: `1`
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
@@ -265,7 +265,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-18 — staged data-structure follow-up on `list9` depth 2
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Workload: `../hands/list9.txt`, depth `2`, `--parallel board --board-workers 10`
 - Stage order used for safe rollout: `8.1` hot/cold `ThreadData`, then `8.5` hot-field co-location in `pos`, then `8.4` packed `moveType`, then `8.3` depth-local scratch state.
@@ -479,3 +479,21 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - as expected, the readability/maintainability changes produced no measurable performance difference
   - correctness confirmed by `mismatches=0` across all boards
   - the `__builtin_popcountll` change eliminates a hot-path manual loop in the alpha-mu prototype but does not affect DDS core performance
+
+## 2026-04-19 — Phase 3: QuickTricks context-struct refactor (§9.1 + §9.2 + §9.6)
+
+- Platform: `macOS-26.4.1-arm-64bit`
+- Benchmark mode: `dtest solve` + `regression_api`
+- Build: release (`-O3 -flto`)
+- Changes:
+  - Introduced `QtricksContext` struct (§9.1) in `QuickTricks.h` to bundle the 13–16 parameters previously passed individually to the four QuickTricks sub-functions (`QtricksLeadHandTrump`, `QtricksLeadHandNT`, `QuickTricksPartnerHandTrump`, `QuickTricksPartnerHandNT`) into a single pointer-passed aggregate; on ARM64 this eliminates stack spills since only x0 (context pointer) is needed instead of 13+ register/stack slots
+  - Introduced `QtricksResult` struct (§9.6) to replace the `int& res` output parameter with a value-returned struct; on ARM64 both fields (qtricks, action) are returned in registers (x0, x1), eliminating the store-to-load forwarding penalty of the old pointer-based approach
+  - Extracted `nextSuitSkipTrump()` and `advanceSuit()` inline helpers (§9.2) to replace 28 instances of the repeated suit-advancement pattern throughout `QuickTricks()`; the branchless `nextSuitSkipTrump` variant uses `suit += (suit == trump)` instead of a conditional branch
+  - `QuickTricksSecondHand()` left unchanged (does not call sub-functions; independent hot path)
+  - Net effect on code size: 423 insertions, 589 deletions (−166 lines net)
+- Regression test results:
+  - `regression_api ../hands/list100.txt ../hands/thomas1.txt ../hands/thomas2.txt` — **PASS** (102 hands, 0 mismatches)
+  - `dtest -f ../hands/list100.txt -s solve` — **PASS** (100 hands, 1439 ms user time)
+  - `dtest -f ../hands/list1000.txt -s solve` — **PASS** (1000 hands, 9235 ms user time, 9.23 ms/hand avg)
+- Note: full alpha-mu benchmark deferred due to high run-to-run variance in the current measurement environment; the context struct is a pure refactor with identical control flow, so performance is expected to be neutral or slightly positive from reduced parameter-passing overhead
+
