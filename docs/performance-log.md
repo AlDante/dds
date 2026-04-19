@@ -292,7 +292,7 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 
 ## 2026-04-18 — matched single-board profiling ladder on `list9` board `7`
 
-- Platform: `macOS-26.4.1-arm64-arm-64bit`
+- Platform: `macOS-26.4.1-arm-64bit`
 - Benchmark mode: `alpha_mu_prototype benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Focused workload: `../hands/list9.txt`, depth `2`, board `7` only via skip spec `1-6,8-9`, `--parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0`
@@ -452,3 +452,30 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
 - Result: all runs completed with `mismatches=0`
 - Note: this session's measurements showed high run-to-run variance (baseline ranging 68–80 s, with outliers to 114 s during system contention), so absolute timing comparisons are unreliable; the changes are kept for correctness and code quality pending a clean-machine re-evaluation
 
+## 2026-04-19 — Code modernisation pass (readability + maintainability)
+
+- Platform: `macOS-26.4.1-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Build: release (`-O3 -flto`)
+- Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
+- Make target: `make perf-bench`
+- Changes (no algorithmic modifications):
+  - Replaced `NULL` with `nullptr` throughout `alpha_mu_prototype_core.h/.cpp` and `alpha_mu_prototype.cpp`
+  - Replaced manual popcount loop in `WorldMask::PopCount()` with `__builtin_popcountll` intrinsic
+  - Replaced `map<string, TTEntry>::const_iterator` with `auto` in `TranspositionTable::Lookup`
+  - Removed `using namespace std` from `Memory.h` header; qualified with `std::` to prevent namespace pollution across all includers
+  - Added `using namespace std` to `Memory.cpp` (file-local scope)
+  - Replaced `<assert.h>` with `<cassert>` in `ABsearch.cpp`
+  - Added doxygen documentation to `dds.h` structures (`pos`, `moveType`, `moveGroupType`)
+  - Created `docs/modernisation-plan.md` documenting the phased approach
+- Result: all runs completed with `mismatches=0`
+
+| Run | Total (s) | Per board (s) | Delta vs prior |
+| --- | ---: | ---: | ---: |
+| Modernisation run 1 | 68.096 | 30.885 | ~0% (within noise) |
+| Modernisation run 2 | 69.287 | 32.162 | ~0% (within noise) |
+
+- Interpretation:
+  - as expected, the readability/maintainability changes produced no measurable performance difference
+  - correctness confirmed by `mismatches=0` across all boards
+  - the `__builtin_popcountll` change eliminates a hot-path manual loop in the alpha-mu prototype but does not affect DDS core performance

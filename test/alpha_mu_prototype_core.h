@@ -97,14 +97,7 @@ namespace alpha_mu_prototype
     /** @brief Count the number of active worlds represented by this mask. */
     unsigned PopCount() const
     {
-      unsigned n = 0;
-      unsigned long long copy = bits;
-      while (copy != 0ULL)
-      {
-        n += static_cast<unsigned>(copy & 1ULL);
-        copy >>= 1;
-      }
-      return n;
+      return static_cast<unsigned>(__builtin_popcountll(bits));
     }
 
     /** @brief Return the set-theoretic union of two world masks. */
@@ -613,7 +606,7 @@ namespace alpha_mu_prototype
 
     bool Lookup(const string& key, ParetoFront& front) const
     {
-      map<string, TTEntry>::const_iterator it = entries.find(key);
+      auto it = entries.find(key);
       if (it == entries.end())
         return false;
 
@@ -669,15 +662,15 @@ namespace alpha_mu_prototype
     HandFileData() :
       number(0),
       GIBmode(false),
-      dealerList(NULL),
-      vulList(NULL),
-      dealList(NULL),
-      futList(NULL),
-      tableList(NULL),
-      parList(NULL),
-      dealerParList(NULL),
-      playList(NULL),
-      traceList(NULL)
+      dealerList(nullptr),
+      vulList(nullptr),
+      dealList(nullptr),
+      futList(nullptr),
+      tableList(nullptr),
+      parList(nullptr),
+      dealerParList(nullptr),
+      playList(nullptr),
+      traceList(nullptr)
     {
     }
 
@@ -731,15 +724,15 @@ namespace alpha_mu_prototype
     {
       number = 0;
       GIBmode = false;
-      dealerList = NULL;
-      vulList = NULL;
-      dealList = NULL;
-      futList = NULL;
-      tableList = NULL;
-      parList = NULL;
-      dealerParList = NULL;
-      playList = NULL;
-      traceList = NULL;
+      dealerList = nullptr;
+      vulList = nullptr;
+      dealList = nullptr;
+      futList = nullptr;
+      tableList = nullptr;
+      parList = nullptr;
+      dealerParList = nullptr;
+      playList = nullptr;
+      traceList = nullptr;
     }
 
     void Free()
@@ -1495,7 +1488,7 @@ namespace alpha_mu_prototype
       parallelMode(ALPHA_MU_PARALLEL_SERIAL),
       boardWorkers(1),
       rootWorkers(1),
-      benchmarkProgress(NULL)
+      benchmarkProgress(nullptr)
     {
     }
   };

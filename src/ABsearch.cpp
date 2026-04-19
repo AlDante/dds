@@ -9,7 +9,7 @@
 
 #include <iostream>
 #include <sstream>
-#include <assert.h>
+#include <cassert>
 
 #include "TransTable.h"
 #include "Moves.h"

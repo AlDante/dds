@@ -28,7 +28,6 @@
   #include "TimerList.h"
 #endif
 
-using namespace std;
 
 
 enum TTmemory
@@ -128,9 +127,9 @@ class Memory
 {
   private:
 
-    vector<ThreadData *> memory;
+    std::vector<ThreadData *> memory;
 
-    vector<string> threadSizes;
+    std::vector<std::string> threadSizes;
 
   public:
 
@@ -152,7 +151,7 @@ class Memory
 
     double MemoryInUseMB(const unsigned thrId) const;
 
-    string ThreadSize(const unsigned thrId) const;
+    std::string ThreadSize(const unsigned thrId) const;
 };
 
 #endif

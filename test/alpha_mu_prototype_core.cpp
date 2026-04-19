@@ -1841,7 +1841,7 @@ ParetoFront MakeBridgeDDSLeafFront(
       futureTricks fut;
       memset(&fut, 0, sizeof(fut));
 
-      if (context.benchmarkProgress != NULL)
+      if (context.benchmarkProgress != nullptr)
         context.benchmarkProgress->ddsLeafCalls++;
 
       const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
@@ -2215,50 +2215,50 @@ WorldMask GeneratePossibleWorlds(
     const vector<WorldConstraint> followSuitConstraints =
       CollectFollowSuitConstraints(information);
     WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->candidateWorldCount = mask.PopCount();
 
     mask = FilterWorldsByConstraints(worlds, mask,
       information.knownCardConstraints);
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->afterKnownCardCount = mask.PopCount();
 
     mask = FilterWorldsByConstraints(worlds, mask,
       information.biddingConstraints);
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->afterBiddingCount = mask.PopCount();
 
     mask = FilterWorldsByConstraints(worlds, mask, followSuitConstraints);
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->afterFollowSuitCount = mask.PopCount();
 
     mask = FilterWorldsByHistory(worlds, mask, information.playHistory);
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->afterPlayHistoryCount = mask.PopCount();
 
     mask = FilterWorldsByHistoryAfterHistory(worlds, mask, information.playHistory,
       information.currentTrickHistory);
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->afterCurrentTrickCount = mask.PopCount();
 
     if (information.deduplicateEquivalentWorlds)
     {
       unsigned duplicatesRemoved = 0;
       mask = DeduplicateWorldMask(worlds, mask, duplicatesRemoved);
-      if (stats != NULL)
+      if (stats != nullptr)
         stats->duplicateWorldsRemoved = duplicatesRemoved;
     }
 
     unsigned sampledOutWorlds = 0;
     mask = SampleWorldMaskDeterministically(worlds, mask, information.sampleLimit,
       information.samplingSeed, sampledOutWorlds);
-    if (stats != NULL)
+    if (stats != nullptr)
     {
       stats->afterSamplingCount = mask.PopCount();
       stats->sampledOutWorlds = sampledOutWorlds;
     }
 
-    if (stats != NULL)
+    if (stats != nullptr)
       stats->finalWorldCount = mask.PopCount();
     return mask;
   }
@@ -2409,7 +2409,7 @@ WorldMask GeneratePossibleWorlds(
   {
     BridgeInformationState information;
     information.knownCardConstraints = constraints;
-    return GeneratePossibleWorlds(worlds, information, NULL);
+    return GeneratePossibleWorlds(worlds, information, nullptr);
   }
 OutcomeVector MakeBinaryOutcome(
     const string& text)
@@ -2466,7 +2466,7 @@ ParetoFront MakeFront(
 string ResolvePath(const string& candidate)
   {
     FILE * fp = fopen(candidate.c_str(), "r");
-    if (fp != NULL)
+    if (fp != nullptr)
     {
       fclose(fp);
       return candidate;
@@ -2474,7 +2474,7 @@ string ResolvePath(const string& candidate)
 
     const string prefixed = "../" + candidate;
     fp = fopen(prefixed.c_str(), "r");
-    if (fp != NULL)
+    if (fp != nullptr)
     {
       fclose(fp);
       return prefixed;
@@ -3087,7 +3087,7 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
 
       const SearchExecutionContext searchContext = MakeSearchExecutionContext(
         ddsThreadId,
-        (enableProgress && progress.reportIntervalSeconds > 0.0 ? &progress : NULL),
+        (enableProgress && progress.reportIntervalSeconds > 0.0 ? &progress : nullptr),
         options.parallelMode,
         options.boardWorkers,
         options.rootWorkers);
@@ -3274,7 +3274,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
         catch (...)
         {
           lock_guard<mutex> lock(workerFailureMutex);
-          if (workerFailure == NULL)
+          if (workerFailure == nullptr)
             workerFailure = current_exception();
         }
       };
@@ -3287,7 +3287,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
       for (unsigned i = 0; i < workers.size(); i++)
         workers[i].join();
 
-      if (workerFailure != NULL)
+      if (workerFailure != nullptr)
         rethrow_exception(workerFailure);
 
       double reportedElapsedSeconds = 0.0;
@@ -3361,7 +3361,7 @@ void ReportBenchmarkMethodSummary(
 double BenchmarkCheckpointIntervalSeconds()
   {
     const char * value = getenv("DDS_ALPHA_MU_BENCHMARK_CHECKPOINT_SECONDS");
-    if (value == NULL || *value == '\0')
+    if (value == nullptr || *value == '\0')
       return 0.0;
 
     const double parsed = atof(value);
@@ -3370,7 +3370,7 @@ double BenchmarkCheckpointIntervalSeconds()
 double BenchmarkProgressIntervalSeconds()
   {
     const char * value = getenv("DDS_ALPHA_MU_BENCHMARK_PROGRESS_SECONDS");
-    if (value != NULL && *value != '\0')
+    if (value != nullptr && *value != '\0')
     {
       const double parsed = atof(value);
       if (parsed > 0.0)
@@ -3385,7 +3385,7 @@ void MaybeReportBenchmarkBoardProgress(
     const SearchExecutionContext& context)
   {
     BenchmarkBoardProgressContext * progress = context.benchmarkProgress;
-    if (progress == NULL || progress->reportIntervalSeconds <= 0.0)
+    if (progress == nullptr || progress->reportIntervalSeconds <= 0.0)
     {
       return;
     }

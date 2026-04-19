@@ -16,7 +16,7 @@ namespace
 {
   bool IsLongOption(const char * text)
   {
-	return text != NULL && strncmp(text, "--", 2) == 0;
+	return text != nullptr && strncmp(text, "--", 2) == 0;
   }
   /** @brief Parse an integer CLI argument with full-string validation. */
   bool TryParseIntArgument(
