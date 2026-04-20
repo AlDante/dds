@@ -505,4 +505,185 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - The context-struct change has identical control flow but changes the calling convention: the old signatures passed 13–16 arguments (ARM64 spills beyond 8 to the stack); the new code passes a single pointer.  At `-O3 -flto` the compiler may already be inlining the sub-functions, which would eliminate the parameter-passing overhead entirely — explaining why no measurable improvement was observed.
   - Conclusion: the refactor is **performance-neutral** in practice.  Its value is code clarity (−166 lines net, elimination of 28 duplicated suit-advancement patterns) rather than runtime speedup.
 - **Reverted**: code changes to `src/QuickTricks.cpp` and `src/QuickTricks.h` reverted to pre-refactor state.  With no measurable performance benefit and a risk of regression in the noise band, the refactor is not justified.  The `nextSuitSkipTrump`/`advanceSuit` helpers and `QtricksContext`/`QtricksResult` structs can be re-introduced if a future profiling pass identifies parameter-passing as a genuine bottleneck.
+- Post-revert serial-mode verification (with new `cpu_seconds` instrumentation via `getrusage`):
+  - Command: `benchmark_alpha ../hands/list9.txt 2 0 --parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0`
+  - Log: `test/build/list9_alpha_mu_depth2_serial_revert_cputime.log`
+  - Wall time: **338.40 s** total, **37.60 s/board** avg
+  - CPU time: **317.43 s** total, **35.27 s/board** avg
+  - Mismatches: **0**
+  - The serial CPU-time figure (35.27 s/board) closely matches the Stage 0 baseline (35.53 s/board), confirming the revert restores baseline performance.
+  - Serial mode + CPU time eliminates the ~20–30% run-to-run variance seen in board-parallel wall-time benchmarks; future A/B comparisons should use this mode.
 
+## 2026-04-20 — CPU-time benchmark ladder across historical commits
+
+- Platform: `macOS-26.4.1-arm-64bit`
+- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Workload: `../hands/list9.txt`, depth `2`, `--parallel serial --board-workers 1 --root-workers 1`
+- Build: release (`-O3 -flto`), same test binary (with `getrusage` instrumentation), library rebuilt from each commit's `src/`
+- Metric: **process CPU time** via `getrusage(RUSAGE_SELF)` — stable across runs, unaffected by thread scheduling
+- Script: `test/run_cpu_benchmark_ladder.sh`
+- Logs: `test/build/cpu_ladder/*.log`
+
+| Commit | Label | CPU (s) | CPU/board (s) | Delta vs `170e566` |
+| --- | ---: | ---: | ---: | ---: |
+| `170e566` | M1 Max path (baseline) | 210.53 | 23.39 | baseline |
+| `9b7d54a` | Cache-layout stages (8.1–8.5) | 253.73 | 28.19 | `+20.5%` |
+| `2b4b27c` | Revert DepthLocal | 256.20 | 28.47 | `+21.7%` |
+| `96d02a3` | Phase 1: NEON intrinsics | 253.92 | 28.21 | `+20.6%` |
+| `4f218e6` | Phase 2: CLZ intrinsic | 301.41 | 33.49 | `+43.2%` |
+| `bcdd518` | Modernisation (popcount etc.) | 305.55 | 33.95 | `+45.2%` |
+| `fa2280e` | HEAD (reverted QuickTricks ctx) | 308.46 | 34.27 | `+46.5%` |
+
+- Observations:
+  - The `170e566` commit (which introduced the M1 Max build path but before the cache-layout experiments) is the fastest code we have at **23.39 s/board CPU**.
+  - The cache-layout experiments (`9b7d54a`) introduced a persistent **+20% regression** that subsequent commits never recovered.
+  - Phase 2 CLZ (`4f218e6`) introduced another **+15% regression** on top of that, stabilising at ~34 s/board for all later commits.
+  - Phase 1 NEON intrinsics (`96d02a3`) had **no measurable effect** (within noise of the preceding commit).
+  - Previous wall-clock parallel benchmarks masked these regressions due to ~20–30% run-to-run variance.
+  - **Action needed**: investigate what changed in `9b7d54a` and `4f218e6` that caused the regressions and consider reverting to `170e566` as the performance baseline.
+
+### Regression analysis
+
+Two distinct regressions are visible in the CPU-time ladder, and one improvement was erroneously rolled back:
+
+#### Regression 1 — cache-layout stages (`9b7d54a`, +20.5%)
+
+Commit `9b7d54a` bundled four cache-layout experiments into a single commit:
+- `8.1` hot/cold `ThreadData` split
+- `8.5` `pos` hot-field reorder
+- `8.4` packed `moveType` (`int` → `short`)
+- `8.3` `DepthLocal` shadow state + removal of `ThreadData::lowestWin`
+
+The earlier profiling-build (`-O2 -g`) staged ladder suggested stages 1–3 were neutral-to-beneficial and only stage 4 (`8.3` DepthLocal) was harmful.  However, the CPU-time ladder using the **release build** (`-O3 -flto`) shows that even after the DepthLocal revert in `2b4b27c` (which removed only `8.3`), the regression persisted at +21.7%.  This means the remaining changes — the hot/cold `ThreadData` split, the `pos` field reorder, and the packed `moveType` — are collectively responsible for the +20% regression **in the release build**, despite appearing harmless or beneficial in the profiling build.  The discrepancy is likely due to different inlining/LTO decisions at `-O3 -flto` vs `-O2 -g`.
+
+**Status**: these changes are still present in the current tree and have not been reverted.
+
+#### Regression 2 — Phase 2 CLZ intrinsic (`4f218e6`, +15% incremental)
+
+The `highestRankFast()` `__builtin_clz` replacement and the explicit 4-way scalar OR unrolling in `QuickTricks.cpp` added another +15% regression on top of the cache-layout baseline (28.21 → 33.49 s/board).  The table-lookup `highestRank[]` it replaced was likely already in L1 cache on the hot path, while the CLZ instruction introduced a data dependency that the M1 pipeline handles less efficiently in this context.
+
+**Status**: this change is still present in the current tree and has not been reverted.
+
+#### Erroneously rolled back — QuickTricks context-struct refactor (§9.1/§9.2/§9.6)
+
+The QuickTricks context-struct refactor (`75ce34f`) was reverted in `fa2280e` on the grounds that it showed +11% in a single noisy board-parallel wall-clock run.  The CPU-time ladder now shows it was **performance-neutral**: the regression from `bcdd518` (33.95 s/board) to `fa2280e` (34.27 s/board) is within measurement noise, and the +11% observed earlier was board-parallel scheduling variance.  The revert discarded a genuine code-quality improvement (−166 lines net, elimination of 28 duplicated suit-advancement patterns, cleaner ARM64 calling convention).  This refactor should be **re-applied**.
+
+#### Recommended recovery plan
+
+1. **Revert `4f218e6`** (Phase 2 CLZ intrinsic) to eliminate the +15% regression.
+2. **Revert `9b7d54a`** cache-layout changes back to the `170e566` layout, or individually bisect which of `8.1`/`8.4`/`8.5` regresses under `-O3 -flto`.
+3. **Re-apply** the QuickTricks context-struct refactor (§9.1/§9.2/§9.6) for code quality.
+4. Use **serial-mode CPU time** (`getrusage`) for all future A/B comparisons to avoid the ~20–30% wall-clock variance that masked these regressions.
+
+## 2026-04-20 — PMU hardware counter ladder across all commits
+
+![PMU counter delta chart](pmu-ladder.svg)
+
+Single-board serial benchmark with Apple M1 Max PMU counters (cycles, instructions,
+branch mispredictions, L1D cache misses). One board (`list9.txt` board 1, depth 2).
+
+#### Raw data
+
+All measurements from a single session (1 board, serial, `list9.txt` board 1, depth 2).
+Rows 1–3 are individual changes applied independently to the baseline; rows 4–9 are
+cumulative commits in git history order.
+
+| # | Label | Wall/board (s) | CPU/board (s) | Cycles (B) | Instructions (B) | IPC | Branch Mispred (M) | L1D Miss Ld (B) | L1D Miss St (B) |
+|---|-------|---------------|--------------|-----------|-----------------|-----|-------------------|----------------|----------------|
+| 0 | Baseline (`170e566`) | 32.75 | 32.23 | 101.94 | 350.05 | 3.43 | 1,235 | 4.635 | 2.866 |
+| 1 | 8.1 Hot/cold ThreadData | 35.62 | 33.34 | 104.23 | 350.31 | 3.36 | 1,252 | 4.686 | 2.897 |
+| 2 | 8.5 pos field reorder | 33.70 | 32.88 | 102.83 | 349.60 | 3.40 | 1,252 | 4.667 | 2.899 |
+| 3 | 8.4 Packed moveType | 33.87 | 33.27 | 103.21 | 346.38 | 3.36 | 1,246 | 4.675 | 2.849 |
+| 4 | `9b7d54a` all (8.1+8.4+8.5+DL) | 39.45 | 36.35 | 112.71 | 371.80 | 3.30 | 1,368 | 4.774 | 2.883 |
+| 5 | `2b4b27c` Revert DepthLocal | 36.94 | 35.34 | 110.04 | 368.88 | 3.35 | 1,347 | 4.754 | 2.867 |
+| 6 | `96d02a3` Phase 1: NEON | 34.95 | 34.69 | 108.94 | 368.63 | 3.38 | 1,340 | 4.723 | 2.836 |
+| 7 | `4f218e6` Phase 2: CLZ | 36.73 | 36.54 | 114.93 | 388.52 | 3.38 | 1,419 | 4.771 | 2.850 |
+| 8 | `bcdd518` Modernisation | 37.02 | 36.62 | 114.90 | 388.53 | 3.38 | 1,418 | 4.780 | 2.853 |
+| 9 | `fa2280e` HEAD | 37.04 | 36.64 | 115.42 | 388.56 | 3.37 | 1,421 | 4.778 | 2.877 |
+
+#### Delta vs baseline — independent changes (rows 1–3)
+
+| # | Label | Wall/board Δ | CPU/board Δ | Cycles Δ | Instructions Δ | Branch Mispred Δ | L1D Miss Ld Δ | L1D Miss St Δ |
+|---|-------|-------------|------------|---------|---------------|-----------------|--------------|--------------|
+| 1 | 8.1 Hot/cold ThreadData | +8.8% | +3.4% | +2.2% | +0.1% | +1.4% | +1.1% | +1.1% |
+| 2 | 8.5 pos field reorder | +2.9% | +2.0% | +0.9% | −0.1% | +1.4% | +0.7% | +1.1% |
+| 3 | 8.4 Packed moveType | +3.4% | +3.2% | +1.2% | **−1.1%** | +0.9% | +0.9% | **−0.6%** |
+
+#### Delta vs baseline — cumulative commits (rows 4–9)
+
+| # | Label | Wall/board Δ | CPU/board Δ | Cycles Δ | Instructions Δ | Branch Mispred Δ | L1D Miss Ld Δ | L1D Miss St Δ |
+|---|-------|-------------|------------|---------|---------------|-----------------|--------------|--------------|
+| 4 | `9b7d54a` all (8.1+8.4+8.5+DL) | +20.5% | +12.8% | +10.6% | +6.2% | +10.7% | +3.0% | +0.6% |
+| 5 | `2b4b27c` Revert DepthLocal | +12.8% | +9.7% | +7.9% | +5.4% | +9.1% | +2.6% | +0.0% |
+| 6 | `96d02a3` Phase 1: NEON | +6.7% | +7.6% | +6.9% | +5.3% | +8.5% | +1.9% | −1.1% |
+| 7 | `4f218e6` Phase 2: CLZ | +12.1% | +13.4% | +12.7% | +11.0% | +14.9% | +2.9% | −0.6% |
+| 8 | `bcdd518` Modernisation | +13.0% | +13.6% | +12.7% | +11.0% | +14.8% | +3.1% | −0.5% |
+| 9 | `fa2280e` HEAD | +13.1% | +13.7% | +13.2% | +11.0% | +15.0% | +3.1% | +0.4% |
+
+#### Observations
+
+1. **The three data-structure changes (8.1, 8.4, 8.5) are essentially neutral in
+   isolation.** Applied independently, they each show +1–2% cycles — within noise.
+   Only 8.4 (packed moveType) produces a meaningful signal: −1.1% instructions and
+   −0.6% L1D store misses, confirming the smaller struct reduces memory traffic.
+
+2. **The DepthLocal refactor is the dominant regression source.** Comparing row 4
+   (`9b7d54a`, +10.6% cycles) vs the sum of independent stages (~+1–2% each) reveals
+   that the DepthLocal helper functions account for the bulk of the +6.2% instruction
+   increase. The compiler generates more code for the abstracted helpers than for the
+   original inline loops.
+
+3. **Reverting DepthLocal only partially helps.** Row 5 (`2b4b27c`) still shows +7.9%
+   cycles vs baseline despite the DepthLocal code being reverted. This is because the
+   revert kept the data-structure changes (8.1+8.4+8.5) which, when combined under
+   `-O3 -flto`, interact differently than when applied individually — the LTO inliner
+   makes different decisions with the changed struct layouts.
+
+4. **NEON intrinsics helped slightly.** Row 6 shows a −1% cycle improvement vs row 5,
+   bringing the cumulative regression down from +7.9% to +6.9%.
+
+5. **CLZ is the second major regression.** Row 6→7 adds +5.5% cycles and +5.4%
+   instructions. The `__builtin_clz` path generates more instructions than the
+   `highestRank[]` table lookup it replaced.
+
+6. **Modernisation and HEAD are noise.** Rows 7–9 are within ±0.5% of each other.
+
+#### Root cause diagnosis
+
+The total +13.2% cycle regression (baseline to HEAD) breaks down as:
+
+| Source | Cycles contributed | Mechanism |
+|--------|-------------------|-----------|
+| DepthLocal + struct interactions | +6.9% | +5.3% more instructions from helper functions and LTO interaction |
+| CLZ intrinsic | +5.5% | +5.7% more instructions replacing table lookup |
+| Noise/other | +0.8% | — |
+
+**IPC is flat** (3.36–3.43 across all variants). The M1 is not stalling — it's simply
+executing more instructions per board solve.
+
+#### Recommendations
+
+**No change since `170e566` has improved performance.** Every individual modification —
+including the three data-structure changes that were expected to help cache behaviour —
+shows a regression in cycles and wall time when measured in isolation under `-O3 -flto`.
+
+The packed moveType (8.4) is the only change that reduces instruction count (−1.1%) and
+store misses (−0.6%), but this does not translate into faster execution (+1.2% cycles,
++3.2% CPU time). The compiler's LTO/inlining decisions with the narrower types appear
+to offset the memory savings.
+
+| Change | Performance impact | Keep for performance? | Keep for code quality? |
+|--------|-------------------|----------------------|----------------------|
+| 8.1 Hot/cold ThreadData | +2.2% cycles | **No** | Debatable |
+| 8.5 pos field reorder | +0.9% cycles | **No** | Debatable |
+| 8.4 Packed moveType | +1.2% cycles | **No** | Debatable (saves memory) |
+| DepthLocal helpers | +10.6% cycles (combined) | **No** | **No** |
+| Phase 1 NEON | −1% vs predecessor | Neutral | Yes (explicit intent) |
+| Phase 2 CLZ | +5.8% cycles | **No** | **No** |
+| Modernisation | ~0% | Neutral | Yes |
+| QuickTricks context-struct | ~0% | Neutral | Yes (−166 lines) |
+
+**Recommended action**: revert `src/` to `170e566` (the fastest measured code) and
+selectively re-apply only code-quality changes that are proven performance-neutral
+(modernisation, QuickTricks context-struct). Any future optimisation attempts must be
+validated with the serial-mode PMU benchmark before committing.
