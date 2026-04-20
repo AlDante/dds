@@ -21,8 +21,6 @@
 
 #ifdef DDS_TARGET_APPLE_M1_MAX
 
-#include <arm_neon.h>
-
 void Undo0(
   pos * posPoint,
   const int depth,
@@ -51,28 +49,48 @@ namespace
     return __builtin_expect(value ? 1 : 0, 0);
   }
 
+  inline void DDSM1ZeroLowestWin(
+    ThreadData * thrp,
+    const int depth)
+  {
+    thrp->lowestWin[depth][0] = 0;
+    thrp->lowestWin[depth][1] = 0;
+    thrp->lowestWin[depth][2] = 0;
+    thrp->lowestWin[depth][3] = 0;
+  }
+
   inline void DDSM1ZeroWinRanks(
     pos * posPoint,
     const int depth)
   {
-    vst1_u16(&posPoint->winRanks[depth][0], vdup_n_u16(0));
+    posPoint->winRanks[depth][0] = 0;
+    posPoint->winRanks[depth][1] = 0;
+    posPoint->winRanks[depth][2] = 0;
+    posPoint->winRanks[depth][3] = 0;
   }
 
   inline void DDSM1CopyChildWinRanks(
     pos * posPoint,
     const int depth)
   {
-    vst1_u16(&posPoint->winRanks[depth][0],
-             vld1_u16(&posPoint->winRanks[depth - 1][0]));
+    posPoint->winRanks[depth][0] = posPoint->winRanks[depth - 1][0];
+    posPoint->winRanks[depth][1] = posPoint->winRanks[depth - 1][1];
+    posPoint->winRanks[depth][2] = posPoint->winRanks[depth - 1][2];
+    posPoint->winRanks[depth][3] = posPoint->winRanks[depth - 1][3];
   }
 
   inline void DDSM1OrChildWinRanks(
     pos * posPoint,
     const int depth)
   {
-    uint16x4_t cur  = vld1_u16(&posPoint->winRanks[depth][0]);
-    uint16x4_t prev = vld1_u16(&posPoint->winRanks[depth - 1][0]);
-    vst1_u16(&posPoint->winRanks[depth][0], vorr_u16(cur, prev));
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][0] | posPoint->winRanks[depth - 1][0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][1] | posPoint->winRanks[depth - 1][1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][2] | posPoint->winRanks[depth - 1][2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][3] | posPoint->winRanks[depth - 1][3]);
   }
 
   inline void DDSM1CopyMakeWinRanks(
@@ -80,9 +98,14 @@ namespace
     unsigned short makeWinRank[DDS_SUITS],
     const int depth)
   {
-    uint16x4_t prev = vld1_u16(&posPoint->winRanks[depth - 1][0]);
-    uint16x4_t make = vld1_u16(&makeWinRank[0]);
-    vst1_u16(&posPoint->winRanks[depth][0], vorr_u16(prev, make));
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][0] | makeWinRank[0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][1] | makeWinRank[1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][2] | makeWinRank[2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth - 1][3] | makeWinRank[3]);
   }
 
   inline void DDSM1OrMakeWinRanks(
@@ -90,11 +113,22 @@ namespace
     unsigned short makeWinRank[DDS_SUITS],
     const int depth)
   {
-    uint16x4_t cur  = vld1_u16(&posPoint->winRanks[depth][0]);
-    uint16x4_t prev = vld1_u16(&posPoint->winRanks[depth - 1][0]);
-    uint16x4_t make = vld1_u16(&makeWinRank[0]);
-    vst1_u16(&posPoint->winRanks[depth][0],
-             vorr_u16(vorr_u16(cur, prev), make));
+    posPoint->winRanks[depth][0] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][0] |
+      posPoint->winRanks[depth - 1][0] |
+      makeWinRank[0]);
+    posPoint->winRanks[depth][1] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][1] |
+      posPoint->winRanks[depth - 1][1] |
+      makeWinRank[1]);
+    posPoint->winRanks[depth][2] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][2] |
+      posPoint->winRanks[depth - 1][2] |
+      makeWinRank[2]);
+    posPoint->winRanks[depth][3] = static_cast<unsigned short>(
+      posPoint->winRanks[depth][3] |
+      posPoint->winRanks[depth - 1][3] |
+      makeWinRank[3]);
   }
 
   inline void DDSM1PrefetchChild(
@@ -103,6 +137,7 @@ namespace
     const int childDepth)
   {
     __builtin_prefetch(&posPoint->winRanks[childDepth][0], 1, 3);
+    __builtin_prefetch(&thrp->lowestWin[childDepth][0], 1, 3);
     __builtin_prefetch(&thrp->bestMove[childDepth], 1, 2);
     __builtin_prefetch(&thrp->bestMoveTT[childDepth], 1, 2);
   }
@@ -125,6 +160,8 @@ bool ABsearch(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  DDSM1ZeroLowestWin(thrp, depth);
+
   thrp->moves.MoveGen0(
     tricks,
     * posPoint,
@@ -164,6 +201,7 @@ bool ABsearch(
     if (DDSM1Unlikely(value == success))
     {
       DDSM1CopyChildWinRanks(posPoint, depth);
+
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
@@ -201,6 +239,7 @@ bool ABsearch0(
   thrp->nodes++;
 #endif
 
+  DDSM1ZeroWinRanks(posPoint, depth);
 
   if (depth >= 20)
   {
@@ -360,6 +399,8 @@ bool ABsearch0(
   bool value = ! success;
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  DDSM1ZeroLowestWin(thrp, depth);
+
   thrp->moves.MoveGen0(
     tricks,
     * posPoint,
@@ -398,6 +439,7 @@ bool ABsearch0(
     if (DDSM1Unlikely(value == success))
     {
       DDSM1CopyChildWinRanks(posPoint, depth);
+
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
@@ -498,6 +540,8 @@ bool ABsearch1(
   }
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  DDSM1ZeroLowestWin(thrp, depth);
+
   thrp->moves.MoveGen123(tricks, 1, * posPoint);
   if (depth == thrp->iniDepth)
     thrp->moves.Purge(tricks, 1, thrp->forbiddenMoves);
@@ -533,6 +577,7 @@ bool ABsearch1(
     if (DDSM1Unlikely(value == success))
     {
       DDSM1CopyChildWinRanks(posPoint, depth);
+
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 1);
@@ -568,6 +613,8 @@ bool ABsearch2(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  DDSM1ZeroLowestWin(thrp, depth);
+
   thrp->moves.MoveGen123(tricks, 2, * posPoint);
   if (depth == thrp->iniDepth)
     thrp->moves.Purge(tricks, 2, thrp->forbiddenMoves);
@@ -604,6 +651,7 @@ bool ABsearch2(
     if (DDSM1Unlikely(value == success))
     {
       DDSM1CopyChildWinRanks(posPoint, depth);
+
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 2);
@@ -640,6 +688,7 @@ bool ABsearch3(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  DDSM1ZeroLowestWin(thrp, depth);
   int tricks = (depth + 3) >> 2;
 
   thrp->moves.MoveGen123(tricks, 3, * posPoint);
@@ -686,6 +735,7 @@ bool ABsearch3(
     if (DDSM1Unlikely(value == success))
     {
       DDSM1CopyMakeWinRanks(posPoint, makeWinRank, depth);
+
       thrp->bestMove[depth] = * mply;
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 3);

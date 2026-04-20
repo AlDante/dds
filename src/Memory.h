@@ -28,6 +28,7 @@
   #include "TimerList.h"
 #endif
 
+using namespace std;
 
 
 enum TTmemory
@@ -52,7 +53,7 @@ struct WinnersType
 };
 
 
-struct ThreadDataHot
+struct ThreadData
 {
   int nodeTypeStore[DDS_HANDS];
   int iniDepth;
@@ -62,11 +63,14 @@ struct ThreadDataHot
   int trump;
 
   pos lookAheadPos; // Recursive alpha-beta data
+  bool analysisFlag;
   unsigned short int lowestWin[50][DDS_SUITS];
   WinnersType winners[13];
   moveType forbiddenMoves[14];
   moveType bestMove[50];
   moveType bestMoveTT[50];
+
+  double memUsed;
   int nodes;
   int trickNodes;
 
@@ -77,14 +81,6 @@ struct ThreadDataHot
   TransTable * transTable;
 
   Moves moves;
-
-};
-
-
-struct ThreadDataCold
-{
-  bool analysisFlag;
-  double memUsed;
 
 #ifdef DDS_TOP_LEVEL
   File fileTopLevel;
@@ -116,20 +112,13 @@ struct ThreadDataCold
 };
 
 
-struct ThreadData:
-  public ThreadDataHot,
-  public ThreadDataCold
-{
-};
-
-
 class Memory
 {
   private:
 
-    std::vector<ThreadData *> memory;
+    vector<ThreadData *> memory;
 
-    std::vector<std::string> threadSizes;
+    vector<string> threadSizes;
 
   public:
 
@@ -151,7 +140,7 @@ class Memory
 
     double MemoryInUseMB(const unsigned thrId) const;
 
-    std::string ThreadSize(const unsigned thrId) const;
+    string ThreadSize(const unsigned thrId) const;
 };
 
 #endif

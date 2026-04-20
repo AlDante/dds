@@ -9,7 +9,7 @@
 
 #include <iostream>
 #include <sstream>
-#include <cassert>
+#include <assert.h>
 
 #include "TransTable.h"
 #include "Moves.h"
@@ -58,6 +58,7 @@ void Undo3(
 
 const int handDelta[DDS_SUITS] = { 256, 16, 1, 0 };
 
+
 #ifndef DDS_TARGET_APPLE_M1_MAX
 bool ABsearch(
   pos * posPoint,
@@ -81,6 +82,9 @@ bool ABsearch(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    thrp->lowestWin[depth][ss] = 0;
+
   thrp->moves.MoveGen0(
     tricks,
     * posPoint,
@@ -330,6 +334,9 @@ bool ABsearch0(
   bool value = ! success;
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    thrp->lowestWin[depth][ss] = 0;
+
   thrp->moves.MoveGen0(
     tricks,
     * posPoint,
@@ -472,6 +479,9 @@ bool ABsearch1(
   }
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    thrp->lowestWin[depth][ss] = 0;
+
   thrp->moves.MoveGen123(tricks, 1, * posPoint);
   if (depth == thrp->iniDepth)
     thrp->moves.Purge(tricks, 1, thrp->forbiddenMoves);
@@ -547,6 +557,9 @@ bool ABsearch2(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    thrp->lowestWin[depth][ss] = 0;
+
   thrp->moves.MoveGen123(tricks, 2, * posPoint);
   if (depth == thrp->iniDepth)
     thrp->moves.Purge(tricks, 2, thrp->forbiddenMoves);
@@ -627,6 +640,8 @@ bool ABsearch3(
 #endif
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
+  for (int ss = 0; ss < DDS_SUITS; ss++)
+    thrp->lowestWin[depth][ss] = 0;
   int tricks = (depth + 3) >> 2;
 
   thrp->moves.MoveGen123(tricks, 3, * posPoint);
@@ -683,10 +698,8 @@ bool ABsearch3(
       goto ABexit;
     }
     for (int ss = 0; ss < DDS_SUITS; ss++)
-      posPoint->winRanks[depth][ss] = static_cast<unsigned short>(
-                                        posPoint->winRanks[depth][ss] |
-                                        posPoint->winRanks[depth - 1][ss] |
-                                        makeWinRank[ss]);
+      posPoint->winRanks[depth][ss] |=
+        posPoint->winRanks[depth - 1][ss] | makeWinRank[ss];
 
     TIMER_START(TIMER_NO_NEXTMOVE, depth);
     TIMER_END(TIMER_NO_NEXTMOVE, depth);

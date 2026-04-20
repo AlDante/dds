@@ -69,13 +69,6 @@
             </RMarkdownRenderProfile>
           </value>
         </entry>
-        <entry key="file://$PROJECT_DIR$/docs/background/QuickTricksOptimisation.md">
-          <value>
-            <RMarkdownRenderProfile>
-              <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$/docs/background" />
-            </RMarkdownRenderProfile>
-          </value>
-        </entry>
         <entry key="file://$PROJECT_DIR$/src/ABOptimisationHints.md">
           <value>
             <RMarkdownRenderProfile>
@@ -91,20 +84,6 @@
           </value>
         </entry>
         <entry key="file://$PROJECT_DIR$/src/Optimisation Hints.rmd">
-          <value>
-            <RMarkdownRenderProfile>
-              <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$/src" />
-            </RMarkdownRenderProfile>
-          </value>
-        </entry>
-        <entry key="file://$PROJECT_DIR$/src/QuickTricksOptimisation.md">
-          <value>
-            <RMarkdownRenderProfile>
-              <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$/src" />
-            </RMarkdownRenderProfile>
-          </value>
-        </entry>
-        <entry key="file://$PROJECT_DIR$/src/QuickTricksOptimisation.md.rmd">
           <value>
             <RMarkdownRenderProfile>
               <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$/src" />

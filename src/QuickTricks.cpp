@@ -13,19 +13,6 @@
 #include "QuickTricks.h"
 
 
-namespace
-{
-  // Replace highestRank[] table lookup with CLZ intrinsic (§9.4).
-  // On ARM64 this compiles to a single CLZ instruction — no memory access.
-  inline int highestRankFast(unsigned short ranks)
-  {
-    return ranks
-      ? (31 - __builtin_clz(static_cast<unsigned int>(ranks)))
-      : 0;
-  }
-}
-
-
 int QtricksLeadHandNT(
   const int hand,
   pos& tpos,
@@ -565,7 +552,7 @@ int QuickTricks(
           {
             lowestQtricks = 1;
 
-            int rr = highestRankFast(ris[partner[hand]][trump]);
+            int rr = highestRank[ris[partner[hand]][trump]];
             if (rr != 0)
             {
               tpos.winRanks[depth][trump] |= bitMapRank[rr];
@@ -1149,7 +1136,7 @@ bool QuickTricksSecondHand(
 
     /* Own side has highest card in suit, which LHO can't ruff. */
 
-    int rr = highestRankFast(ranks);
+    int rr = highestRank[ranks];
     tpos.winRanks[depth][ss] = bitMapRank[rr];
   }
   else

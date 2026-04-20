@@ -14,7 +14,6 @@
 #include "Memory.h"
 
 
-
 bool ABsearch(
   pos * posPoint,
   const int target,

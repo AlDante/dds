@@ -62,34 +62,27 @@ extern char relRank[8192][15];
 extern unsigned short int winRanks[8192][14];
 
 
-/** @brief Grouped representation of consecutive rank runs within a 13-bit suit holding. */
 struct moveGroupType
 {
-  /// Number of groups minus one (at most 7 groups in a 13-bit vector).
+  // There are at most 7 groups of bit "runs" in a 13-bit vector
   int lastGroup;
-  /// Highest rank in each group.
   int rank[7];
-  /// Consecutive-rank sequence bitmap starting from each group's top rank.
   int sequence[7];
-  /// Full sequence bitmap including cards below the gap.
   int fullseq[7];
-  /// Gap (missing ranks) below each group.
   int gap[7];
 };
 
 extern moveGroupType groupData[8192];
 
 
-/** @brief A single candidate move in suit/rank/sequence/weight form. */
 struct moveType
 {
-  short suit;       ///< Suit index (0=spades .. 3=clubs).
-  short rank;       ///< Rank as a bit position (2..14).
-  short sequence;   ///< Non-zero if this move heads a sequence of equals.
-  short weight;     ///< Sorting weight assigned by move-generation heuristics.
+  int suit;
+  int rank;
+  int sequence; /* Whether or not this move is the
+                                     first in a sequence */
+  int weight; /* Weight used at sorting */
 };
-
-static_assert(sizeof(moveType) == 8, "moveType should remain compact");
 
 struct movePlyType
 {
@@ -105,27 +98,27 @@ struct highCardType
 };
 
 
-/**
- * @brief Full search position state used by the alpha-beta engine.
- *
- * Contains the remaining cards for each hand/suit, aggregated suit holdings,
- * lengths, trick winners, and the search-tree bookkeeping arrays indexed by
- * depth (ply).
- */
 struct pos
 {
-  unsigned short int rankInSuit[DDS_HANDS][DDS_SUITS]; ///< Remaining cards per hand/suit.
-  unsigned short int aggr[DDS_SUITS];                  ///< OR of all hands' holdings per suit.
-  unsigned char length[DDS_HANDS][DDS_SUITS];          ///< Card count per hand/suit.
-  int handDist[DDS_HANDS];                             ///< Packed 4-suit length distribution.
+  unsigned short int rankInSuit[DDS_HANDS][DDS_SUITS];
+  unsigned short int aggr[DDS_SUITS];
+  unsigned char length[DDS_HANDS][DDS_SUITS];
+  int handDist[DDS_HANDS];
 
-  highCardType winner[DDS_SUITS];     ///< Current highest card in each suit.
-  highCardType secondBest[DDS_SUITS]; ///< Second-highest card in each suit.
-  int first[50];                      ///< Leading hand at each depth.
-  moveType move[50];                  ///< Currently winning move at each depth.
-  unsigned short int winRanks[50][DDS_SUITS]; ///< Winning rank-set by depth/suit.
-  int tricksMAX;                      ///< Cumulative tricks won by the MAX side.
-  int handRelFirst;                   ///< Current hand position relative to trick leader.
+  unsigned short int winRanks[50][DDS_SUITS];
+  /* Cards that win by rank, firstindex is depth. */
+  int first[50];
+  /* Hand that leads the trick for each ply */
+  moveType move[50];
+  /* Presently winning move */
+  int handRelFirst;
+  /* The current hand, relative first hand */
+  int tricksMAX;
+  /* Aggregated tricks won by MAX */
+  highCardType winner[DDS_SUITS];
+  /* Winning rank of trick. */
+  highCardType secondBest[DDS_SUITS];
+  /* Second best rank. */
 };
 
 
