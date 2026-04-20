@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1410,6 +1411,12 @@ namespace alpha_mu_prototype
     int ddsThreadId;
     int configuredBoardWorkers;
     double elapsedSeconds;
+    double cpuSeconds;
+    uint64_t pmuCycles;
+    uint64_t pmuInstructions;
+    uint64_t pmuBranchMispred;
+    uint64_t pmuL1dMissLd;
+    uint64_t pmuL1dMissSt;
     unsigned mismatches;
     vector<double> perBoardSeconds;
 
@@ -1424,6 +1431,12 @@ namespace alpha_mu_prototype
       ddsThreadId(0),
       configuredBoardWorkers(1),
       elapsedSeconds(0.0),
+      cpuSeconds(0.0),
+      pmuCycles(0),
+      pmuInstructions(0),
+      pmuBranchMispred(0),
+      pmuL1dMissLd(0),
+      pmuL1dMissSt(0),
       mismatches(0),
       perBoardSeconds()
     {
@@ -1811,6 +1824,8 @@ namespace alpha_mu_prototype
   BenchmarkMethodSummary BenchmarkAlphaMuExactBoards( const string& handFile, const int depth, const int maxBoards, const string& skipSpec);
   /** @brief Print a machine-readable benchmark summary line for one method. */
   void ReportBenchmarkMethodSummary( const BenchmarkMethodSummary& summary);
+  /** @brief Initialize PMU hardware counters (requires sudo). */
+  void InitPmuCounters();
   /** @brief Compare exact DDS and exact alpha-mu results over multiple depths. */
   DDSVsAlphaMuComparison CompareDDSAndAlphaMu( const string& handFile, const int maxDepth, const int maxBoards);
   /** @brief Print a machine-readable DDS-vs-alpha-mu comparison summary. */

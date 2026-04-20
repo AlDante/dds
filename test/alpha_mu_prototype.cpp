@@ -122,6 +122,7 @@ namespace
  */
 int main(int argc, char ** argv)
 {
+  InitPmuCounters();
   if (argc >= 2)
   {
 	const string mode(argv[1]);

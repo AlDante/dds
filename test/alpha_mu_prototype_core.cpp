@@ -9,14 +9,36 @@
 
 #include <atomic>
 #include <mutex>
+#include <sys/resource.h>
 #include <thread>
+
+#include "pmu_counters.h"
 
 namespace alpha_mu_prototype
 {
   using namespace std;
 
+  static PmuCounters g_pmu;
+
+  void InitPmuCounters()
+  {
+    if (!g_pmu.Init())
+      fprintf(stderr, "PMU: Hardware counters not available (run with sudo for PMU data)\n");
+  }
+
   const char kPrototypeMessagePrefix[] = "alpha_mu_prototype: ";
   const char kAlphaMuPlayHandFile[] = "hands/alpha_mu_play.txt";
+
+  static double GetProcessCpuSeconds()
+  {
+    struct rusage usage;
+    if (getrusage(RUSAGE_SELF, &usage) != 0)
+      return 0.0;
+    return static_cast<double>(usage.ru_utime.tv_sec) +
+           static_cast<double>(usage.ru_utime.tv_usec) * 1e-6 +
+           static_cast<double>(usage.ru_stime.tv_sec) +
+           static_cast<double>(usage.ru_stime.tv_usec) * 1e-6;
+  }
 
 void Fail(const string& msg)
   {
@@ -3147,6 +3169,8 @@ BenchmarkMethodSummary BenchmarkDDSExactBoards(
     SetMaxThreads(0);
     const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+    const double cpuStart = GetProcessCpuSeconds();
+    const PmuCounterSet pmuStart = g_pmu.Read();
     double lastCheckpoint = 0.0;
     for (unsigned i = 0; i < boardNumbers.size(); i++)
     {
@@ -3177,6 +3201,16 @@ BenchmarkMethodSummary BenchmarkDDSExactBoards(
     }
     const chrono::steady_clock::time_point end = chrono::steady_clock::now();
     summary.elapsedSeconds = chrono::duration<double>(end - start).count();
+    summary.cpuSeconds = GetProcessCpuSeconds() - cpuStart;
+    {
+      const PmuCounterSet pmuEnd = g_pmu.Read();
+      const PmuCounterSet pmuDiff = PmuCounters::Diff(pmuEnd, pmuStart);
+      summary.pmuCycles = pmuDiff.cycles;
+      summary.pmuInstructions = pmuDiff.instructions;
+      summary.pmuBranchMispred = pmuDiff.branchMispredictions;
+      summary.pmuL1dMissLd = pmuDiff.l1dCacheMissLd;
+      summary.pmuL1dMissSt = pmuDiff.l1dCacheMissSt;
+    }
     return summary;
   }
 BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
@@ -3221,6 +3255,8 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
 
     const double checkpointSeconds = BenchmarkCheckpointIntervalSeconds();
     const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+    const double cpuStart = GetProcessCpuSeconds();
+    const PmuCounterSet pmuStart = g_pmu.Read();
     double lastCheckpoint = 0.0;
 
     if (boardWorkerCount <= 1U)
@@ -3314,6 +3350,16 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
 
     const chrono::steady_clock::time_point end = chrono::steady_clock::now();
     summary.elapsedSeconds = chrono::duration<double>(end - start).count();
+    summary.cpuSeconds = GetProcessCpuSeconds() - cpuStart;
+    {
+      const PmuCounterSet pmuEnd = g_pmu.Read();
+      const PmuCounterSet pmuDiff = PmuCounters::Diff(pmuEnd, pmuStart);
+      summary.pmuCycles = pmuDiff.cycles;
+      summary.pmuInstructions = pmuDiff.instructions;
+      summary.pmuBranchMispred = pmuDiff.branchMispredictions;
+      summary.pmuL1dMissLd = pmuDiff.l1dCacheMissLd;
+      summary.pmuL1dMissSt = pmuDiff.l1dCacheMissSt;
+    }
     return summary;
   }
 BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
@@ -3348,13 +3394,22 @@ void ReportBenchmarkMethodSummary(
          << " dds_thread_id=" << summary.ddsThreadId
          << " configured_board_workers=" << summary.configuredBoardWorkers
          << " total_seconds=" << summary.elapsedSeconds
+         << " cpu_seconds=" << summary.cpuSeconds
          << " per_board_seconds="
          << (summary.perBoardSeconds.empty() ?
              (summary.boardsTested == 0 ? 0.0 :
                summary.elapsedSeconds / static_cast<double>(summary.boardsTested)) :
              sumPerBoard / static_cast<double>(summary.perBoardSeconds.size()))
-         << " mismatches=" << summary.mismatches
-         << "\n";
+         << " mismatches=" << summary.mismatches;
+    if (summary.pmuCycles > 0)
+    {
+      cout << " pmu_cycles=" << summary.pmuCycles
+           << " pmu_instructions=" << summary.pmuInstructions
+           << " pmu_branch_mispred=" << summary.pmuBranchMispred
+           << " pmu_l1d_miss_ld=" << summary.pmuL1dMissLd
+           << " pmu_l1d_miss_st=" << summary.pmuL1dMissSt;
+    }
+    cout << "\n";
     Check(summary.mismatches == 0,
       "benchmark mode should preserve the exact golden FUT score on every tested board");
   }
