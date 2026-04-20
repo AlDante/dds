@@ -77,12 +77,14 @@ extern moveGroupType groupData[8192];
 
 struct moveType
 {
-  int suit;
-  int rank;
-  int sequence; /* Whether or not this move is the
-                                     first in a sequence */
-  int weight; /* Weight used at sorting */
+  short suit;
+  short rank;
+  short sequence; /* Whether or not this move is the
+                                       first in a sequence */
+  short weight; /* Weight used at sorting */
 };
+
+static_assert(sizeof(moveType) == 8, "moveType should remain compact");
 
 struct movePlyType
 {
