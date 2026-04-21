@@ -12,6 +12,10 @@ namespace alpha_mu_prototype
   void RunBridgeDDSTestSuite();
   /** @brief Run the complete alpha-mu prototype regression suite. */
   void RunDefaultTestSuite();
+  /** @brief Run the partial-information world generation test. */
+  void TestPartialInformationWorldGeneration();
+  /** @brief Run play-history parse validation tests. */
+  void TestParsePlayHistoryValidation();
 }
 
 #endif

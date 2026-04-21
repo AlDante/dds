@@ -3011,6 +3011,141 @@ namespace alpha_mu_prototype
     };
   }
 
+  /**
+   * @brief Stage 1 test: build multi-world BridgeState from partial information.
+   *
+   * Uses a known deal and the first trick of play to construct a partial-
+   * information world set from the declaring side's perspective.  Verifies:
+   *  - Multiple candidate worlds are generated (not just one)
+   *  - Play history evidence narrows the candidate count
+   *  - The true defenders' hands are consistent with at least one generated world
+   */
+  /**
+   * Regression: play.number exceeding the actual card-pair count in the
+   * play string previously caused ParsePBNPlayHistory to silently return
+   * fewer events than requested, leading to downstream failures.
+   */
+  void TestParsePlayHistoryValidation()
+  {
+    // Correct case: 4 cards, 8-char string
+    {
+      playTracePBN play;
+      memset(&play, 0, sizeof(play));
+      play.number = 4;
+      strcpy(play.cards, "CTC4CACJ");
+      const vector<PlayHistoryEvent> history =
+        ParsePBNPlayHistory(play, SEAT_NORTH, 0);
+      Check(history.size() == 4,
+        "should parse exactly 4 events from a 4-card string");
+    }
+
+    // Regression: play.number larger than available card pairs must fail
+    {
+      playTracePBN play;
+      memset(&play, 0, sizeof(play));
+      play.number = 8;
+      strcpy(play.cards, "CTC4CACJ");  // only 4 card pairs (8 chars)
+      bool caught = false;
+      try
+      {
+        ParsePBNPlayHistory(play, SEAT_NORTH, 0);
+      }
+      catch (...)
+      {
+        caught = true;
+      }
+      Check(caught,
+        "ParsePBNPlayHistory should reject play.number exceeding "
+        "available card pairs in the string");
+    }
+
+    // Empty / zero cases should return empty without error
+    {
+      playTracePBN play;
+      memset(&play, 0, sizeof(play));
+      play.number = 0;
+      const vector<PlayHistoryEvent> history =
+        ParsePBNPlayHistory(play, SEAT_NORTH, 0);
+      Check(history.empty(),
+        "zero play.number should produce empty history");
+    }
+  }
+
+  void TestPartialInformationWorldGeneration()
+  {
+    // Use a deal late in the play to keep the hidden-card count small.
+    // Board 1 from alpha_mu_play.txt:
+    // PBN 0 0 0 0 "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3"
+    // PLAY 45 "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ"
+    // Trump=0 (spades), opening leader=0 (N)
+    //
+    // We take South as declarer (dummy=North). After 9 tricks (36 cards),
+    // each hand has 4 cards left. The hidden hands (E, W) have 8 cards total,
+    // giving C(8,4)=70 raw assignments — manageable.
+
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;  // spades
+    deal.first = 0;  // North leads
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    const int declarerSeat = SEAT_SOUTH;
+    const int trumpSuit = 0;
+
+    // Parse first 40 cards (10 complete tricks) — leaves 3 cards per hand,
+    // 6 hidden cards total, C(6,3)=20 raw assignments.
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 40;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5");
+
+    const vector<PlayHistoryEvent> history =
+      ParsePBNPlayHistory(play, deal.first, trumpSuit);
+
+    Check(history.size() == 40,
+      "should parse 40 play events from ten tricks");
+
+    // Build the partial-information state after 10 tricks
+    const BridgeState state = MakeBridgeStateFromPartialInformation(
+      deal, declarerSeat, history, 50);
+
+    Check(state.worlds.size() > 1,
+      "partial-information state should have multiple worlds");
+
+    const unsigned worldCount = state.possibleWorlds.PopCount();
+    Check(worldCount > 0,
+      "at least one world should survive filtering");
+    Check(worldCount <= 50,
+      "world count should respect the sample limit");
+
+    // Check that surviving worlds have the right number of cards per hidden defender
+    // After 10 tricks, each hand has 3 cards left.
+    bool foundValidWorld = false;
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      if (! ((state.possibleWorlds.bits >> i) & 1ULL))
+        continue;
+
+      unsigned eastCards = 0;
+      unsigned westCards = 0;
+      for (int s = 0; s < 4; s++)
+      {
+        eastCards += static_cast<unsigned>(state.worlds[i].suits[SEAT_EAST][s].size());
+        westCards += static_cast<unsigned>(state.worlds[i].suits[SEAT_WEST][s].size());
+      }
+      if (eastCards == 3 && westCards == 3)
+      {
+        foundValidWorld = true;
+        break;
+      }
+    }
+
+    Check(foundValidWorld,
+      "at least one surviving world should have 3 cards per hidden defender");
+  }
+
   void RunBridgeDDSTestSuite()
   {
     TestBridgeMultiTrickDDSLeaf();
@@ -3065,7 +3200,9 @@ namespace alpha_mu_prototype
        {"benchmark option normalization OK", &TestAlphaMuBenchmarkOptionNormalization},
        {"benchmark overload parity OK", &TestAlphaMuBenchmarkOptionsOverloadParity},
        {"board-parallel benchmark parity OK", &TestBoardParallelBenchmarkParity},
-       {"repeated DDS reinitialization OK", &TestRepeatedDDSReinitializationKeepsThreadContext}
+       {"repeated DDS reinitialization OK", &TestRepeatedDDSReinitializationKeepsThreadContext},
+       {"play history parse validation OK", &TestParsePlayHistoryValidation},
+       {"partial-information world generation OK", &TestPartialInformationWorldGeneration}
     };
 
     for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)

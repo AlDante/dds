@@ -1678,6 +1678,62 @@ namespace alpha_mu_prototype
   HistoryDerivedConstructionResult ConstructCandidateWorldsFromHistory( const HistoryDerivedWorldSpec& spec, const BridgeInformationState& information);
   /** @brief Explain each constructor-local pruning stage used during world building. */
   HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction( const HistoryDerivedWorldSpec& spec, const BridgeInformationState& information);
+
+  /**
+   * @brief Convert a PBN play-card suit character to a suit index.
+   *
+   * Accepts 'S', 'H', 'D', 'C' and returns SUIT_SPADES..SUIT_CLUBS.
+   */
+  int SuitFromPlayChar(const char c);
+
+  /**
+   * @brief Parse the PBN play-card string into PlayHistoryEvent entries.
+   *
+   * The play string is pairs of (suit-letter, rank-char), e.g. "CTC4CACJ".
+   * The opening leader is deal.first; subsequent players follow in seat order.
+   */
+  vector<PlayHistoryEvent> ParsePBNPlayHistory(
+      const playTracePBN& play,
+      const int openingLeader,
+      const int trumpSuit);
+
+  /**
+   * @brief Build a HistoryDerivedWorldSpec from a full deal and the declarer seat.
+   *
+   * The visible hands are declarer and dummy; the hidden hands are LHO and RHO.
+   * Cards already played are removed from the visible seed world.
+   */
+  HistoryDerivedWorldSpec BuildWorldSpecFromDeal(
+      const dealPBN& fullDeal,
+      const int declarerSeat,
+      const vector<PlayHistoryEvent>& playedCards);
+
+  /**
+   * @brief Build a BridgeInformationState from a deal, declarer seat, and play history.
+   *
+   * Known-card constraints are generated for all cards in the visible hands that
+   * have not yet been played.  Follow-suit derivation is enabled.
+   */
+  BridgeInformationState BuildInformationStateFromPlay(
+      const dealPBN& fullDeal,
+      const int declarerSeat,
+      const vector<PlayHistoryEvent>& playedCards,
+      const unsigned maxWorlds);
+
+  /**
+   * @brief Create a multi-world BridgeState from a partial-information scenario.
+   *
+   * This is the Stage 1 bridge front-end for alpha-mu: given a full deal (for
+   * visible-hand extraction), a declarer seat, and a play history prefix, it
+   * constructs a world pool from the defending perspective and returns a
+   * BridgeState suitable for multi-world alpha-mu search.
+   */
+  BridgeState MakeBridgeStateFromPartialInformation(
+      const dealPBN& fullDeal,
+      const int declarerSeat,
+      const vector<PlayHistoryEvent>& playedCards,
+      const unsigned maxWorlds);
+
   /** @brief Convert a bridge continuation state into the DDS `dealPBN` leaf format. */
   dealPBN MakeDDSDealPBN( const BridgeState& state, const ParsedWorld& world);
   /** @brief Count the number of unresolved tricks remaining in one world. */

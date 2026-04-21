@@ -2920,6 +2920,327 @@ BridgeState MakeBridgeStateFromDDSDeal(
     state.maxTricksWon = 0;
     return state;
   }
+int SuitFromPlayChar(const char c)
+  {
+    switch (c)
+    {
+      case 'S': return SUIT_SPADES;
+      case 'H': return SUIT_HEARTS;
+      case 'D': return SUIT_DIAMONDS;
+      case 'C': return SUIT_CLUBS;
+      default:
+        throw runtime_error("Unknown suit character in play string");
+    }
+  }
+vector<PlayHistoryEvent> ParsePBNPlayHistory(
+    const playTracePBN& play,
+    const int openingLeader,
+    const int trumpSuit)
+  {
+    vector<PlayHistoryEvent> events;
+    const string cards(play.cards);
+    if (cards.empty() || play.number <= 0)
+      return events;
+
+    const unsigned requiredLength = static_cast<unsigned>(play.number) * 2U;
+    if (cards.size() < requiredLength)
+    {
+      throw runtime_error(
+        "play string too short for declared play.number ("
+        + to_string(cards.size()) + " chars for "
+        + to_string(play.number) + " cards, need "
+        + to_string(requiredLength) + ")");
+    }
+
+    if (play.number > 52)
+      throw runtime_error("play.number exceeds maximum of 52 cards");
+
+    if (openingLeader < 0 || openingLeader > 3)
+      throw runtime_error("opening leader must be a valid seat (0-3)");
+
+    const string validRanks = "AKQJT98765432";
+
+    int currentPlayer = openingLeader;
+    int leadSuit = -1;
+    unsigned cardsInTrick = 0;
+    vector<BridgeMove> trickCards;
+    vector<int> trickPlayers;
+
+    for (int i = 0; i < play.number; i++)
+    {
+      const unsigned pos = static_cast<unsigned>(i) * 2U;
+
+      const char suitChar = cards[pos];
+      if (suitChar != 'S' && suitChar != 'H' &&
+          suitChar != 'D' && suitChar != 'C')
+      {
+        throw runtime_error(
+          "invalid suit character '" + string(1, suitChar)
+          + "' at position " + to_string(pos) + " in play string");
+      }
+
+      const int suit = SuitFromPlayChar(suitChar);
+      const char rank = cards[pos + 1];
+
+      if (validRanks.find(rank) == string::npos)
+      {
+        throw runtime_error(
+          "invalid rank character '" + string(1, rank)
+          + "' at position " + to_string(pos + 1) + " in play string");
+      }
+
+      if (cardsInTrick == 0)
+        leadSuit = suit;
+
+      events.push_back(PlayHistoryEvent(currentPlayer, leadSuit,
+        BridgeMove(suit, rank)));
+
+      trickCards.push_back(BridgeMove(suit, rank));
+      trickPlayers.push_back(currentPlayer);
+      cardsInTrick++;
+
+      if (cardsInTrick == 4)
+      {
+        const unsigned winIdx = WinningCardIndex(trickCards, leadSuit, trumpSuit);
+        currentPlayer = trickPlayers[winIdx];
+        trickCards.clear();
+        trickPlayers.clear();
+        cardsInTrick = 0;
+        leadSuit = -1;
+      }
+      else
+      {
+        currentPlayer = (currentPlayer + 1) % 4;
+      }
+    }
+    return events;
+  }
+HistoryDerivedWorldSpec BuildWorldSpecFromDeal(
+    const dealPBN& fullDeal,
+    const int declarerSeat,
+    const vector<PlayHistoryEvent>& playedCards)
+  {
+    HistoryDerivedWorldSpec spec;
+    const ParsedWorld fullWorld = ParsePBNWorld(fullDeal.remainCards);
+
+    const int dummySeat = (declarerSeat + 2) % 4;
+    const int lho = (declarerSeat + 1) % 4;
+    const int rho = (declarerSeat + 3) % 4;
+
+    // Collect all played cards as a set for quick lookup
+    set<pair<int,char> > allPlayed;
+    for (unsigned i = 0; i < playedCards.size(); i++)
+      allPlayed.insert(make_pair(playedCards[i].move.suit,
+                                 playedCards[i].move.rank));
+
+    // Build seedWorld with remaining cards for all four seats.
+    // Visible seats (declarer, dummy): original hand minus played cards.
+    // Hidden seats (lho, rho): empty — their remaining cards form the
+    // hidden pool that the constructor will distribute.
+    ParsedWorld seedWorld;
+    for (int s = 0; s < 4; s++)
+    {
+      // Visible seats: remaining cards only
+      for (int visSeat = 0; visSeat < 2; visSeat++)
+      {
+        const int seat = (visSeat == 0) ? declarerSeat : dummySeat;
+        seedWorld.suits[seat][s] = "";
+        const string& orig = fullWorld.suits[seat][s];
+        for (unsigned c = 0; c < orig.size(); c++)
+        {
+          if (allPlayed.find(make_pair(s, orig[c])) == allPlayed.end())
+            seedWorld.suits[seat][s] += orig[c];
+        }
+      }
+      seedWorld.suits[lho][s] = "";
+      seedWorld.suits[rho][s] = "";
+    }
+
+    // Compute hidden card pool: all cards NOT in visible remaining hands
+    // and NOT played by anyone.  These are the defenders' remaining cards.
+    spec.hiddenSeats.push_back(lho);
+    spec.hiddenSeats.push_back(rho);
+
+    // Do NOT use inferHiddenCardsFromVisibleHands — that would include
+    // already-played cards in the hidden pool.  Instead, place the
+    // defenders' remaining cards into the seedWorld hidden seats so
+    // CollectSeedHiddenCards picks them up and redistributes them.
+    spec.inferHiddenCardsFromVisibleHands = false;
+
+    // Collect hidden pool: cards not in visible remaining hands, not played.
+    vector<BridgeMove> hiddenPool;
+    const string ranks = "AKQJT98765432";
+    for (int suit = 0; suit < 4; suit++)
+    {
+      for (unsigned r = 0; r < ranks.size(); r++)
+      {
+        const char rank = ranks[r];
+        if (allPlayed.find(make_pair(suit, rank)) != allPlayed.end())
+          continue;
+        if (FindCardSeatInWorld(seedWorld, suit, rank) >= 0)
+          continue;
+        hiddenPool.push_back(BridgeMove(suit, rank));
+      }
+    }
+
+    // Distribute hidden cards evenly across hidden seats in seedWorld.
+    // The constructor will strip them out and try all valid assignments.
+    const unsigned cardsPerDefender =
+      static_cast<unsigned>(hiddenPool.size()) /
+      static_cast<unsigned>(spec.hiddenSeats.size());
+    unsigned idx = 0;
+    for (unsigned h = 0; h < spec.hiddenSeats.size(); h++)
+    {
+      const int seat = spec.hiddenSeats[h];
+      const unsigned limit = (h + 1 < spec.hiddenSeats.size())
+        ? cardsPerDefender : static_cast<unsigned>(hiddenPool.size()) - idx;
+      for (unsigned c = 0; c < limit && idx < hiddenPool.size(); c++, idx++)
+        seedWorld.suits[seat][hiddenPool[idx].suit] += hiddenPool[idx].rank;
+    }
+    spec.seedWorld = seedWorld;
+
+    return spec;
+  }
+BridgeInformationState BuildInformationStateFromPlay(
+    const dealPBN& fullDeal,
+    const int declarerSeat,
+    const vector<PlayHistoryEvent>& playedCards,
+    const unsigned maxWorlds)
+  {
+    BridgeInformationState info;
+    const ParsedWorld fullWorld = ParsePBNWorld(fullDeal.remainCards);
+    const int dummySeat = (declarerSeat + 2) % 4;
+
+    // Known-card constraints: all remaining visible-hand cards
+    // (cards not yet played by declarer or dummy)
+    set<pair<int,char> > playedByVisible;
+    for (unsigned i = 0; i < playedCards.size(); i++)
+    {
+      const int player = playedCards[i].player;
+      if (player == declarerSeat || player == dummySeat)
+        playedByVisible.insert(make_pair(
+          playedCards[i].move.suit, playedCards[i].move.rank));
+    }
+
+    for (int seat = 0; seat < 4; seat++)
+    {
+      if (seat != declarerSeat && seat != dummySeat)
+        continue;
+      for (int s = 0; s < 4; s++)
+      {
+        const string& hand = fullWorld.suits[seat][s];
+        for (unsigned c = 0; c < hand.size(); c++)
+        {
+          if (playedByVisible.find(make_pair(s, hand[c])) ==
+              playedByVisible.end())
+          {
+            info.knownCardConstraints.push_back(
+              WorldConstraint::HasCard(seat, s, hand[c]));
+          }
+        }
+      }
+    }
+
+    // Split play history into completed tricks and current trick
+    unsigned cardsInCurrentTrick = playedCards.size() % 4;
+    unsigned completedCards = playedCards.size() - cardsInCurrentTrick;
+
+    for (unsigned i = 0; i < completedCards; i++)
+      info.playHistory.push_back(playedCards[i]);
+
+    for (unsigned i = completedCards; i < playedCards.size(); i++)
+      info.currentTrickHistory.push_back(playedCards[i]);
+
+    info.deriveFollowSuitConstraints = true;
+    info.deduplicateEquivalentWorlds = true;
+    info.sampleLimit = maxWorlds;
+    info.samplingSeed = 42;
+    return info;
+  }
+BridgeState MakeBridgeStateFromPartialInformation(
+    const dealPBN& fullDeal,
+    const int declarerSeat,
+    const vector<PlayHistoryEvent>& playedCards,
+    const unsigned maxWorlds)
+  {
+    const HistoryDerivedWorldSpec spec =
+      BuildWorldSpecFromDeal(fullDeal, declarerSeat, playedCards);
+    const BridgeInformationState info =
+      BuildInformationStateFromPlay(fullDeal, declarerSeat, playedCards, maxWorlds);
+
+    const HistoryDerivedConstructionResult constructed =
+      ConstructCandidateWorldsFromHistory(spec, info);
+
+
+    vector<ParsedWorld> worlds = constructed.worlds;
+
+    if (worlds.empty())
+    {
+      // Fallback: use the full deal as a single-world state
+      return MakeBridgeStateFromDDSDeal(fullDeal);
+    }
+
+    // Accept all constructed worlds directly.  The worlds describe only
+    // the remaining cards after the play history, so the staged filtering
+    // in GeneratePossibleWorlds (which checks play-history consistency
+    // against full-deal worlds) does not apply here.
+    WorldMask possibleMask;
+    possibleMask.count = static_cast<unsigned>(worlds.size());
+    possibleMask.bits = (worlds.size() >= 64)
+      ? ~0ULL
+      : (1ULL << worlds.size()) - 1ULL;
+
+    // Build the state
+    BridgeState state;
+    state.worlds = worlds;
+    state.possibleWorlds = possibleMask;
+
+    const int trumpSuit = (fullDeal.trump == 4 ? -1 : fullDeal.trump);
+    state.trumpSuit = trumpSuit;
+
+    // Determine current trick and player from the tail of the play
+    unsigned cardsInCurrentTrick = playedCards.size() % 4;
+    if (cardsInCurrentTrick > 0)
+    {
+      unsigned trickStart = playedCards.size() - cardsInCurrentTrick;
+      state.trickLeader = playedCards[trickStart].player;
+      state.leadSuit = playedCards[trickStart].move.suit;
+      for (unsigned i = trickStart; i < playedCards.size(); i++)
+      {
+        state.currentTrick.push_back(playedCards[i].move);
+        state.currentTrickPlayers.push_back(playedCards[i].player);
+      }
+      state.playerToMove =
+        (state.trickLeader + static_cast<int>(cardsInCurrentTrick)) % 4;
+    }
+    else if (! playedCards.empty())
+    {
+      // Last trick just completed; find the winner to determine next leader
+      unsigned lastTrickStart = playedCards.size() - 4;
+      vector<BridgeMove> lastTrick;
+      vector<int> lastPlayers;
+      for (unsigned i = lastTrickStart; i < playedCards.size(); i++)
+      {
+        lastTrick.push_back(playedCards[i].move);
+        lastPlayers.push_back(playedCards[i].player);
+      }
+      const unsigned winIdx = WinningCardIndex(lastTrick,
+        playedCards[lastTrickStart].move.suit, trumpSuit);
+      state.trickLeader = lastPlayers[winIdx];
+      state.playerToMove = state.trickLeader;
+      state.leadSuit = -1;
+    }
+    else
+    {
+      state.trickLeader = fullDeal.first;
+      state.playerToMove = fullDeal.first;
+      state.leadSuit = -1;
+    }
+
+    state.maxSide = SeatSide(state.playerToMove);
+    state.maxTricksWon = 0;
+    return state;
+  }
 int SingleWorldFrontScore(
     const ParetoFront& front,
     const int depth,

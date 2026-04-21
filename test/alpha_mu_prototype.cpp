@@ -171,6 +171,14 @@ int main(int argc, char ** argv)
 	  RunBridgeDDSTestSuite();
 	  return 0;
 	}
+	if (mode == "partial")
+	{
+	  TestParsePlayHistoryValidation();
+	  PrintPrototypeStatus("play history parse validation OK");
+	  TestPartialInformationWorldGeneration();
+	  PrintPrototypeStatus("partial-information world generation OK");
+	  return 0;
+	}
   }
 
   RunDefaultTestSuite();
