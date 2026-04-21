@@ -687,3 +687,48 @@ to offset the memory savings.
 selectively re-apply only code-quality changes that are proven performance-neutral
 (modernisation, QuickTricks context-struct). Any future optimisation attempts must be
 validated with the serial-mode PMU benchmark before committing.
+
+## 2026-04-20 — Clean-slate rebuild: packed moveType + QuickTricks refactor evaluation
+
+- Platform: `macOS-26.4.1-arm-64bit`
+- Benchmark: `pmu_single_run` (serial, `list9.txt` board 1, depth 2, with PMU counters)
+- Build: release (`-O3 -flto -Werror`)
+- Starting point: code reverted to `170e566` baseline, then changes re-applied individually
+
+Code at this point: `170e566` baseline + packed moveType (`int→short`) + QuickTricks
+context-struct refactor (§9.1 + §9.2 + §9.6).
+
+### With QuickTricks context-struct refactor
+
+| Run | Wall/board (s) | CPU/board (s) | Cycles (B) | Instructions (B) | IPC | Branch Mispred (M) | L1D Miss Ld (B) | L1D Miss St (B) |
+|-----|---------------|--------------|-----------|-----------------|-----|-------------------|----------------|----------------|
+| 1 | 39.04 | 35.23 | 109.22 | 359.51 | 3.29 | 1,326 | 4.770 | 2.904 |
+| 2 | 34.99 | 34.18 | 107.26 | 359.23 | 3.35 | 1,302 | 4.714 | 2.856 |
+
+Delta vs baseline (run 2): Wall +6.8%, CPU +6.1%, Cycles +5.2%, Instructions **+2.6%**,
+Branch Mispred +5.4%, L1D Miss Ld +1.7%, L1D Miss St −0.3%.
+
+**Conclusion**: the QuickTricks context-struct refactor (§9.1, §9.2, §9.6) causes a
+measurable regression. The struct indirection and helper-function abstraction add +2.6%
+instructions (deterministic) and +5% cycles. Reverted.
+
+### After reverting QuickTricks refactor (packed moveType only)
+
+| Run | Wall/board (s) | CPU/board (s) | Cycles (B) | Instructions (B) | IPC | Branch Mispred (M) | L1D Miss Ld (B) | L1D Miss St (B) |
+|-----|---------------|--------------|-----------|-----------------|-----|-------------------|----------------|----------------|
+| 1 | 32.70 | 32.45 | 102.56 | 346.33 | 3.38 | 1,228 | 4.672 | 2.836 |
+
+Delta vs baseline: Wall **−0.2%**, CPU +0.7%, Cycles +0.6%, Instructions **−1.1%**,
+Branch Mispred **−0.6%**, L1D Miss Ld +0.8%, L1D Miss St **−1.0%**.
+
+**Conclusion**: with only the packed moveType change, performance matches the `170e566`
+baseline within noise. The −1.1% instruction count and −1.0% L1D store miss reductions
+are the expected signature of the halved struct size (16→8 bytes).
+
+### Current HEAD
+
+Code: `170e566` baseline + packed moveType (`int→short`, `static_assert`).
+All other experimental changes (hot/cold ThreadData, pos reorder, NEON intrinsics,
+QuickTricks CLZ, depth-local scratch, QuickTricks context-struct) have been reverted.
+Documentation, PMU tooling, and performance logs are preserved.
+
