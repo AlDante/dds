@@ -1659,9 +1659,9 @@ namespace alpha_mu_prototype
   /** @brief Enumerate history-derived worlds with constructor-local pruning enabled. */
   void ConstructHistoryDerivedWorldsRec( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const vector<WorldConstraint>& constructorConstraints, const int targetCounts[4], const int finalSeatCounts[4], int assignedCounts[4], ParsedWorld& current, const unsigned index, vector<ParsedWorld>& worlds);
   /** @brief Enumerate the raw assignment space without constructor-local pruning. */
-  void EnumerateHistoryDerivedWorldsRec( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const int targetCounts[4], int assignedCounts[4], ParsedWorld& current, const unsigned index, vector<ParsedWorld>& worlds);
+  void EnumerateHistoryDerivedWorldsRec( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const int targetCounts[4], int assignedCounts[4], ParsedWorld& current, const unsigned index, vector<ParsedWorld>& worlds, const unsigned worldCap);
   /** @brief Materialize all raw worlds implied by the visible seed and hidden cards. */
-  vector<ParsedWorld> EnumerateHistoryDerivedWorlds( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const int targetCounts[4], const ParsedWorld& visibleSeedWorld);
+  vector<ParsedWorld> EnumerateHistoryDerivedWorlds( const vector<int>& hiddenSeats, const vector<HiddenCardCandidate>& hiddenCards, const int targetCounts[4], const ParsedWorld& visibleSeedWorld, const unsigned worldCap = 0U);
   bool WorldMatchesConstructorLengthConstraints( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
   bool WorldMatchesConstructorHCPConstraints( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);
   bool WorldMatchesConstructorBalancedConstraints( const ParsedWorld& world, const vector<int>& hiddenSeats, const vector<WorldConstraint>& constraints);

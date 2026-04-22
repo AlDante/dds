@@ -1218,8 +1218,12 @@ void EnumerateHistoryDerivedWorldsRec(
     int assignedCounts[4],
     ParsedWorld& current,
     const unsigned index,
-    vector<ParsedWorld>& worlds)
+    vector<ParsedWorld>& worlds,
+    const unsigned worldCap)
   {
+    if (worldCap > 0U && worlds.size() >= worldCap)
+      return;
+
     if (index == hiddenCards.size())
     {
       for (unsigned i = 0; i < hiddenSeats.size(); i++)
@@ -1244,7 +1248,7 @@ void EnumerateHistoryDerivedWorldsRec(
       current.suits[seat][candidate.card.suit].push_back(candidate.card.rank);
       assignedCounts[seat]++;
       EnumerateHistoryDerivedWorldsRec(hiddenSeats, hiddenCards, targetCounts,
-        assignedCounts, current, index + 1U, worlds);
+        assignedCounts, current, index + 1U, worlds, worldCap);
       assignedCounts[seat]--;
       current.suits[seat][candidate.card.suit].erase(
         current.suits[seat][candidate.card.suit].size() - 1U, 1U);
@@ -1254,14 +1258,15 @@ vector<ParsedWorld> EnumerateHistoryDerivedWorlds(
     const vector<int>& hiddenSeats,
     const vector<HiddenCardCandidate>& hiddenCards,
     const int targetCounts[4],
-    const ParsedWorld& visibleSeedWorld)
+    const ParsedWorld& visibleSeedWorld,
+    const unsigned worldCap)
   {
     vector<ParsedWorld> worlds;
     ParsedWorld current(visibleSeedWorld);
     int assignedCounts[4];
     memset(assignedCounts, 0, sizeof(assignedCounts));
     EnumerateHistoryDerivedWorldsRec(hiddenSeats, hiddenCards, targetCounts,
-      assignedCounts, current, 0U, worlds);
+      assignedCounts, current, 0U, worlds, worldCap);
     SortConstructedWorlds(worlds);
     return worlds;
   }
@@ -1461,9 +1466,10 @@ HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction(
       explanation.constructorConstraints, targetCounts, finalSeatCounts);
 
     SortHiddenCardCandidates(prepared.hiddenCards);
+    const unsigned explanationCap = 10000U;
     const vector<ParsedWorld> rawWorlds = EnumerateHistoryDerivedWorlds(
       spec.hiddenSeats, prepared.hiddenCards, targetCounts,
-      prepared.visibleSeedWorld);
+      prepared.visibleSeedWorld, explanationCap);
     explanation.stats.rawAssignmentCount = static_cast<unsigned>(rawWorlds.size());
 
     vector<HiddenCardCandidate> ownershipHiddenCards = prepared.hiddenCards;
@@ -1472,7 +1478,7 @@ HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction(
     SortHiddenCardCandidates(ownershipHiddenCards);
     const vector<ParsedWorld> ownershipWorlds = EnumerateHistoryDerivedWorlds(
       spec.hiddenSeats, ownershipHiddenCards, targetCounts,
-      prepared.visibleSeedWorld);
+      prepared.visibleSeedWorld, explanationCap);
     explanation.stats.afterOwnershipCount = static_cast<unsigned>(ownershipWorlds.size());
 
     vector<HiddenCardCandidate> cardLocationHiddenCards = ownershipHiddenCards;
@@ -1481,7 +1487,7 @@ HistoryDerivedConstructionExplanation ExplainHistoryDerivedConstruction(
     SortHiddenCardCandidates(cardLocationHiddenCards);
     const vector<ParsedWorld> cardLocationWorlds = EnumerateHistoryDerivedWorlds(
       spec.hiddenSeats, cardLocationHiddenCards, targetCounts,
-      prepared.visibleSeedWorld);
+      prepared.visibleSeedWorld, explanationCap);
     explanation.stats.afterCardLocationCount =
       static_cast<unsigned>(cardLocationWorlds.size());
 
@@ -3171,24 +3177,52 @@ BridgeState MakeBridgeStateFromPartialInformation(
     const HistoryDerivedConstructionResult constructed =
       ConstructCandidateWorldsFromHistory(spec, info);
 
-
     vector<ParsedWorld> worlds = constructed.worlds;
 
     if (worlds.empty())
     {
-      // Fallback: use the full deal as a single-world state
       return MakeBridgeStateFromDDSDeal(fullDeal);
     }
 
-    // Accept all constructed worlds directly.  The worlds describe only
-    // the remaining cards after the play history, so the staged filtering
-    // in GeneratePossibleWorlds (which checks play-history consistency
-    // against full-deal worlds) does not apply here.
+    // Filter worlds by follow-suit evidence from the play history.
+    // If a defender discarded (played off-suit) at some point, they were
+    // void in the led suit from that point onward and cannot hold remaining
+    // cards in that suit.
+    //
+    // Build a void set: voidSuits[seat][suit] = true if the defender showed
+    // out of that suit at any point during play.
+    bool voidSuits[4][4];
+    memset(voidSuits, 0, sizeof(voidSuits));
+    for (unsigned i = 0; i < playedCards.size(); i++)
+    {
+      const PlayHistoryEvent& ev = playedCards[i];
+      if (ev.leadSuit >= 0 && ev.move.suit != ev.leadSuit)
+        voidSuits[ev.player][ev.leadSuit] = true;
+    }
+
     WorldMask possibleMask;
     possibleMask.count = static_cast<unsigned>(worlds.size());
-    possibleMask.bits = (worlds.size() >= 64)
-      ? ~0ULL
-      : (1ULL << worlds.size()) - 1ULL;
+    possibleMask.bits = 0ULL;
+    for (unsigned w = 0; w < worlds.size(); w++)
+    {
+      bool valid = true;
+      for (unsigned h = 0; h < spec.hiddenSeats.size() && valid; h++)
+      {
+        const int seat = spec.hiddenSeats[h];
+        for (int s = 0; s < 4 && valid; s++)
+        {
+          if (voidSuits[seat][s] && ! worlds[w].suits[seat][s].empty())
+            valid = false;
+        }
+      }
+      if (valid)
+        possibleMask.bits |= (1ULL << w);
+    }
+
+    if (possibleMask.PopCount() == 0)
+    {
+      return MakeBridgeStateFromDDSDeal(fullDeal);
+    }
 
     // Build the state
     BridgeState state;

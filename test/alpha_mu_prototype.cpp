@@ -177,6 +177,8 @@ int main(int argc, char ** argv)
 	  PrintPrototypeStatus("play history parse validation OK");
 	  TestPartialInformationWorldGeneration();
 	  PrintPrototypeStatus("partial-information world generation OK");
+	  TestFollowSuitNarrowingInPartialInformation();
+	  PrintPrototypeStatus("follow-suit narrowing in partial information OK");
 	  return 0;
 	}
   }

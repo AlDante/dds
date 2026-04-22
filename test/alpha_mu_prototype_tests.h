@@ -16,6 +16,8 @@ namespace alpha_mu_prototype
   void TestPartialInformationWorldGeneration();
   /** @brief Run play-history parse validation tests. */
   void TestParsePlayHistoryValidation();
+  /** @brief Run the follow-suit narrowing test for partial-information worlds. */
+  void TestFollowSuitNarrowingInPartialInformation();
 }
 
 #endif
