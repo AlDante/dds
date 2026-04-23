@@ -27,8 +27,12 @@
 using namespace std;
 
 
-#define NUM_PAGES_DEFAULT 15
-#define NUM_PAGES_MAXIMUM 25
+#ifndef NUM_PAGES_DEFAULT
+  #define NUM_PAGES_DEFAULT 15
+#endif
+#ifndef NUM_PAGES_MAXIMUM
+  #define NUM_PAGES_MAXIMUM 25
+#endif
 #define BLOCKS_PER_PAGE 1000
 #define DISTS_PER_ENTRY 32
 #define BLOCKS_PER_ENTRY 125

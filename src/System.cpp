@@ -847,10 +847,10 @@ string System::str(DDSInfo * info) const
   ss << left << setw(17) << "Memory max (MB)" <<
     setw(16) << right << sysMem_MB << "\n";
 
-  const string stm = to_string(THREADMEM_SMALL_DEF_MB) + "-" + 
-    to_string(THREADMEM_SMALL_MAX_MB) + " / " +
-    to_string(THREADMEM_LARGE_DEF_MB) + "-" +
-    to_string(THREADMEM_LARGE_MAX_MB);
+  const string stm = to_string(TTSmallDefMB()) + "-" +
+    to_string(TTSmallMaxMB()) + " / " +
+    to_string(TTLargeDefMB()) + "-" +
+    to_string(TTLargeMaxMB());
   ss << left << setw(17) << "Threads (MB)" <<
     setw(16) << right << stm << "\n";
 

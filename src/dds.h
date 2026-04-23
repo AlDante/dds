@@ -21,10 +21,9 @@
 #endif
 
 
-#define THREADMEM_SMALL_MAX_MB 30
-#define THREADMEM_SMALL_DEF_MB 20
-#define THREADMEM_LARGE_MAX_MB 160
-#define THREADMEM_LARGE_DEF_MB 95
+// Thread memory configuration moved to TTConfig.h
+// Override at compile time (-D flags) or runtime (env vars).
+#include "TTConfig.h"
 
 #define MAXNODE 1
 #define MINNODE 0

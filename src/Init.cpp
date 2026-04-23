@@ -125,31 +125,35 @@ void STDCALL SetResources(
   // in the small and large versions.
 
   int noOfThreads, noOfLargeThreads, noOfSmallThreads;
-  if (thrMax * THREADMEM_LARGE_MAX_MB <= memMaxMB)
+  const int smallMaxMB = TTSmallMaxMB();
+  const int largeMaxMB = TTLargeMaxMB();
+  const int smallDefMB = TTSmallDefMB();
+  const int largeDefMB = TTLargeDefMB();
+
+  if (thrMax * largeMaxMB <= memMaxMB)
   {
     // We have enough memory for the maximum number of large threads.
     noOfThreads = thrMax;
     noOfLargeThreads = thrMax;
     noOfSmallThreads = 0;
   }
-  else if (thrMax * THREADMEM_SMALL_MAX_MB > memMaxMB)
+  else if (thrMax * smallMaxMB > memMaxMB)
   {
     // We don't even have enough memory for only small threads.
     // We'll limit the number of threads.
     noOfThreads = static_cast<int>(memMaxMB / 
-      static_cast<double>(THREADMEM_SMALL_MAX_MB));
+      static_cast<double>(smallMaxMB));
     noOfLargeThreads = 0;
     noOfSmallThreads = noOfThreads;
   }
   else
   {
     // We'll have a mixture with as many large threads as possible.
-    const double d = static_cast<double>(
-          THREADMEM_LARGE_MAX_MB - THREADMEM_SMALL_MAX_MB);
+    const double d = static_cast<double>(largeMaxMB - smallMaxMB);
 
     noOfThreads = thrMax;
     noOfLargeThreads = static_cast<int>(
-      (memMaxMB - thrMax * THREADMEM_SMALL_MAX_MB) / d);
+      (memMaxMB - thrMax * smallMaxMB) / d);
     noOfSmallThreads = thrMax - noOfLargeThreads;
   }
 
@@ -158,8 +162,8 @@ void STDCALL SetResources(
     noOfThreads = 1;
     noOfLargeThreads = 0;
     noOfSmallThreads = 1;
-    if (memMaxMB < THREADMEM_SMALL_MAX_MB)
-      memMaxMB = THREADMEM_SMALL_MAX_MB;
+    if (memMaxMB < smallMaxMB)
+      memMaxMB = smallMaxMB;
   }
 
   sysdep.RegisterParams(noOfThreads, memMaxMB);
@@ -170,10 +174,10 @@ void STDCALL SetResources(
   memory.Resize(0, DDS_TT_SMALL, 0, 0);
   if (noOfLargeThreads > 0)
     memory.Resize(static_cast<unsigned>(noOfLargeThreads),
-      DDS_TT_LARGE, THREADMEM_LARGE_DEF_MB, THREADMEM_LARGE_MAX_MB);
+      DDS_TT_LARGE, largeDefMB, largeMaxMB);
   if (noOfSmallThreads > 0)
     memory.Resize(static_cast<unsigned>(noOfThreads),
-      DDS_TT_SMALL, THREADMEM_SMALL_DEF_MB, THREADMEM_SMALL_MAX_MB);
+      DDS_TT_SMALL, smallDefMB, smallMaxMB);
 
   threadMgr.Reset(noOfThreads);
 
