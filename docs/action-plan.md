@@ -2,24 +2,39 @@
 
 ## Purpose
 
-This document turns the staged roadmap in `implementation-plan.md` into the next concrete execution cycle.
+This document turns the staged roadmap in `implementation-plan.md` and
+`alpha-mu-roadmap.md` into the **next concrete execution cycle** toward a
+complete alpha-mu engine for post-mortem declarer-play evaluation.
 
-After reading the papers, the practical conclusion is:
-
-- the DDS root-policy work is useful groundwork,
-- but the next real alpha-mu implementation step is to build a **paper-faithful prototype around DDS**, not just to keep tuning `src/SolverIF.cpp`.
+The immediate aim is not to demonstrate paper semantics in isolation. It is to
+deliver the next vertical slice of a real decision-point evaluator that can take
+an actual hand history, reconstruct a plausible information state, and recommend
+a move under uncertainty.
 
 ## Immediate objectives
 
 1. Preserve the current DDS-side benchmarked baseline.
-2. Define a paper-derived alpha-mu test and benchmark set.
-3. Implement a minimal alpha-mu prototype with correct search semantics.
-4. Add only the first paper-level cuts before attempting further optimization.
-5. Keep DDS-only root-policy tweaks as a secondary track.
+2. Make the information state significantly more realistic.
+3. Deliver a stable single-decision post-mortem alpha-mu analysis path.
+4. Start extracting durable engine modules from the current monolithic
+   implementation.
+5. Add the instrumentation needed to judge recommendation quality and runtime
+   cost separately.
 
-## Step 1 — freeze the DDS support baseline
+## Deliverable for this cycle
 
-Keep the current DDS-side support workflow available and reproducible:
+At the end of this cycle, a user should be able to analyze a single declarer
+decision point from a real hand and receive:
+
+- the alpha-mu recommended move,
+- alternative candidate moves,
+- the surviving world summary,
+- an explanation of why worlds were admitted or rejected,
+- and a comparison point against DDS and the actual played card.
+
+## Workstream 1 — preserve and measure the DDS baseline
+
+Keep the DDS support workflow available and reproducible:
 
 - `python3 test/alpha_mu_benchmark.py`
 - `test/build/regression_api`
@@ -31,256 +46,205 @@ Record:
 - pass/fail status,
 - wall-clock time,
 - probe-count summaries by context,
-- whether repeated solves show stable exact-score behavior.
+- and whether repeated solves remain stable.
 
-This step is not the new algorithmic target. It is the baseline we should keep so later alpha-mu work can still rely on a measurable DDS oracle.
+This is not the main algorithmic target, but it remains the performance and
+correctness baseline for DDS as the leaf oracle.
 
-## Step 2 — define the paper-derived alpha-mu test set
+## Workstream 2 — richer information-state construction
 
-Before writing the prototype, lock down the test material that reflects the two papers.
+### Goal
 
-This repository now includes the first curated version of that material in `docs/alpha-mu-test-set.md` and the corresponding hand files under `hands/alpha_mu_*.txt`.
+Make alpha-mu's world model reflect what declarer could realistically infer at
+the table.
 
-The first set should include:
+### Tasks
 
-1. **paper-motivated hand families**
-   - strategy-fusion examples,
-   - non-locality examples,
-   - discovery-play style examples,
-   - “rare bad event” examples.
-2. **repository-controlled workloads**
-   - the 3 play-analysis example hands from `examples/hands.cpp`,
-   - a small repeat-solve family from `hands/list10.txt`,
-   - control boards from `hands/thomas1.txt` and `hands/thomas2.txt`.
-3. **success metrics**
-   - correctness of front operations,
-   - stability of chosen move,
-   - number of worlds,
-   - root depth / Max-move horizon,
-   - elapsed time,
-   - alpha-mu cut activity once cuts are added.
+1. **Formalize the information-state contract**
+   - document the intended meaning of bidding constraints, play-history
+     constraints, known cards, cannot-hold facts, follow-suit implications,
+     suit-length ranges, HCP ranges, hand types, and partnership ranges,
+   - decide which inferences are hard constraints versus soft plausibility
+     inputs.
 
-## Step 3 — implement the minimum viable alpha-mu prototype
+2. **Extend bidding-derived inference**
+   - broaden the current scoped auction-side model,
+   - add richer seat-level and partnership-level range construction where the
+     auction meaning is clear enough to support deterministic regression cases.
 
-Do this as a **new component**, not as a rewrite of `src/ABsearch.cpp`.
+3. **Extend play-derived inference**
+   - preserve current follow-suit legality,
+   - add richer history-derived narrowing from longer sequences,
+   - add regression cases where later discard/play evidence materially narrows
+     the world pool.
 
-Recommended first scope:
+4. **Improve history-derived world construction**
+   - support longer and larger ambiguous defender pools,
+   - retain deterministic capping and explanation traces,
+   - keep constructor-local pruning measurable.
 
-- a fixed small number of worlds,
-- a bounded number of Max moves,
-- DDS used as the leaf evaluator,
-- single-threaded,
-- correctness-first data structures.
+5. **Introduce world plausibility hooks**
+   - add a first explicit notion of world ranking or weighting,
+   - keep the first version simple and regression-backed,
+   - do not yet let weighting alter core front semantics silently; expose it in
+     reporting first.
 
-The first implementation pieces should be:
+### Success tests
 
-1. `WorldMask` or equivalent valid-world tracking,
-2. `OutcomeVector`,
-3. `ParetoFront`,
-4. dominance tests,
-5. Max-node front union and reduction,
-6. Min-node front product/min and reduction,
-7. root iterative deepening in number of Max moves,
-8. DDS leaf evaluation adapter.
+- new regressions starting from real-looking partial-information states rather
+  than mostly curated toy pools,
+- explanation traces for why worlds survive or are rejected,
+- reproducible world construction on repeated runs,
+- and at least one board where richer bidding/play information narrows the
+  world set in a way that changes the reported recommendation.
 
-The first minimal version of this now exists in `test/alpha_mu_prototype.cpp` with a dedicated runner target in `test/Makefiles/Makefile_Mac_clang`.
+## Workstream 3 — decision-point post-mortem runner
 
-## Step 4 — add only the first paper-level cuts
+### Goal
 
-The prototype should first support:
+Provide a stable alpha-mu entry point for analyzing a single real decision.
 
-- **early cut**,
-- **root cut**.
+### Tasks
 
-Do **not** start with the full optimization set from the second paper.
+1. **Define the analysis entry point**
+   Support input of:
+   - deal,
+   - declarer/leader/contract,
+   - bidding-derived information,
+   - play prefix,
+   - search depth / Max-move horizon,
+   - world-count budget,
+   - deterministic seed.
 
-Those later optimizations depend on already having correct:
+2. **Add a decision-point runner mode**
+   The runner should:
+   - stop at a declarer turn,
+   - build the information state,
+   - generate and filter worlds,
+   - search with alpha-mu,
+   - and print the chosen move plus supporting information.
 
-- front semantics,
-- useful-world tracking,
-- recursive control flow.
+3. **Add comparison reporting**
+   For the same decision point, report:
+   - actual played move,
+   - alpha-mu recommended move,
+   - DDS omniscient move where appropriate,
+   - and why alpha-mu differs if it does.
 
-## Step 5 — verify the prototype before optimizing it
+4. **Add analyst-grade output fields**
+   Include:
+   - surviving world count,
+   - top candidate moves,
+   - root front summary,
+   - cut activity,
+   - DDS leaf count,
+   - time split between world generation and search.
 
-The prototype should be considered valid only if it can:
+### Success tests
 
-- pass deterministic front-operation checks,
-- behave correctly on the small paper-derived examples,
-- produce stable results on repeated runs,
-- use DDS only as a leaf evaluator rather than duplicating DDS semantics internally.
+- one stable command or API path that analyzes a real board at one decision
+  point,
+- repeated runs are deterministic under fixed seed and configuration,
+- output is useful without reading the implementation.
 
-## Step 6 — add the optimization-paper features in order
+## Workstream 4 — deeper practical continuation coverage
 
-After the prototype is correct, the next implementation steps should be:
+### Goal
 
-1. maintaining useful worlds,
-2. world cuts,
-3. cut on win,
-4. empty-entry handling for interior fronts,
-5. deep alpha cuts,
-6. leaf parallelization,
-7. only then low-level SIMD experiments if Pareto filtering becomes a measured bottleneck.
+Ensure the decision-point evaluator is supported by meaningful continuation
+search rather than only narrow showcase trees.
 
-The first of these optimization-paper steps is now present in the prototype: useful-world maintenance.
+### Tasks
 
-The second optimization-paper step is also now present in the prototype: world cuts.
+1. add more realistic multi-world continuation regressions,
+2. extend mixed merge/split bridge cases across more tricks,
+3. verify partial-trick to next-trick transitions under deeper search,
+4. strengthen root summaries for move/front/world/cut visibility,
+5. continue to keep DDS only as the leaf oracle.
 
-The third optimization-paper step is also now present in the prototype: cut on win.
+### Success tests
 
-The fourth optimization-paper step is also now present in the prototype: empty-entry handling for sparse interior fronts.
+- more than two surviving worlds in practical bridge-backed continuation tests,
+- deeper searched prefixes than the current showcase depth,
+- stable move selection across repeated runs.
 
-The fifth optimization-paper step is also now present in the prototype: deep alpha cuts against earlier Max ancestors.
+## Workstream 5 — extract durable modules while growing features
 
-The sixth optimization-paper step is also now present in the prototype: leaf-parallelized DDS leaf evaluation.
+### Goal
 
-The prototype also now includes optimistic completion of impossible worlds for cross-state comparison, following the later discussion in the optimization paper.
+Stop accumulating all alpha-mu growth in one monolithic implementation file.
 
-The prototype also now includes a first possible-world generator from simple bidding-style and play-style constraints over a candidate world pool, including a first scoped auction-side contract where a separate analysis component can supply HCP ranges, hand types, and minimum/maximum suit lengths, plus first partnership suit-length range and partnership HCP-range bidding constraints.
+### Tasks
 
-The prototype also now includes an explicit follow-suit-implication stage derived from discard history, plus per-world explanations for why candidate worlds are accepted or rejected during generation.
+1. extract information-state and world-construction code into a dedicated unit,
+2. extract Pareto-front and outcome-vector logic into a dedicated unit,
+3. extract bridge-state transition helpers into a dedicated unit,
+4. keep the runner and tests working while code moves,
+5. keep alpha-mu outside the core DDS recursion.
 
-The prototype also now includes a first seed-based hidden-seat world-construction step from partial-information states, including partially specified visible-hand seeds whose missing hidden cards are inferred from the full-deck complement, plus a first moderate-size ambiguous two-defender visible-seed pool with deterministic downselection after staged filtering and a longer multi-trick visible-seed history whose broader pool is narrowed by play-derived follow-suit evidence before sampling, with constructor-local explicit known-card and bidding card-location pruning plus suit-length, hand-type, and partnership suit-length range pruning before the later full filtering pipeline.
+### Success tests
 
-The prototype also now includes constructor-local accounting and explanation traces for that seed-based hidden-seat construction, including stable counts before ownership pinning, after ownership pinning, after constructor-local card-location pruning, and separately after constructor-local length, HCP, and balanced narrowing.
+- no regression failures after extraction,
+- cleaner ownership boundaries,
+- easier addition of new world-generation and reporting features.
 
-The prototype also now includes constructor-local MinHCP and MaxHCP pruning for those seed-based hidden-seat candidate worlds before the later full bidding filter, along with a first constructor-local partnership HCP-range pruning path when one partner is hidden and the other remains visible.
+## Workstream 6 — instrumentation for the next optimization cycle
 
-The prototype also now includes conservative constructor-local balanced-shape pruning for full hidden hands, while still deferring incomplete toy hidden-hand cases to the later full bidding filter.
+### Goal
 
-The prototype also now includes a first bridge move generator over those possible worlds, including legal-move union and world elimination after a play.
+Collect the evidence needed for later performance work.
 
-The prototype also now includes a first one-trick bridge search controller over those generated move trees, including trick completion, winner advancement, and bridge-specific backup of sparse outcome vectors.
+### Tasks
 
-The prototype also now includes a first Pareto-front transposition table for exact repeated-subtree reuse in the toy alpha-mu search.
+Measure and report at least:
 
-## Step 7 — keep DDS-only work on a separate branch of the plan
+- candidate world count before and after constructor-local pruning,
+- surviving world count after each staged filter,
+- root front size,
+- dominance reduction counts,
+- TT probes/hits/stores,
+- cut counts by type,
+- DDS leaf calls,
+- elapsed time split by world generation, search, and DDS leaves.
 
-DDS-side follow-up work is still reasonable, but it is now a separate support track.
+### Success tests
 
-Good candidates there remain:
+- the decision-point runner reports these metrics,
+- benchmark logs can distinguish world-generation cost from search cost.
 
-- a conditional refinement of the `SolveSameBoard()` guess bias,
-- an exact-hint fast path in `AnalyseLaterBoard()`,
-- cleanup of the `solutions == 3` root duplication.
-
-These should not displace the actual alpha-mu prototype work.
-
-## Explicit non-goals for the next cycle
+## Explicit non-goals for this cycle
 
 These should stay out of scope for now:
 
-- rewriting `ABsearch*()` to impersonate alpha-mu,
-- mixing paper-level alpha-mu semantics directly into DDS before a prototype exists,
-- low-level SIMD work before Pareto-front costs are measured,
-- broad performance tuning unrelated to a confirmed bottleneck.
+- redesigning `ABsearch*()` to impersonate alpha-mu,
+- pushing paper-level alpha-mu semantics into DDS recursion,
+- broad low-level SIMD or Apple-Silicon tuning before alpha-mu bottlenecks are
+  measured,
+- forcing immediate public API stabilization before the decision-point runner is
+  proven useful,
+- treating set membership alone as sufficient if weighting/ranking turns out to
+  be necessary for recommendation quality.
 
 ## Practical summary
 
 The next cycle should be:
 
 1. preserve the DDS baseline,
-2. lock the paper-derived test set,
-3. implement the minimal alpha-mu prototype,
-4. add early/root cut,
-5. verify correctness,
-6. add optimization-paper features one at a time,
-7. keep DDS root-policy tuning as a secondary support stream.
+2. strengthen realistic information-state construction,
+3. deliver a single-decision post-mortem alpha-mu runner,
+4. broaden practical continuation coverage,
+5. extract durable modules while growing the feature set,
+6. instrument the engine for the next optimization cycle.
 
-## Next concrete execution cycles from the current prototype
+## Definition of done for this cycle
 
-The prototype now already covers the minimum semantic core plus the first optimization-paper features.
+This cycle is done when all of the following are true:
 
-That means the next execution cycles should no longer be framed as “build the first prototype”, but as “turn the existing prototype into a complete alpha-mu implementation”.
-
-### Cycle A — richer world generation
-
-Implement the next realistic-world step:
-
-1. represent bidding constraints, play-history constraints, known cards, and follow-suit implications explicitly,
-2. extend world generation from simple filtered candidate pools to realistic history-derived worlds,
-3. make world sampling reproducible and measurable,
-4. add regression cases that explain why each world is accepted or rejected,
-5. extend post-lead construction from tiny East/West card swaps to longer post-lead histories with richer defender-side ambiguity,
-6. grow from narrow hidden-card pools to moderately larger ambiguous defender pools before attempting full remaining East/West construction,
-7. treat capped or sampled full remaining East/West construction as a later Stage-1 candidate once the smaller-history construction path is benchmark-backed.
-
-### Cycle B — larger bridge continuations
-
-Extend the bridge search controller from the current small continuation model to larger realistic continuations:
-
-1. support more than two surviving worlds,
-2. support multiple sparse-front shapes after continuation,
-3. support mixed merge/split behavior across multiple tricks,
-4. verify correct empty-trick and partial-trick transitions at larger horizons,
-5. report root move, front, and useful-world counts,
-6. prefer longer post-lead continuation families before attempting much broader world counts at the same search horizon.
-
-### Cycle C — complete the missing paper motifs
-
-Add controlled fixtures for the motifs not yet directly represented in repository-format material:
-
-1. strategy fusion,
-2. non-locality,
-3. discovery-play / information gain,
-4. rare-bad-event avoidance.
-
-For each fixture, record:
-
-- intended world family,
-- expected root property or move preference,
-- required horizon,
-- whether the case is synthetic or file-backed.
-
-### Cycle D — refactor the prototype into durable units
-
-Before further growth, split the prototype into clearer pieces for:
-
-1. world/state representation,
-2. Pareto-front operations,
-3. bridge-state transitions,
-4. DDS leaf adaptation,
-5. search control,
-6. fixture definition and runner logic.
-
-Keep the alpha-mu code outside the core DDS recursion while doing this.
-
-### Cycle E — instrument alpha-mu for measured optimization
-
-Add benchmark accounting for:
-
-- world generation cost,
-- world-construction candidate counts before and after constructor-local pruning,
-- front sizes and dominance reductions,
-- TT hit/miss counts,
-- cut counts by type,
-- DDS leaf-call counts,
-- elapsed time split by stage,
-- and checkpoint output for long-running timing jobs so partial progress survives interrupted runs.
-
-Possible later optimization candidates after those measurements include bridge-state transposition reuse for the continuation search and, if that proves worthwhile, Zobrist-style state keying for the bridge alpha-mu state.
-
-Do this before adding further performance work.
-
-### Cycle F — graduate from prototype to complete engine
-
-Define the point where alpha-mu stops being only a prototype runner and becomes a complete repository component:
-
-1. a stable alpha-mu entry point,
-2. configurable world count / horizon / seed,
-3. reproducible imperfect-information searches,
-4. documented inputs, outputs, and limits,
-5. maintained regression/benchmark coverage.
-
-## Practical definition of done for alpha-mu
-
-Alpha-mu should only be treated as complete in this repository when all of the following are true:
-
-1. realistic world generation from meaningful histories exists,
-2. bridge continuation search extends well beyond the current showcase depth,
-3. paper-motif fixtures are covered directly,
-4. root reporting includes move/front/cut information,
-5. performance instrumentation separates world generation, search, and DDS leaf cost,
-6. the implementation is organized into durable components,
-7. the engine is runnable reproducibly as a first-class repository-supported alpha-mu searcher,
-8. DDS baseline behavior remains unchanged and benchmark-backed.
+1. alpha-mu can analyze at least one real declarer decision point end to end,
+2. the world set is derived from richer bidding/play information than the
+   current showcase baseline,
+3. the runner reports recommendation, alternatives, world summary, and timing,
+4. the implementation is measurably more modular than at the start of the
+   cycle,
+5. DDS baseline checks remain green and benchmark-backed.
 

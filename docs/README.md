@@ -52,11 +52,11 @@ The generated site includes:
 - `data-structures.md` — important internal and public data structures
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
 - `alpha-mu-multicore-plan.md` — staged plan for multicore alpha-mu implementation and regression validation
-- `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from prototype to full alpha-mu engine
+- `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from the current engine-incubation state to a full post-mortem alpha-mu evaluator
 - `alpha-mu-test-set.md` — paper-derived alpha-mu test families and hand sets
 - `profiling.md` — profiling build targets, Instruments workflow, and hotspot checklist
 - `implementation-plan.md` — staged implementation roadmap
-- `action-plan.md` — concrete next-cycle execution checklist
+- `action-plan.md` — concrete next-cycle execution checklist for the next engine-building iteration
 - `performance.md` — historical performance notes and the standardized post-change benchmark workflow
 - `performance-log.md` — append-only record of standardized benchmark runs
 - `legacy-docs.md` — guide to the historical documentation in `../doc/`
