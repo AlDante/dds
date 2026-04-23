@@ -1982,6 +1982,30 @@ ParetoFront MakeBridgeDDSLeafFront(
     if (allFinished)
       return MakeBridgeTerminalFront(state);
 
+    // Validate equal card counts before calling DDS
+    for (unsigned i = 0; i < active.size(); i++)
+    {
+      const unsigned wi = active[i];
+      unsigned seatCounts[4];
+      for (int s = 0; s < 4; s++)
+        seatCounts[s] = WorldSeatCardCount(state.worlds[wi], s);
+      const unsigned expected = seatCounts[0];
+      for (int s = 1; s < 4; s++)
+      {
+        if (seatCounts[s] != expected)
+        {
+          fprintf(stderr,
+            "DEBUG: unbalanced world %u at DDS leaf: N=%u E=%u S=%u W=%u "
+            "trickSize=%u playerToMove=%d maxSide=%d maxTricksWon=%d\n",
+            wi, seatCounts[0], seatCounts[1], seatCounts[2], seatCounts[3],
+            static_cast<unsigned>(state.currentTrick.size()),
+            state.playerToMove, state.maxSide, state.maxTricksWon);
+          fprintf(stderr, "  PBN: %s\n",
+            SerializePBNWorld(state.worlds[wi]).c_str());
+        }
+      }
+    }
+
     ParetoFront front(state.possibleWorlds.count);
     OutcomeVector vec(state.possibleWorlds.count);
     vec.valid = state.possibleWorlds;
@@ -3377,18 +3401,23 @@ HistoryDerivedWorldSpec BuildWorldSpecFromDeal(
       }
     }
 
-    // Distribute hidden cards evenly across hidden seats in seedWorld.
-    // The constructor will strip them out and try all valid assignments.
-    const unsigned cardsPerDefender =
-      static_cast<unsigned>(hiddenPool.size()) /
-      static_cast<unsigned>(spec.hiddenSeats.size());
+    // Distribute hidden cards across hidden seats in seedWorld according to
+    // each defender's actual remaining count (13 minus cards they played).
+    // This matters when the play prefix ends mid-trick: the hidden seats may
+    // legitimately have different remaining counts at construction time, and we
+    // must preserve those exact counts before later history replay narrows the
+    // candidate worlds.
+    int cardsPlayedBySeat[4] = {0, 0, 0, 0};
+    for (unsigned i = 0; i < playedCards.size(); i++)
+      cardsPlayedBySeat[playedCards[i].player]++;
+
     unsigned idx = 0;
     for (unsigned h = 0; h < spec.hiddenSeats.size(); h++)
     {
       const int seat = spec.hiddenSeats[h];
-      const unsigned limit = (h + 1 < spec.hiddenSeats.size())
-        ? cardsPerDefender : static_cast<unsigned>(hiddenPool.size()) - idx;
-      for (unsigned c = 0; c < limit && idx < hiddenPool.size(); c++, idx++)
+      const unsigned remaining = static_cast<unsigned>(
+        13 - cardsPlayedBySeat[seat]);
+      for (unsigned c = 0; c < remaining && idx < hiddenPool.size(); c++, idx++)
         seedWorld.suits[seat][hiddenPool[idx].suit] += hiddenPool[idx].rank;
     }
     spec.seedWorld = seedWorld;
@@ -3451,6 +3480,38 @@ BridgeInformationState BuildInformationStateFromPlay(
     info.samplingSeed = 42;
     return info;
   }
+  // `WorldMask` is backed by a single 64-bit word, so oversized constructor
+  // pools must be compacted before they become a BridgeState. Use the same
+  // canonical sort-and-offset sampling rule as the world-generation pipeline so
+  // test expectations and debugging remain reproducible.
+  static vector<unsigned> SelectDeterministicWorldIndices(
+    const vector<ParsedWorld>& worlds,
+    const vector<unsigned>& candidates,
+    const unsigned limit,
+    const unsigned samplingSeed)
+  {
+    if (limit == 0 || candidates.size() <= limit)
+      return candidates;
+
+    vector<unsigned> ordered(candidates);
+    sort(ordered.begin(), ordered.end(),
+      [&](const unsigned left, const unsigned right)
+      {
+        const string leftKey = SerializePBNWorld(worlds[left]);
+        const string rightKey = SerializePBNWorld(worlds[right]);
+        if (leftKey != rightKey)
+          return leftKey < rightKey;
+        return left < right;
+      });
+
+    vector<unsigned> selected;
+    const unsigned offset = samplingSeed % static_cast<unsigned>(ordered.size());
+    for (unsigned i = 0; i < limit; i++)
+      selected.push_back(ordered[(offset + i) % ordered.size()]);
+
+    sort(selected.begin(), selected.end());
+    return selected;
+  }
 BridgeState MakeBridgeStateFromPartialInformation(
     const dealPBN& fullDeal,
     const int declarerSeat,
@@ -3488,9 +3549,7 @@ BridgeState MakeBridgeStateFromPartialInformation(
         voidSuits[ev.player][ev.leadSuit] = true;
     }
 
-    WorldMask possibleMask;
-    possibleMask.count = static_cast<unsigned>(worlds.size());
-    possibleMask.bits = 0ULL;
+    vector<unsigned> survivingIndices;
     for (unsigned w = 0; w < worlds.size(); w++)
     {
       bool valid = true;
@@ -3504,13 +3563,36 @@ BridgeState MakeBridgeStateFromPartialInformation(
         }
       }
       if (valid)
-        possibleMask.bits |= (1ULL << w);
+        survivingIndices.push_back(w);
     }
 
-    if (possibleMask.PopCount() == 0)
+    if (survivingIndices.empty())
     {
       return MakeBridgeStateFromDDSDeal(fullDeal);
     }
+
+    const unsigned worldLimit =
+      min(64U, (maxWorlds == 0 ? 64U : maxWorlds));
+
+    // Compact oversized candidate sets before wrapping them in WorldMask. This
+    // avoids aliasing multiple constructor indices onto the same 64-bit mask bit
+    // and keeps later DDS leaves on legal equal-hand-count worlds.
+    if (worlds.size() > 64 || survivingIndices.size() > worldLimit)
+    {
+      const vector<unsigned> selected = SelectDeterministicWorldIndices(
+        worlds, survivingIndices, worldLimit, info.samplingSeed);
+      vector<ParsedWorld> compacted;
+      compacted.reserve(selected.size());
+      for (unsigned i = 0; i < selected.size(); i++)
+        compacted.push_back(worlds[selected[i]]);
+      worlds.swap(compacted);
+    }
+
+    WorldMask possibleMask;
+    possibleMask.count = static_cast<unsigned>(worlds.size());
+    possibleMask.bits = 0ULL;
+    for (unsigned w = 0; w < worlds.size(); w++)
+      possibleMask.bits |= (1ULL << w);
 
     // Build the state
     BridgeState state;

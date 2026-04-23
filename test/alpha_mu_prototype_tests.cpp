@@ -3148,6 +3148,107 @@ namespace alpha_mu_prototype
       "at least one surviving world should have 3 cards per hidden defender");
   }
 
+
+  static void TestBuildWorldSpecTracksUnevenSeatCounts()
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;
+    deal.first = 0;
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 34;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5");
+
+    const vector<PlayHistoryEvent> history =
+      ParsePBNPlayHistory(play, deal.first, deal.trump);
+    Check(history.size() == 34,
+      "uneven-prefix fixture should parse 34 play events");
+
+    int playedBySeat[4] = {0, 0, 0, 0};
+    for (unsigned i = 0; i < history.size(); i++)
+      playedBySeat[history[i].player]++;
+
+    const HistoryDerivedWorldSpec spec =
+      BuildWorldSpecFromDeal(deal, SEAT_SOUTH, history);
+
+    Check(spec.hiddenSeats.size() == 2,
+      "seed-world construction should track both hidden defenders");
+    for (int seat = 0; seat < 4; seat++)
+    {
+      ostringstream msg;
+      msg << "seed-world construction should leave "
+          << SeatName(seat)
+          << " with exactly 13 minus that seat's parsed played-card count";
+      Check(WorldSeatCardCount(spec.seedWorld, seat) ==
+            static_cast<unsigned>(13 - playedBySeat[seat]),
+        msg.str());
+    }
+    Check(WorldCardCount(spec.seedWorld) == 18,
+      "seed-world construction should preserve the 18 remaining unseen cards after 34 cards of play");
+  }
+
+
+  static void TestPartialInformationUnevenCurrentTrickCounts()
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;
+    deal.first = 0;
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 34;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5");
+
+    const vector<PlayHistoryEvent> history =
+      ParsePBNPlayHistory(play, deal.first, deal.trump);
+    const BridgeState state = MakeBridgeStateFromPartialInformation(
+      deal, SEAT_SOUTH, history, 50);
+    int playedBySeat[4] = {0, 0, 0, 0};
+    for (unsigned i = 0; i < history.size(); i++)
+      playedBySeat[history[i].player]++;
+
+    Check(state.currentTrick.size() == 2,
+      "partial-information state should preserve the two cards already played into the current trick");
+    Check(state.trickLeader == history[32].player,
+      "partial-information state should preserve the parsed leader of the current unfinished trick");
+    Check(state.playerToMove == (state.trickLeader + 2) % 4,
+      "partial-information state should advance the player-to-move by the two cards already played into the current trick");
+    Check(! state.worlds.empty(),
+      "partial-information state should construct candidate worlds for the uneven current-trick fixture");
+    Check(state.possibleWorlds.PopCount() > 0,
+      "partial-information state should keep at least one surviving world for the uneven current-trick fixture");
+
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      for (int seat = 0; seat < 4; seat++)
+      {
+        ostringstream msg;
+        msg << "every constructed world should leave "
+            << SeatName(seat)
+            << " with exactly 13 minus that seat's parsed played-card count in the uneven current-trick fixture";
+        Check(WorldSeatCardCount(state.worlds[i], seat) ==
+              static_cast<unsigned>(13 - playedBySeat[seat]),
+          msg.str());
+      }
+      Check(WorldCardCount(state.worlds[i]) == 18,
+        "every constructed world should preserve the 18 cards still held in hand during the uneven current trick");
+    }
+
+    const int tricksRemaining = static_cast<int>(
+      (WorldCardCount(state.worlds[0]) + state.currentTrick.size()) / 4U);
+    Check(tricksRemaining == 5,
+      "the uneven current-trick fixture should still have 5 full tricks remaining once the two current-trick cards are counted back in");
+  }
+
   /**
    * Test that follow-suit evidence from the play history reduces the number
    * of candidate worlds.  Uses a deal where a defender shows out early.
@@ -3417,8 +3518,8 @@ namespace alpha_mu_prototype
 
   void TestIterativeDeepeningDepth3()
   {
-    // Board 1 from alpha_mu_play.txt with a 6-trick (24-card) prefix,
-    // leaving 7 cards per hand — enough for depth-3 search.
+    // Board 1 from alpha_mu_play.txt with an 8-trick (32-card) prefix,
+    // leaving 5 cards per hand and therefore 5 remaining tricks.
     dealPBN deal;
     memset(&deal, 0, sizeof(deal));
     deal.trump = 0;  // spades
@@ -3428,22 +3529,50 @@ namespace alpha_mu_prototype
 
     const int declarerSeat = SEAT_SOUTH;
 
-    // Use the same 10-trick (40-card) prefix as the end-to-end test.
-    // This leaves 3 cards per hand = 3 remaining tricks.
-    // Depth 3 searches all remaining tricks end-to-end.
+    // Use first 8 tricks = 32 cards, leaving 5 cards per hand.
+    // This tests deeper search than the 10-trick (3-card) prefix.
     playTracePBN play;
     memset(&play, 0, sizeof(play));
-    play.number = 40;
+    play.number = 32;
     strcpy(play.cards,
-      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5");
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6");
+
+    const vector<PlayHistoryEvent> history =
+      ParsePBNPlayHistory(play, deal.first, deal.trump);
+    Check(history.size() == 32,
+      "depth-3 fixture should parse the 32-card eight-trick prefix exactly");
+
+    const BridgeState state = MakeBridgeStateFromPartialInformation(
+      deal, declarerSeat, history, 1);
+    Check(state.currentTrick.empty(),
+      "depth-3 fixture should end on a trick boundary before search starts");
+    Check(state.worlds.size() == 1,
+      "depth-3 fixture should compact the oversized 252-world candidate pool to the one requested sampled world before search");
+    Check(state.possibleWorlds == WorldMask(1, 0x1ULL),
+      "depth-3 fixture should keep the compacted one-world bridge state fully active before search");
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      Check(WorldSeatCardCount(state.worlds[i], SEAT_NORTH) == 5 &&
+            WorldSeatCardCount(state.worlds[i], SEAT_EAST) == 5 &&
+            WorldSeatCardCount(state.worlds[i], SEAT_SOUTH) == 5 &&
+            WorldSeatCardCount(state.worlds[i], SEAT_WEST) == 5,
+        "depth-3 fixture should leave 5 cards in every hand after the eight-trick prefix");
+      Check(WorldCardCount(state.worlds[i]) == 20,
+        "depth-3 fixture should leave 20 cards in hand across the four seats after the eight-trick prefix");
+    }
+
+    const int tricksRemaining = static_cast<int>(
+      WorldCardCount(state.worlds[0]) / 4U);
+    Check(tricksRemaining == 5,
+      "depth-3 fixture should leave 5 full tricks remaining after the eight-trick prefix");
 
     const AlphaMuSolveResult result = SolveAlphaMu(
-      deal, declarerSeat, play, 3, 10, 60.0);
+      deal, declarerSeat, play, 3, 1, 60.0);
 
     Check(result.valid,
       "depth-3 iterative deepening should produce a valid result");
-    Check(result.depthSearched >= 1,
-      "depth-3 iterative deepening should complete at least depth 1");
+    Check(result.depthSearched == 3,
+      "depth-3 iterative deepening should complete all three requested trick depths on the one-world five-card fixture");
     Check(result.rootFront.vectors.size() > 0,
       "depth-3 iterative deepening should produce a non-empty front");
     Check(result.chosenMove.suit >= 0 && result.chosenMove.suit <= 3,
@@ -3472,6 +3601,8 @@ namespace alpha_mu_prototype
       {"Pareto-front TT OK", &TestParetoFrontTT},
       {"possible-world generation OK", &TestPossibleWorldGeneration},
       {"play-history filtering OK", &TestPlayHistoryFiltering},
+      {"uneven seed-world seat counts OK", &TestBuildWorldSpecTracksUnevenSeatCounts},
+      {"uneven current-trick world counts OK", &TestPartialInformationUnevenCurrentTrickCounts},
       {"follow-suit implications and world explanations OK", &TestFollowSuitImplicationsAndWorldExplanation},
       {"history-derived candidate world construction OK", &TestHistoryDerivedCandidateWorldConstruction},
       {"history-derived known-card construction OK", &TestHistoryDerivedConstructionUsesKnownCardLocation},

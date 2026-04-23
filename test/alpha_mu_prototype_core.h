@@ -47,6 +47,11 @@ namespace alpha_mu_prototype
    * worlds: worlds still consistent with the history, worlds still useful at a
    * Min node, worlds reachable by a child move, and so on. This small helper is
    * the core set representation used throughout the prototype.
+   *
+   * Important invariant: the backing storage is a single 64-bit word, so any
+   * search state that uses `WorldMask` must first be compacted to at most 64
+   * candidate worlds. Larger constructor pools are allowed transiently, but must
+   * be deterministically downselected before they are wrapped in a `BridgeState`.
    */
   struct WorldMask
   {
@@ -1703,6 +1708,10 @@ namespace alpha_mu_prototype
    *
    * The visible hands are declarer and dummy; the hidden hands are LHO and RHO.
    * Cards already played are removed from the visible seed world.
+   * Hidden-seat placeholder cards are then distributed so each hidden defender
+   * starts with exactly `13 - playedCardsByThatSeat`, even when the play prefix
+   * ends in the middle of a trick. This preserves the per-seat remaining-card
+   * counts that later world construction and DDS leaves rely on.
    */
   HistoryDerivedWorldSpec BuildWorldSpecFromDeal(
       const dealPBN& fullDeal,
@@ -1713,7 +1722,10 @@ namespace alpha_mu_prototype
    * @brief Build a BridgeInformationState from a deal, declarer seat, and play history.
    *
    * Known-card constraints are generated for all cards in the visible hands that
-   * have not yet been played.  Follow-suit derivation is enabled.
+   * have not yet been played. Follow-suit derivation is enabled.
+   * `maxWorlds` is stored as the deterministic sampling budget used later when
+   * the constructor or search front-end must shrink an oversized candidate pool
+   * to fit the 64-world `WorldMask` representation.
    */
   BridgeInformationState BuildInformationStateFromPlay(
       const dealPBN& fullDeal,
@@ -1728,6 +1740,12 @@ namespace alpha_mu_prototype
    * visible-hand extraction), a declarer seat, and a play history prefix, it
    * constructs a world pool from the defending perspective and returns a
    * BridgeState suitable for multi-world alpha-mu search.
+   *
+   * The returned state must satisfy two practical invariants discovered during
+   * regression work: each world must preserve the exact per-seat remaining-card
+   * counts implied by the parsed play history, and the final world pool must be
+   * compacted to at most 64 deterministically selected worlds before being stored
+   * in `WorldMask`.
    */
   BridgeState MakeBridgeStateFromPartialInformation(
       const dealPBN& fullDeal,
@@ -1764,6 +1782,9 @@ namespace alpha_mu_prototype
    * @brief Evaluate all active worlds exactly with DDS and wrap them as one front.
    *
    * DDS acts as the perfect-information oracle beneath the alpha-mu layer.
+   * Every active world handed to DDS must be a legal bridge position with equal
+   * remaining hand sizes across the four seats once the current partial trick is
+   * accounted for; the implementation keeps a debug-time validation for this.
    */
   ParetoFront MakeBridgeDDSLeafFront(const BridgeState& state, const SearchExecutionContext& context);
   /** @brief Compatibility wrapper using the default serial search execution context. */
@@ -1808,6 +1829,9 @@ namespace alpha_mu_prototype
    * This is the bridge-specific world supplier for alpha-mu: known cards,
    * bidding-derived facts, follow-suit implications, play history, current-trick
    * replay, deduplication, and deterministic sampling are applied in order.
+   * The returned mask still uses the 64-bit `WorldMask` representation, so this
+   * routine is appropriate only when the caller's candidate vector already fits
+   * in that representation or has been compacted beforehand.
    */
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const BridgeInformationState& information, WorldGenerationStats* stats);
   /** @brief Produce an explanation trace for every stage of possible-world filtering. */
