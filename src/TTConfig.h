@@ -26,11 +26,11 @@
 #endif
 
 #ifndef THREADMEM_LARGE_DEF_MB
-  #define THREADMEM_LARGE_DEF_MB 95
+  #define THREADMEM_LARGE_DEF_MB 320
 #endif
 
 #ifndef THREADMEM_LARGE_MAX_MB
-  #define THREADMEM_LARGE_MAX_MB 160
+  #define THREADMEM_LARGE_MAX_MB 480
 #endif
 
 // Runtime configuration: environment variables override compile-time defaults.
