@@ -12,6 +12,49 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-04-23 22:58:13 — Workstream 1 DDS baseline on commit `9c57806` (dirty)
+
+- Primary output bundle: `test/build/alpha_mu_stats/20260423-223955`
+- Stability rerun bundle: `test/build/alpha_mu_stats/20260423-225540`
+- Platform: `Darwin 25.4.0 arm64 (macOS, M1 Max class host)`
+- Repository state at capture time: untracked top-level `build/` directory present
+- Result: all Workstream 1 commands completed with `returncode=0`
+- `python3 test/alpha_mu_benchmark.py` wall-clock:
+  - Cold-ish first run (including rebuilds): `208.062 s`
+  - Warm rerun (including rebuilds): `131.026 s`
+
+| Command | Status | Wall clock | Notes |
+| --- | --- | ---: | --- |
+| `python3 test/alpha_mu_benchmark.py` | pass | `208.062 s` / `131.026 s` | Two full runs; both restored the normal DDS build afterwards. |
+| `test/build/regression_api ../hands/list10.txt ../hands/thomas1.txt` | pass | `104.59 s` | Direct normal-build rerun via `/usr/bin/time -p`; output ended with `regression_api: OK`. |
+| `test/build/dtest -f ../hands/list10.txt -s solve` | pass | `0.21 s` | Direct normal-build rerun; program reported `Avg user time (ms) 10.15`. |
+| `test/build/play_analysis_benchmark` | pass | `0.15 s` | Direct normal-build rerun; all `3` hands reported `OK`. |
+
+### Instrumented workload timings from `alpha_mu_benchmark.py`
+
+| Workload | Run 1 (s) | Run 2 (s) | Root lines |
+| --- | ---: | ---: | ---: |
+| `regression_api_smoke` | `122.112` | `106.078` | `451` |
+| `dtest_solve_list10` | `6.128` | `0.211` | `0` |
+| `dtest_solve_list100` | `2.239` | `0.844` | `0` |
+| `play_analysis_benchmark` | `0.402` | `0.143` | `107` |
+
+### Probe-count summaries by context
+
+The two independent instrumentation runs produced identical `root_stats_by_context` payloads and the same total root-line count (`558`).
+
+| Context | Count | Avg probes | Min | Max | Guess relations |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `AnalyseLaterBoard` | `104` | `1.93` | `1` | `3` | `{"below": 2, "exact": 102}` |
+| `SolveBoardInternal` | `124` | `3.95` | `2` | `7` | `{"above": 56, "below": 52, "exact": 16}` |
+| `SolveSameBoard` | `330` | `3.46` | `1` | `13` | `{"above": 168, "below": 70, "exact": 92}` |
+
+### Repeated-solve stability
+
+- `SolveSameBoard` remained stable across the two independent `alpha_mu_benchmark.py` runs: identical counts, identical probe distributions, identical guess-relation counts, and identical final-score histograms in both `summary.json` files.
+- The raw instrumentation log in `test/build/alpha_mu_stats/20260423-223955/04_regression_api_smoke.log` shows the repeat-solve path being exercised heavily from `regression_api`, which makes the matching `SolveSameBoard` summaries a meaningful determinism check rather than an empty aggregate.
+- Wall-clock time varied noticeably between the first and second runs, especially for short workloads, so the stable baseline signal for Workstream 1 is the repeated exact same probe/result summary rather than any single raw elapsed-time sample.
+
 ## 2026-04-12 10:10:11 — commit `2bec9d9` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-095932`
