@@ -3415,6 +3415,45 @@ namespace alpha_mu_prototype
     }
   }
 
+  void TestIterativeDeepeningDepth3()
+  {
+    // Board 1 from alpha_mu_play.txt with a 6-trick (24-card) prefix,
+    // leaving 7 cards per hand — enough for depth-3 search.
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;  // spades
+    deal.first = 0;  // North leads
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    const int declarerSeat = SEAT_SOUTH;
+
+    // Use the same 10-trick (40-card) prefix as the end-to-end test.
+    // This leaves 3 cards per hand = 3 remaining tricks.
+    // Depth 3 searches all remaining tricks end-to-end.
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 40;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5");
+
+    const AlphaMuSolveResult result = SolveAlphaMu(
+      deal, declarerSeat, play, 3, 10, 60.0);
+
+    Check(result.valid,
+      "depth-3 iterative deepening should produce a valid result");
+    Check(result.depthSearched >= 1,
+      "depth-3 iterative deepening should complete at least depth 1");
+    Check(result.rootFront.vectors.size() > 0,
+      "depth-3 iterative deepening should produce a non-empty front");
+    Check(result.chosenMove.suit >= 0 && result.chosenMove.suit <= 3,
+      "depth-3 iterative deepening should choose a valid suit");
+    Check(result.totalSeconds < 60.0,
+      "depth-3 iterative deepening should complete within 60 seconds");
+    Check(result.ttStores > 0,
+      "depth-3 iterative deepening should use TT (stores > 0)");
+  }
+
   void RunBridgeDDSTestSuite()
   {
     TestBridgeMultiTrickDDSLeaf();
@@ -3474,7 +3513,8 @@ namespace alpha_mu_prototype
        {"partial-information world generation OK", &TestPartialInformationWorldGeneration},
        {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
-       {"bridge transposition table OK", &TestBridgeTranspositionTable}
+       {"bridge transposition table OK", &TestBridgeTranspositionTable},
+       {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3}
     };
 
     for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)

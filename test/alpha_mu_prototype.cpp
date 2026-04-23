@@ -174,7 +174,7 @@ int main(int argc, char ** argv)
 	if (mode == "solve")
 	{
 	  Check(argc >= 4,
-		"solve mode requires: <hand-file> <board-number> [depth] [max-worlds]");
+		"solve mode requires: <hand-file> <board-number> [depth] [max-worlds] [--time seconds]");
 
 	  const string handFile(argv[2]);
 	  const int boardNumber = ParseOptionalIntArgument(
@@ -183,6 +183,16 @@ int main(int argc, char ** argv)
 		argc, argv, 4, 1, "solve depth");
 	  const int maxWorlds = ParseOptionalIntArgument(
 		argc, argv, 5, 50, "solve max worlds");
+
+	  double timeBudget = 0.0;
+	  for (int a = 4; a < argc - 1; a++)
+	  {
+		if (string(argv[a]) == "--time")
+		{
+		  timeBudget = atof(argv[a + 1]);
+		  break;
+		}
+	  }
 
 	  HandFileData data;
 	  LoadHandFile(handFile, data);
@@ -198,7 +208,7 @@ int main(int argc, char ** argv)
 
 	  const AlphaMuSolveResult result = SolveAlphaMu(
 		deal, declarerSeat, play, depth,
-		static_cast<unsigned>(maxWorlds));
+		static_cast<unsigned>(maxWorlds), timeBudget);
 
 	  ReportAlphaMuSolveResult(result);
 	  PrintPrototypeStatus("alpha-mu solve OK");

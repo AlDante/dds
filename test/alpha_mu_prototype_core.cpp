@@ -2218,6 +2218,71 @@ BridgeRootReport AnalyzeBridgeRoot(
   {
     return AnalyzeBridgeRoot(state, tricksRemaining, SearchExecutionContext());
   }
+
+BridgeRootReport AnalyzeBridgeRootWithTT(
+    const BridgeState& state,
+    const int tricksRemaining,
+    const SearchExecutionContext& context,
+    BridgeTranspositionTable* tt,
+    BridgeTTStats* ttStats,
+    const BridgeRootReport* previousReport)
+  {
+    BridgeRootReport report(state.possibleWorlds.count);
+    if (state.possibleWorlds.Empty())
+      return report;
+
+    vector<BridgeChild> children = ExpandBridgeChildren(state);
+    if (children.empty())
+      return report;
+
+    // Move ordering: if we have a previous report, sort children by
+    // descending mu from the previous iteration
+    if (previousReport != NULL && ! previousReport->children.empty())
+    {
+      // Build a map from move -> mu
+      map<string, double> moveMu;
+      for (unsigned i = 0; i < previousReport->children.size(); i++)
+      {
+        const BridgeMove& m = previousReport->children[i].move;
+        const string key = SuitName(m.suit) + string(1, m.rank);
+        moveMu[key] = previousReport->children[i].front.Mu();
+      }
+
+      // Sort children by descending previous mu (stable sort to preserve
+      // order for moves not in the previous report)
+      for (unsigned i = 0; i < children.size(); i++)
+      {
+        for (unsigned j = i + 1; j < children.size(); j++)
+        {
+          const string ki = SuitName(children[i].move.suit) +
+            string(1, children[i].move.rank);
+          const string kj = SuitName(children[j].move.suit) +
+            string(1, children[j].move.rank);
+          const double mi = (moveMu.count(ki) ? moveMu[ki] : -1.0);
+          const double mj = (moveMu.count(kj) ? moveMu[kj] : -1.0);
+          if (mj > mi)
+            swap(children[i], children[j]);
+        }
+      }
+    }
+
+    for (unsigned i = 0; i < children.size(); i++)
+    {
+      BridgeRootChildReport childReport(state.possibleWorlds.count);
+      childReport.move = children[i].move;
+      const int nextDepth = tricksRemaining - BridgeDepthCost(state,
+        children[i].state);
+      childReport.front = SearchBridgeStateWithTT(
+        children[i].state, nextDepth, context, tt, ttStats);
+      childReport.validWorlds = childReport.front.ValidWorlds();
+      childReport.usefulWorlds = childReport.front.UsefulWorlds();
+      report.children.push_back(childReport);
+      report.rootFront = ParetoFront::MaxMerge(report.rootFront,
+        childReport.front);
+    }
+
+    return report;
+  }
 bool WorldMatchesConstraint(
     const ParsedWorld& world,
     const WorldConstraint& constraint)
@@ -4274,7 +4339,8 @@ AlphaMuSolveResult SolveAlphaMu(
     const int declarerSeat,
     const playTracePBN& play,
     const int depth,
-    const unsigned maxWorlds)
+    const unsigned maxWorlds,
+    const double timeBudgetSeconds)
   {
     AlphaMuSolveResult result;
     const int trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
@@ -4323,38 +4389,89 @@ AlphaMuSolveResult SolveAlphaMu(
     }
     const int tricksRemaining = static_cast<int>(
       (maxCards + state.currentTrick.size()) / 4U);
-    const int searchDepth = (depth <= 0 || depth > tricksRemaining)
+    const int maxSearchDepth = (depth <= 0 || depth > tricksRemaining)
       ? tricksRemaining : depth;
 
     SetMaxThreads(0);
+    InitZobrist();
+    BridgeTranspositionTable tt(1U << 20);
+    BridgeTTStats ttStats;
     const SearchExecutionContext context;
-    const BridgeRootReport report = AnalyzeBridgeRoot(state, searchDepth, context);
+
+    BridgeRootReport bestReport(state.possibleWorlds.count);
+    int bestDepth = 0;
+
+    if (timeBudgetSeconds > 0.0 && maxSearchDepth > 1)
+    {
+      // Iterative deepening with time budget
+      const BridgeRootReport* prevReport = NULL;
+      for (int d = 1; d <= maxSearchDepth; d++)
+      {
+        const double elapsed =
+          chrono::duration<double>(chrono::steady_clock::now() - searchStart).count();
+        if (d > 1 && elapsed > timeBudgetSeconds)
+          break;
+
+        tt.Clear();
+        BridgeTTStats iterStats;
+        const BridgeRootReport report = AnalyzeBridgeRootWithTT(
+          state, d, context, &tt, &iterStats, prevReport);
+
+        ttStats.probes += iterStats.probes;
+        ttStats.hits += iterStats.hits;
+        ttStats.stores += iterStats.stores;
+
+        bestReport = report;
+        bestDepth = d;
+        prevReport = &bestReport;
+
+        const double iterElapsed =
+          chrono::duration<double>(chrono::steady_clock::now() - searchStart).count();
+        cout << "  ID depth=" << d
+             << " mu=" << fixed << setprecision(4) << report.rootFront.Mu()
+             << " vectors=" << report.rootFront.vectors.size()
+             << " tt_hits=" << iterStats.hits
+             << " tt_stores=" << iterStats.stores
+             << " elapsed=" << setprecision(3) << iterElapsed << "s"
+             << endl;
+      }
+    }
+    else
+    {
+      // Single-pass search at requested depth
+      bestReport = AnalyzeBridgeRootWithTT(
+        state, maxSearchDepth, context, &tt, &ttStats);
+      bestDepth = maxSearchDepth;
+    }
 
     const chrono::steady_clock::time_point searchEnd =
       chrono::steady_clock::now();
     result.searchSeconds =
       chrono::duration<double>(searchEnd - searchStart).count();
 
-    result.rootReport = report;
-    result.rootFront = report.rootFront;
-    result.depthSearched = searchDepth;
-    result.valid = ! report.rootFront.vectors.empty();
+    result.rootReport = bestReport;
+    result.rootFront = bestReport.rootFront;
+    result.depthSearched = bestDepth;
+    result.valid = ! bestReport.rootFront.vectors.empty();
+    result.ttProbes = ttStats.probes;
+    result.ttHits = ttStats.hits;
+    result.ttStores = ttStats.stores;
 
     // Choose the move with the highest mu
-    if (! report.children.empty())
+    if (! bestReport.children.empty())
     {
       double bestMu = -1.0;
       unsigned bestIdx = 0;
-      for (unsigned i = 0; i < report.children.size(); i++)
+      for (unsigned i = 0; i < bestReport.children.size(); i++)
       {
-        const double mu = report.children[i].front.Mu();
+        const double mu = bestReport.children[i].front.Mu();
         if (mu > bestMu)
         {
           bestMu = mu;
           bestIdx = i;
         }
       }
-      result.chosenMove = report.children[bestIdx].move;
+      result.chosenMove = bestReport.children[bestIdx].move;
     }
 
     result.totalSeconds =
@@ -4388,6 +4505,9 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
     cout << "  Timing: " << result.totalSeconds << "s total ("
          << result.worldGenerationSeconds << "s world-gen, "
          << result.searchSeconds << "s search)" << endl;
+    cout << "  TT: " << result.ttStores << " stores, "
+         << result.ttHits << " hits / " << result.ttProbes << " probes"
+         << endl;
 
     if (! result.rootReport.children.empty())
     {

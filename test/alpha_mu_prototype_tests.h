@@ -22,6 +22,8 @@ namespace alpha_mu_prototype
   void TestEndToEndSolveAlphaMu();
   /** @brief Verify bridge TT produces identical fronts to TT-free search, with hits > 0. */
   void TestBridgeTranspositionTable();
+  /** @brief Verify iterative deepening with TT reaches depth 3 on a 7-card position. */
+  void TestIterativeDeepeningDepth3();
 }
 
 #endif

@@ -1904,6 +1904,9 @@ namespace alpha_mu_prototype
     double totalSeconds;
     unsigned ddsLeafCalls;
     unsigned searchNodes;
+    unsigned long long ttProbes;
+    unsigned long long ttHits;
+    unsigned long long ttStores;
     bool valid;
 
     AlphaMuSolveResult() :
@@ -1918,22 +1921,29 @@ namespace alpha_mu_prototype
       totalSeconds(0.0),
       ddsLeafCalls(0),
       searchNodes(0),
+      ttProbes(0),
+      ttHits(0),
+      ttStores(0),
       valid(false)
     {
     }
   };
 
   /**
-   * @brief End-to-end alpha-mu solve: build worlds from partial information, search, return result.
+   * @brief End-to-end alpha-mu solve with TT and iterative deepening.
    *
-   * This is the Milestone 1 entry point that connects world generation to search.
+   * If timeBudgetSeconds > 0, performs iterative deepening from depth 1 up to
+   * the requested depth, stopping when the time budget is exhausted. Returns
+   * the result from the deepest completed iteration. Uses TT across iterations.
+   * If timeBudgetSeconds <= 0, searches to the requested depth in a single pass.
    */
   AlphaMuSolveResult SolveAlphaMu(
       const dealPBN& deal,
       const int declarerSeat,
       const playTracePBN& play,
       const int depth,
-      const unsigned maxWorlds);
+      const unsigned maxWorlds,
+      const double timeBudgetSeconds = 0.0);
 
   /** @brief Print a human-readable summary of an alpha-mu solve result. */
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);
@@ -2025,6 +2035,14 @@ namespace alpha_mu_prototype
       const SearchExecutionContext& context,
       BridgeTranspositionTable* tt,
       BridgeTTStats* ttStats);
+
+  BridgeRootReport AnalyzeBridgeRootWithTT(
+      const BridgeState& state,
+      const int tricksRemaining,
+      const SearchExecutionContext& context,
+      BridgeTranspositionTable* tt,
+      BridgeTTStats* ttStats,
+      const BridgeRootReport* previousReport = NULL);
 }
 
 #endif
