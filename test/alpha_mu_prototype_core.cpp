@@ -18,6 +18,151 @@ namespace alpha_mu_prototype
   const char kPrototypeMessagePrefix[] = "alpha_mu_prototype: ";
   const char kAlphaMuPlayHandFile[] = "hands/alpha_mu_play.txt";
 
+  // ========================================================================
+  // Zobrist hashing and bridge transposition table implementation
+  // ========================================================================
+
+  ZobristTable gZobrist;
+  static bool gZobristInitialized = false;
+
+  void InitZobrist()
+  {
+    if (gZobristInitialized)
+      return;
+    gZobrist.Init();
+    gZobristInitialized = true;
+  }
+
+  unsigned long long HashBridgeState(const BridgeState& state)
+  {
+    InitZobrist();
+    unsigned long long h = 0;
+
+    // Hash player to move
+    h ^= gZobrist.playerToMove[state.playerToMove & 3];
+
+    // Hash max tricks won
+    if (state.maxTricksWon >= 0 &&
+        state.maxTricksWon < static_cast<int>(ZobristTable::MAX_TRICKS))
+      h ^= gZobrist.maxTricksWon[state.maxTricksWon];
+
+    // Hash trump suit (+1 so notrump=-1 maps to index 0)
+    const int trumpIdx = state.trumpSuit + 1;
+    if (trumpIdx >= 0 && trumpIdx < 5)
+      h ^= gZobrist.trumpSuit[trumpIdx];
+
+    // Hash current trick cards
+    for (unsigned t = 0; t < state.currentTrick.size(); t++)
+    {
+      const int ri = RankCharToIndex(state.currentTrick[t].rank);
+      if (ri >= 0)
+        h ^= gZobrist.currentTrickCard[t][state.currentTrick[t].suit][ri];
+    }
+
+    // Hash world mask
+    for (unsigned w = 0; w < state.possibleWorlds.count && w < 64; w++)
+    {
+      if (state.possibleWorlds.Has(w))
+        h ^= gZobrist.worldMaskBit[w];
+    }
+
+    // Hash card holdings per world
+    for (unsigned w = 0; w < state.worlds.size(); w++)
+    {
+      if (! state.possibleWorlds.Has(w))
+        continue;
+      if (w >= ZobristTable::MAX_WORLDS)
+        break;
+
+      for (unsigned seat = 0; seat < 4; seat++)
+      {
+        for (unsigned suit = 0; suit < 4; suit++)
+        {
+          const string& cards = state.worlds[w].suits[seat][suit];
+          for (unsigned c = 0; c < cards.size(); c++)
+          {
+            const int ri = RankCharToIndex(cards[c]);
+            if (ri >= 0)
+              h ^= gZobrist.card[w][seat][suit][ri];
+          }
+        }
+      }
+    }
+
+    return h;
+  }
+
+  BridgeTranspositionTable::BridgeTranspositionTable(unsigned capacityHint)
+  {
+    // Round up to power of 2
+    unsigned cap = 1;
+    while (cap < capacityHint)
+      cap <<= 1;
+    capacity = cap;
+    mask = cap - 1;
+    stored = 0;
+    table.resize(cap);
+  }
+
+  void BridgeTranspositionTable::Clear()
+  {
+    for (unsigned i = 0; i < capacity; i++)
+      table[i].occupied = false;
+    stored = 0;
+  }
+
+  const ParetoFront* BridgeTranspositionTable::Probe(
+      unsigned long long hash,
+      unsigned long long worldMaskBits) const
+  {
+    unsigned idx = static_cast<unsigned>(hash) & mask;
+    // Linear probing with limited search
+    for (unsigned i = 0; i < 4; i++)
+    {
+      const unsigned slot = (idx + i) & mask;
+      const BridgeTTEntry& e = table[slot];
+      if (! e.occupied)
+        return NULL;
+      if (e.hash == hash && e.worldMaskBits == worldMaskBits)
+        return &e.front;
+    }
+    return NULL;
+  }
+
+  void BridgeTranspositionTable::Store(
+      unsigned long long hash,
+      unsigned long long worldMaskBits,
+      const ParetoFront& front)
+  {
+    unsigned idx = static_cast<unsigned>(hash) & mask;
+    // Linear probing: find empty or matching slot within 4 steps
+    for (unsigned i = 0; i < 4; i++)
+    {
+      const unsigned slot = (idx + i) & mask;
+      BridgeTTEntry& e = table[slot];
+      if (! e.occupied)
+      {
+        e.hash = hash;
+        e.worldMaskBits = worldMaskBits;
+        e.front = front;
+        e.occupied = true;
+        stored++;
+        return;
+      }
+      if (e.hash == hash && e.worldMaskBits == worldMaskBits)
+      {
+        e.front = front;
+        return;
+      }
+    }
+    // All 4 slots occupied — replace the first one
+    const unsigned slot = idx;
+    table[slot].hash = hash;
+    table[slot].worldMaskBits = worldMaskBits;
+    table[slot].front = front;
+  }
+
+
 void Fail(const string& msg)
   {
     cerr << kPrototypeMessagePrefix << msg << "\n";
@@ -1962,6 +2107,84 @@ ParetoFront SearchBridgeState(
     return SearchBridgeStateInternal(state, tricksRemaining,
       SearchExecutionContext());
   }
+ParetoFront SearchBridgeStateWithTT(
+    const BridgeState& state,
+    const int tricksRemaining,
+    const SearchExecutionContext& context,
+    BridgeTranspositionTable* tt,
+    BridgeTTStats* ttStats)
+  {
+    MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
+
+    if (state.possibleWorlds.Empty())
+      return MakeZeroFront(state.possibleWorlds.count);
+
+    if (tricksRemaining <= 0)
+      return MakeBridgeDDSLeafFront(state, context);
+
+    // TT probe
+    unsigned long long hash = 0;
+    if (tt != NULL)
+    {
+      hash = HashBridgeState(state);
+      if (ttStats != NULL)
+        ttStats->probes++;
+
+      const ParetoFront* cached = tt->Probe(hash, state.possibleWorlds.bits);
+      if (cached != NULL)
+      {
+        if (ttStats != NULL)
+          ttStats->hits++;
+        return *cached;
+      }
+    }
+
+    const vector<BridgeChild> children = ExpandBridgeChildren(state);
+    if (children.empty())
+      return MakeBridgeDDSLeafFront(state, context);
+
+    ParetoFront front(state.possibleWorlds.count);
+
+    if (SeatSide(state.playerToMove) == state.maxSide)
+    {
+      for (unsigned i = 0; i < children.size(); i++)
+      {
+        const int nextDepth = tricksRemaining - BridgeDepthCost(state,
+          children[i].state);
+        front = ParetoFront::MaxMerge(front,
+          SearchBridgeStateWithTT(children[i].state, nextDepth, context,
+            tt, ttStats));
+      }
+    }
+    else
+    {
+      bool initialized = false;
+      for (unsigned i = 0; i < children.size(); i++)
+      {
+        const int nextDepth = tricksRemaining - BridgeDepthCost(state,
+          children[i].state);
+        const ParetoFront childFront = SearchBridgeStateWithTT(
+          children[i].state, nextDepth, context, tt, ttStats);
+        if (! initialized)
+        {
+          front = childFront;
+          initialized = true;
+        }
+        else
+          front = ParetoFront::MinProduct(front, childFront);
+      }
+    }
+
+    // TT store
+    if (tt != NULL)
+    {
+      if (ttStats != NULL)
+        ttStats->stores++;
+      tt->Store(hash, state.possibleWorlds.bits, front);
+    }
+
+    return front;
+  }
 BridgeRootReport AnalyzeBridgeRoot(
     const BridgeState& state,
     const int tricksRemaining,
@@ -3349,6 +3572,8 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
     }
     return selectedBoards;
   }
+
+  double BenchmarkProgressIntervalSeconds();
 
   namespace
   {

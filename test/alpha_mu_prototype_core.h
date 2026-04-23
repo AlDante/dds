@@ -27,6 +27,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <random>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -1936,6 +1937,94 @@ namespace alpha_mu_prototype
 
   /** @brief Print a human-readable summary of an alpha-mu solve result. */
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);
+
+  // ========================================================================
+  // Bridge transposition table — Zobrist hashing
+  // ========================================================================
+
+  /** @brief Map rank character to index 0..12 for Zobrist table indexing. */
+  inline int RankCharToIndex(const char r)
+  {
+    switch (r)
+    {
+      case '2': return 0;  case '3': return 1;  case '4': return 2;
+      case '5': return 3;  case '6': return 4;  case '7': return 5;
+      case '8': return 6;  case '9': return 7;  case 'T': return 8;
+      case 'J': return 9;  case 'Q': return 10; case 'K': return 11;
+      case 'A': return 12; default: return -1;
+    }
+  }
+
+  /** @brief Pre-computed random 64-bit Zobrist values for bridge state hashing. */
+  struct ZobristTable
+  {
+    static const unsigned MAX_WORLDS = 64;
+    static const unsigned NUM_SEATS = 4;
+    static const unsigned NUM_SUITS = 4;
+    static const unsigned NUM_RANKS = 13;
+    static const unsigned MAX_TRICKS = 14;
+
+    unsigned long long card[MAX_WORLDS][NUM_SEATS][NUM_SUITS][NUM_RANKS];
+    unsigned long long playerToMove[NUM_SEATS];
+    unsigned long long maxTricksWon[MAX_TRICKS];
+    unsigned long long trumpSuit[NUM_SUITS + 1];
+    unsigned long long currentTrickCard[NUM_SEATS][NUM_SUITS][NUM_RANKS];
+    unsigned long long worldMaskBit[MAX_WORLDS];
+
+    void Init(unsigned long long seed = 0x12345678ABCDEF01ULL)
+    {
+      mt19937_64 rng(seed);
+      unsigned long long * p = reinterpret_cast<unsigned long long *>(this);
+      const size_t n = sizeof(ZobristTable) / sizeof(unsigned long long);
+      for (size_t i = 0; i < n; i++)
+        p[i] = rng();
+    }
+  };
+
+  extern ZobristTable gZobrist;
+  void InitZobrist();
+  unsigned long long HashBridgeState(const BridgeState& state);
+
+  struct BridgeTTEntry
+  {
+    unsigned long long hash;
+    unsigned long long worldMaskBits;
+    ParetoFront front;
+    bool occupied;
+    BridgeTTEntry() : hash(0), worldMaskBits(0), front(0), occupied(false) {}
+  };
+
+  class BridgeTranspositionTable
+  {
+  public:
+    explicit BridgeTranspositionTable(unsigned capacityHint = 1U << 20);
+    void Clear();
+    const ParetoFront * Probe(unsigned long long hash, unsigned long long worldMaskBits) const;
+    void Store(unsigned long long hash, unsigned long long worldMaskBits, const ParetoFront& front);
+    unsigned Size() const { return stored; }
+    unsigned Capacity() const { return capacity; }
+  private:
+    vector<BridgeTTEntry> table;
+    unsigned capacity;
+    unsigned mask;
+    unsigned stored;
+  };
+
+  struct BridgeTTStats
+  {
+    unsigned long long probes;
+    unsigned long long hits;
+    unsigned long long stores;
+    unsigned long long collisions;
+    BridgeTTStats() : probes(0), hits(0), stores(0), collisions(0) {}
+  };
+
+  ParetoFront SearchBridgeStateWithTT(
+      const BridgeState& state,
+      const int tricksRemaining,
+      const SearchExecutionContext& context,
+      BridgeTranspositionTable* tt,
+      BridgeTTStats* ttStats);
 }
 
 #endif

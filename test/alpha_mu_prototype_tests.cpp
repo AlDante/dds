@@ -3339,6 +3339,82 @@ namespace alpha_mu_prototype
       "end-to-end solve should report at least one candidate move");
   }
 
+  void TestBridgeTranspositionTable()
+  {
+    // Use the same board as TestEndToEndSolveAlphaMu
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;  // spades
+    deal.first = 0;  // North leads
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    const int declarerSeat = SEAT_SOUTH;
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 40;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5");
+
+    const int trumpSuit = deal.trump;
+    const vector<PlayHistoryEvent> history =
+      ParsePBNPlayHistory(play, deal.first, trumpSuit);
+
+    const unsigned maxWorlds = 50;
+    BridgeState state = MakeBridgeStateFromPartialInformation(
+      deal, declarerSeat, history, maxWorlds);
+
+    Check(state.possibleWorlds.PopCount() > 0,
+      "TT test: should have surviving worlds");
+
+    const int depth = 1;
+    SearchExecutionContext context;
+
+    // Search without TT
+    const ParetoFront frontNoTT = SearchBridgeStateInternal(
+      state, depth, context);
+
+    // Search with TT
+    InitZobrist();
+    BridgeTranspositionTable tt(1U << 16);
+    BridgeTTStats ttStats;
+    const ParetoFront frontWithTT = SearchBridgeStateWithTT(
+      state, depth, context, &tt, &ttStats);
+
+    // Verify identical results
+    Check(frontNoTT.vectors.size() == frontWithTT.vectors.size(),
+      "TT-backed search must produce same number of front vectors");
+
+    for (unsigned i = 0; i < frontNoTT.vectors.size(); i++)
+    {
+      Check(SameOutcome(frontNoTT.vectors[i], frontWithTT.vectors[i]),
+        "TT-backed search must produce identical outcome vectors");
+    }
+
+    // Verify TT was actually used
+    Check(ttStats.stores > 0,
+      "TT should have stored at least one entry");
+
+    // Run a second search — should get hits
+    BridgeTTStats ttStats2;
+    const ParetoFront frontSecond = SearchBridgeStateWithTT(
+      state, depth, context, &tt, &ttStats2);
+
+    Check(ttStats2.hits > 0,
+      "Second search should produce TT hits");
+
+    // Second search should also produce identical results
+    Check(frontNoTT.vectors.size() == frontSecond.vectors.size(),
+      "Second TT-backed search must produce same number of front vectors");
+
+    for (unsigned i = 0; i < frontNoTT.vectors.size(); i++)
+    {
+      Check(SameOutcome(frontNoTT.vectors[i], frontSecond.vectors[i]),
+        "Second TT-backed search must produce identical outcome vectors");
+    }
+  }
+
   void RunBridgeDDSTestSuite()
   {
     TestBridgeMultiTrickDDSLeaf();
@@ -3397,7 +3473,8 @@ namespace alpha_mu_prototype
        {"play history parse validation OK", &TestParsePlayHistoryValidation},
        {"partial-information world generation OK", &TestPartialInformationWorldGeneration},
        {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
-       {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu}
+       {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
+       {"bridge transposition table OK", &TestBridgeTranspositionTable}
     };
 
     for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)

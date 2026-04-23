@@ -20,6 +20,8 @@ namespace alpha_mu_prototype
   void TestFollowSuitNarrowingInPartialInformation();
   /** @brief Run the end-to-end SolveAlphaMu smoke test. */
   void TestEndToEndSolveAlphaMu();
+  /** @brief Verify bridge TT produces identical fronts to TT-free search, with hits > 0. */
+  void TestBridgeTranspositionTable();
 }
 
 #endif
