@@ -204,6 +204,77 @@ int main(int argc, char ** argv)
 	  PrintPrototypeStatus("alpha-mu solve OK");
 	  return 0;
 	}
+	if (mode == "tt_bench")
+	{
+	  Check(argc >= 4,
+		"tt_bench mode requires: <hand-file> <board-number> [depth] [max-worlds]");
+
+	  const string handFile(argv[2]);
+	  const int boardNumber = ParseOptionalIntArgument(
+		argc, argv, 3, 1, "tt_bench board number");
+	  const int maxDepth = ParseOptionalIntArgument(
+		argc, argv, 4, 2, "tt_bench depth");
+	  const int maxWorlds = ParseOptionalIntArgument(
+		argc, argv, 5, 50, "tt_bench max worlds");
+
+	  HandFileData data;
+	  LoadHandFile(handFile, data);
+	  Check(boardNumber >= 1 && boardNumber <= data.number,
+		"board number out of range");
+
+	  const int idx = boardNumber - 1;
+	  const dealPBN& deal = data.dealList[idx];
+	  const playTracePBN& play = data.playList[idx];
+	  const int declarerSeat = (deal.first + 3) % 4;
+	  const int trumpSuit = deal.trump;
+
+	  const vector<PlayHistoryEvent> history =
+		ParsePBNPlayHistory(play, deal.first, trumpSuit);
+	  BridgeState state = MakeBridgeStateFromPartialInformation(
+		deal, declarerSeat, history, static_cast<unsigned>(maxWorlds));
+
+	  SetMaxThreads(0);
+	  const SearchExecutionContext context;
+
+	  cout << "TT Benchmark: " << state.possibleWorlds.PopCount()
+		   << " worlds, board " << boardNumber << endl;
+
+	  for (int d = 1; d <= maxDepth; d++)
+	  {
+		// Without TT
+		auto t0 = chrono::steady_clock::now();
+		ParetoFront f1 = SearchBridgeStateInternal(state, d, context);
+		auto t1 = chrono::steady_clock::now();
+		double noTT = chrono::duration<double>(t1 - t0).count();
+
+		// With TT (cold)
+		InitZobrist();
+		BridgeTranspositionTable tt(1U << 18);
+		BridgeTTStats stats;
+		auto t2 = chrono::steady_clock::now();
+		ParetoFront f2 = SearchBridgeStateWithTT(state, d, context, &tt, &stats);
+		auto t3 = chrono::steady_clock::now();
+		double withTTcold = chrono::duration<double>(t3 - t2).count();
+
+		// With TT (warm)
+		BridgeTTStats stats2;
+		auto t4 = chrono::steady_clock::now();
+		ParetoFront f3 = SearchBridgeStateWithTT(state, d, context, &tt, &stats2);
+		auto t5 = chrono::steady_clock::now();
+		double withTTwarm = chrono::duration<double>(t5 - t4).count();
+
+		cout << "  depth=" << d
+			 << "  no_tt=" << fixed << setprecision(4) << noTT << "s"
+			 << "  tt_cold=" << withTTcold << "s"
+			 << "  tt_warm=" << withTTwarm << "s"
+			 << "  stores=" << stats.stores
+			 << "  hits_cold=" << stats.hits
+			 << "  hits_warm=" << stats2.hits
+			 << "  vectors=" << f1.vectors.size()
+			 << endl;
+	  }
+	  return 0;
+	}
 	if (mode == "partial")
 	{
 	  TestParsePlayHistoryValidation();
