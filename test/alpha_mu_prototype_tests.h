@@ -24,6 +24,10 @@ namespace alpha_mu_prototype
   void TestBridgeTranspositionTable();
   /** @brief Verify iterative deepening with TT reaches depth 3 on a 5-card-per-hand position. */
   void TestIterativeDeepeningDepth3();
+  /** @brief Verify the debug-only world-mask capacity assertion fires through a child process. */
+  void TestDebugWorldMaskCapacityAssertion();
+  /** @brief Trigger the debug-only world-mask capacity assertion path in a dedicated process mode. */
+  void RunDebugWorldMaskCapacityAssertionTrigger();
 }
 
 #endif

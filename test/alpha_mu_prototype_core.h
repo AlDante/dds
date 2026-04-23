@@ -1971,6 +1971,10 @@ namespace alpha_mu_prototype
 
   /** @brief Print a human-readable summary of an alpha-mu solve result. */
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);
+  /** @brief Record the current alpha-mu prototype executable path for self-spawn tests. */
+  void SetPrototypeExecutablePath(const string& path);
+  /** @brief Return the current alpha-mu prototype executable path for self-spawn tests. */
+  string GetPrototypeExecutablePath();
 
   // ========================================================================
   // Bridge transposition table — Zobrist hashing

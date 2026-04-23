@@ -17,6 +17,17 @@ namespace alpha_mu_prototype
 
   const char kPrototypeMessagePrefix[] = "alpha_mu_prototype: ";
   const char kAlphaMuPlayHandFile[] = "hands/alpha_mu_play.txt";
+  static string gPrototypeExecutablePath = "./build/alpha_mu_prototype";
+
+  void SetPrototypeExecutablePath(const string& path)
+  {
+    gPrototypeExecutablePath = path;
+  }
+
+  string GetPrototypeExecutablePath()
+  {
+    return gPrototypeExecutablePath;
+  }
 
   // ========================================================================
   // Zobrist hashing and bridge transposition table implementation
@@ -173,6 +184,72 @@ void Check(const bool condition, const string& msg)
     if (! condition)
       Fail(msg);
   }
+#ifndef NDEBUG
+  static void DebugCheckWorldMaskCapacity(
+    const unsigned worldCount,
+    const string& context)
+  {
+    ostringstream oss;
+    oss << context
+        << " requires at most 64 worlds because WorldMask is backed by one 64-bit word"
+        << " (got " << worldCount << ")";
+    Check(worldCount <= 64U, oss.str());
+  }
+
+  static void DebugCheckBridgeStateMaskConsistency(
+    const BridgeState& state,
+    const string& context)
+  {
+    DebugCheckWorldMaskCapacity(static_cast<unsigned>(state.worlds.size()), context);
+    Check(state.possibleWorlds.count == state.worlds.size(),
+      context + " should keep BridgeState.worlds and possibleWorlds.count in sync");
+  }
+
+  static void DebugCheckDDSLeafWorld(
+    const BridgeState& state,
+    const ParsedWorld& world,
+    const unsigned worldIndex)
+  {
+    Check(state.currentTrick.size() == state.currentTrickPlayers.size(),
+      "DDS leaf validation requires currentTrick and currentTrickPlayers to stay aligned");
+
+    unsigned playedInCurrentTrick[4] = {0, 0, 0, 0};
+    for (unsigned i = 0; i < state.currentTrickPlayers.size(); i++)
+    {
+      const int player = state.currentTrickPlayers[i];
+      Check(player >= 0 && player < 4,
+        "DDS leaf validation requires every current-trick player to be a valid seat");
+      playedInCurrentTrick[player]++;
+      Check(playedInCurrentTrick[player] <= 1U,
+        "DDS leaf validation requires a partial trick to contain at most one card per seat");
+    }
+
+    const unsigned reference =
+      WorldSeatCardCount(world, 0) + playedInCurrentTrick[0];
+    for (int seat = 0; seat < 4; seat++)
+    {
+      const unsigned normalized =
+        WorldSeatCardCount(world, seat) + playedInCurrentTrick[seat];
+      if (normalized != reference)
+      {
+        ostringstream oss;
+        oss << "DDS leaf validation found inconsistent remaining hand sizes in world "
+            << worldIndex
+            << ": normalized seat counts were N="
+            << (WorldSeatCardCount(world, SEAT_NORTH) + playedInCurrentTrick[SEAT_NORTH])
+            << " E="
+            << (WorldSeatCardCount(world, SEAT_EAST) + playedInCurrentTrick[SEAT_EAST])
+            << " S="
+            << (WorldSeatCardCount(world, SEAT_SOUTH) + playedInCurrentTrick[SEAT_SOUTH])
+            << " W="
+            << (WorldSeatCardCount(world, SEAT_WEST) + playedInCurrentTrick[SEAT_WEST])
+            << " with current trick size " << state.currentTrick.size()
+            << " and world " << SerializePBNWorld(world);
+        Fail(oss.str());
+      }
+    }
+  }
+#endif
 string AlphaMuParallelModeName(const AlphaMuParallelMode mode)
   {
     switch (mode)
@@ -1959,6 +2036,10 @@ ParetoFront MakeBridgeDDSLeafFront(
     const BridgeState& state,
     const SearchExecutionContext& context)
   {
+#ifndef NDEBUG
+    DebugCheckBridgeStateMaskConsistency(state,
+      "MakeBridgeDDSLeafFront");
+#endif
     vector<unsigned> active;
     for (unsigned i = 0; i < state.worlds.size(); i++)
     {
@@ -1982,29 +2063,10 @@ ParetoFront MakeBridgeDDSLeafFront(
     if (allFinished)
       return MakeBridgeTerminalFront(state);
 
-    // Validate equal card counts before calling DDS
+#ifndef NDEBUG
     for (unsigned i = 0; i < active.size(); i++)
-    {
-      const unsigned wi = active[i];
-      unsigned seatCounts[4];
-      for (int s = 0; s < 4; s++)
-        seatCounts[s] = WorldSeatCardCount(state.worlds[wi], s);
-      const unsigned expected = seatCounts[0];
-      for (int s = 1; s < 4; s++)
-      {
-        if (seatCounts[s] != expected)
-        {
-          fprintf(stderr,
-            "DEBUG: unbalanced world %u at DDS leaf: N=%u E=%u S=%u W=%u "
-            "trickSize=%u playerToMove=%d maxSide=%d maxTricksWon=%d\n",
-            wi, seatCounts[0], seatCounts[1], seatCounts[2], seatCounts[3],
-            static_cast<unsigned>(state.currentTrick.size()),
-            state.playerToMove, state.maxSide, state.maxTricksWon);
-          fprintf(stderr, "  PBN: %s\n",
-            SerializePBNWorld(state.worlds[wi]).c_str());
-        }
-      }
-    }
+      DebugCheckDDSLeafWorld(state, state.worlds[active[i]], active[i]);
+#endif
 
     ParetoFront front(state.possibleWorlds.count);
     OutcomeVector vec(state.possibleWorlds.count);
@@ -2530,6 +2592,10 @@ WorldMask GeneratePossibleWorlds(
     const BridgeInformationState& information,
     WorldGenerationStats* stats)
   {
+#ifndef NDEBUG
+    DebugCheckWorldMaskCapacity(static_cast<unsigned>(worlds.size()),
+      "GeneratePossibleWorlds");
+#endif
     const vector<WorldConstraint> followSuitConstraints =
       CollectFollowSuitConstraints(information);
     WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
@@ -3594,6 +3660,15 @@ BridgeState MakeBridgeStateFromPartialInformation(
     for (unsigned w = 0; w < worlds.size(); w++)
       possibleMask.bits |= (1ULL << w);
 
+#ifndef NDEBUG
+    DebugCheckWorldMaskCapacity(static_cast<unsigned>(worlds.size()),
+      "MakeBridgeStateFromPartialInformation");
+    Check(possibleMask.count == worlds.size(),
+      "MakeBridgeStateFromPartialInformation should keep WorldMask count aligned with the compacted world vector");
+    Check(possibleMask.PopCount() == worlds.size(),
+      "MakeBridgeStateFromPartialInformation should leave every compacted world active initially");
+#endif
+
     // Build the state
     BridgeState state;
     state.worlds = worlds;
@@ -3643,6 +3718,10 @@ BridgeState MakeBridgeStateFromPartialInformation(
 
     state.maxSide = SeatSide(state.playerToMove);
     state.maxTricksWon = 0;
+#ifndef NDEBUG
+    DebugCheckBridgeStateMaskConsistency(state,
+      "MakeBridgeStateFromPartialInformation");
+#endif
     return state;
   }
 int SingleWorldFrontScore(

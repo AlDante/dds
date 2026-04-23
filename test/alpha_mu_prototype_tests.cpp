@@ -12,6 +12,38 @@ namespace alpha_mu_prototype
 {
   using namespace std;
 
+  static string ShellQuote(const string& text)
+  {
+    string quoted("'");
+    for (unsigned i = 0; i < text.size(); i++)
+    {
+      if (text[i] == '\'')
+        quoted += "'\\''";
+      else
+        quoted += text[i];
+    }
+    quoted += "'";
+    return quoted;
+  }
+
+  static string ReadWholeFile(const string& path)
+  {
+    FILE * fp = fopen(path.c_str(), "rb");
+    Check(fp != NULL,
+      "debug assertion regression should be able to read its captured child-process output");
+    string contents;
+    char buffer[1024];
+    while (true)
+    {
+      const size_t n = fread(buffer, 1, sizeof(buffer), fp);
+      if (n == 0)
+        break;
+      contents.append(buffer, n);
+    }
+    fclose(fp);
+    return contents;
+  }
+
   static void TestParetoInsert()
   {
     ParetoFront front(3);
@@ -3583,6 +3615,50 @@ namespace alpha_mu_prototype
       "depth-3 iterative deepening should use TT (stores > 0)");
   }
 
+
+  void TestDebugWorldMaskCapacityAssertion()
+  {
+#ifdef NDEBUG
+    Check(true,
+      "debug-only world-mask assertion regression is skipped in release builds");
+#else
+    const string exe = GetPrototypeExecutablePath();
+    Check(! exe.empty(),
+      "debug assertion regression should know the current prototype executable path");
+
+    const string outputPath =
+      "/tmp/alpha_mu_prototype_worldmask_assert_output.txt";
+    remove(outputPath.c_str());
+
+    const string command =
+      ShellQuote(exe) +
+      " debug_assert_worldmask_capacity > " +
+      ShellQuote(outputPath) + " 2>&1";
+    const int status = system(command.c_str());
+    Check(status != 0,
+      "debug-only world-mask assertion regression should fail in the child process");
+
+    const string output = ReadWholeFile(outputPath);
+    remove(outputPath.c_str());
+    Check(output.find(
+      "GeneratePossibleWorlds requires at most 64 worlds because WorldMask is backed by one 64-bit word") != string::npos,
+      "debug-only world-mask assertion regression should report the expected capacity invariant message");
+#endif
+  }
+
+
+  void RunDebugWorldMaskCapacityAssertionTrigger()
+  {
+#ifdef NDEBUG
+    Fail("debug_assert_worldmask_capacity mode is only available in debug builds");
+#else
+    vector<ParsedWorld> worlds(65);
+    BridgeInformationState information;
+    GeneratePossibleWorlds(worlds, information, NULL);
+    Fail("debug_assert_worldmask_capacity mode should have failed before returning");
+#endif
+  }
+
   void RunBridgeDDSTestSuite()
   {
     TestBridgeMultiTrickDDSLeaf();
@@ -3645,7 +3721,10 @@ namespace alpha_mu_prototype
        {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
-       {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3}
+       {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
+#ifndef NDEBUG
+       {"debug world-mask assertion regression OK", &TestDebugWorldMaskCapacityAssertion}
+#endif
     };
 
     for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)

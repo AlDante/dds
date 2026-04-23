@@ -122,9 +122,17 @@ namespace
  */
 int main(int argc, char ** argv)
 {
+  if (argc >= 1 && argv[0] != NULL)
+    SetPrototypeExecutablePath(argv[0]);
+
   if (argc >= 2)
   {
 	const string mode(argv[1]);
+	if (mode == "debug_assert_worldmask_capacity")
+	{
+	  RunDebugWorldMaskCapacityAssertionTrigger();
+	  return 0;
+	}
 	if (mode == "benchmark_dds")
 	{
 	  Check(argc >= 3,
