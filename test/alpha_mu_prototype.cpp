@@ -171,6 +171,39 @@ int main(int argc, char ** argv)
 	  RunBridgeDDSTestSuite();
 	  return 0;
 	}
+	if (mode == "solve")
+	{
+	  Check(argc >= 4,
+		"solve mode requires: <hand-file> <board-number> [depth] [max-worlds]");
+
+	  const string handFile(argv[2]);
+	  const int boardNumber = ParseOptionalIntArgument(
+		argc, argv, 3, 1, "solve board number");
+	  const int depth = ParseOptionalIntArgument(
+		argc, argv, 4, 1, "solve depth");
+	  const int maxWorlds = ParseOptionalIntArgument(
+		argc, argv, 5, 50, "solve max worlds");
+
+	  HandFileData data;
+	  LoadHandFile(handFile, data);
+	  Check(boardNumber >= 1 && boardNumber <= data.number,
+		"board number out of range for the selected hand file");
+
+	  const int idx = boardNumber - 1;
+	  const dealPBN& deal = data.dealList[idx];
+	  const playTracePBN& play = data.playList[idx];
+
+	  // Determine declarer: the player before the opening leader
+	  const int declarerSeat = (deal.first + 3) % 4;
+
+	  const AlphaMuSolveResult result = SolveAlphaMu(
+		deal, declarerSeat, play, depth,
+		static_cast<unsigned>(maxWorlds));
+
+	  ReportAlphaMuSolveResult(result);
+	  PrintPrototypeStatus("alpha-mu solve OK");
+	  return 0;
+	}
 	if (mode == "partial")
 	{
 	  TestParsePlayHistoryValidation();
@@ -179,6 +212,8 @@ int main(int argc, char ** argv)
 	  PrintPrototypeStatus("partial-information world generation OK");
 	  TestFollowSuitNarrowingInPartialInformation();
 	  PrintPrototypeStatus("follow-suit narrowing in partial information OK");
+	  TestEndToEndSolveAlphaMu();
+	  PrintPrototypeStatus("end-to-end alpha-mu solve OK");
 	  return 0;
 	}
   }

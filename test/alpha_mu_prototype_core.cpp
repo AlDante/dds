@@ -4043,4 +4043,140 @@ DDSLeafEvalResult EvaluateDDSLeafThresholdParallel(
   {
     cout << kPrototypeMessagePrefix << msg << "\n";
   }
+
+AlphaMuSolveResult SolveAlphaMu(
+    const dealPBN& deal,
+    const int declarerSeat,
+    const playTracePBN& play,
+    const int depth,
+    const unsigned maxWorlds)
+  {
+    AlphaMuSolveResult result;
+    const int trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
+
+    const chrono::steady_clock::time_point totalStart =
+      chrono::steady_clock::now();
+
+    // Phase 1: parse play history and build partial-information state
+    const chrono::steady_clock::time_point worldGenStart =
+      chrono::steady_clock::now();
+
+    const vector<PlayHistoryEvent> history =
+      ParsePBNPlayHistory(play, deal.first, trumpSuit);
+
+    const BridgeState state = MakeBridgeStateFromPartialInformation(
+      deal, declarerSeat, history, maxWorlds);
+
+    const chrono::steady_clock::time_point worldGenEnd =
+      chrono::steady_clock::now();
+    result.worldGenerationSeconds =
+      chrono::duration<double>(worldGenEnd - worldGenStart).count();
+
+    result.worldCount = static_cast<unsigned>(state.worlds.size());
+    result.survivingWorldCount = state.possibleWorlds.PopCount();
+
+    if (result.survivingWorldCount == 0)
+    {
+      result.totalSeconds =
+        chrono::duration<double>(chrono::steady_clock::now() - totalStart).count();
+      return result;
+    }
+
+    // Phase 2: determine remaining tricks and search
+    const chrono::steady_clock::time_point searchStart =
+      chrono::steady_clock::now();
+
+    unsigned maxCards = 0;
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      if (state.possibleWorlds.Has(i))
+      {
+        const unsigned c = WorldCardCount(state.worlds[i]);
+        if (c > maxCards)
+          maxCards = c;
+      }
+    }
+    const int tricksRemaining = static_cast<int>(
+      (maxCards + state.currentTrick.size()) / 4U);
+    const int searchDepth = (depth <= 0 || depth > tricksRemaining)
+      ? tricksRemaining : depth;
+
+    SetMaxThreads(0);
+    const SearchExecutionContext context;
+    const BridgeRootReport report = AnalyzeBridgeRoot(state, searchDepth, context);
+
+    const chrono::steady_clock::time_point searchEnd =
+      chrono::steady_clock::now();
+    result.searchSeconds =
+      chrono::duration<double>(searchEnd - searchStart).count();
+
+    result.rootReport = report;
+    result.rootFront = report.rootFront;
+    result.depthSearched = searchDepth;
+    result.valid = ! report.rootFront.vectors.empty();
+
+    // Choose the move with the highest mu
+    if (! report.children.empty())
+    {
+      double bestMu = -1.0;
+      unsigned bestIdx = 0;
+      for (unsigned i = 0; i < report.children.size(); i++)
+      {
+        const double mu = report.children[i].front.Mu();
+        if (mu > bestMu)
+        {
+          bestMu = mu;
+          bestIdx = i;
+        }
+      }
+      result.chosenMove = report.children[bestIdx].move;
+    }
+
+    result.totalSeconds =
+      chrono::duration<double>(chrono::steady_clock::now() - totalStart).count();
+    return result;
+  }
+
+void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
+  {
+    cout.setf(ios::fixed);
+    cout << setprecision(3);
+
+    cout << "=== Alpha-Mu Solve Result ===" << endl;
+
+    if (! result.valid)
+    {
+      cout << "  Status: no valid result (no surviving worlds or empty front)" << endl;
+      cout << "  Total time: " << result.totalSeconds << "s" << endl;
+      return;
+    }
+
+    cout << "  Chosen move: " << SuitName(result.chosenMove.suit)
+         << " " << result.chosenMove.rank << endl;
+    cout << "  Depth searched: " << result.depthSearched << " tricks" << endl;
+    cout << "  Worlds: " << result.survivingWorldCount
+         << " surviving / " << result.worldCount << " raw" << endl;
+    cout << "  Root front: " << result.rootFront.vectors.size()
+         << " vectors, mu=" << setprecision(4) << result.rootFront.Mu() << endl;
+
+    cout << setprecision(3);
+    cout << "  Timing: " << result.totalSeconds << "s total ("
+         << result.worldGenerationSeconds << "s world-gen, "
+         << result.searchSeconds << "s search)" << endl;
+
+    if (! result.rootReport.children.empty())
+    {
+      cout << "  Candidate moves:" << endl;
+      for (unsigned i = 0; i < result.rootReport.children.size(); i++)
+      {
+        const BridgeRootChildReport& child = result.rootReport.children[i];
+        cout << "    " << SuitName(child.move.suit) << " " << child.move.rank
+             << ": mu=" << setprecision(4) << child.front.Mu()
+             << ", vectors=" << child.front.vectors.size()
+             << ", worlds=" << child.validWorlds.PopCount()
+             << endl;
+      }
+    }
+    cout << setprecision(3);
+  }
 }

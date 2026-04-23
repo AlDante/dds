@@ -18,6 +18,8 @@ namespace alpha_mu_prototype
   void TestParsePlayHistoryValidation();
   /** @brief Run the follow-suit narrowing test for partial-information worlds. */
   void TestFollowSuitNarrowingInPartialInformation();
+  /** @brief Run the end-to-end SolveAlphaMu smoke test. */
+  void TestEndToEndSolveAlphaMu();
 }
 
 #endif

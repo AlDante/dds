@@ -3287,6 +3287,58 @@ namespace alpha_mu_prototype
       "follow-suit filtering should keep only the world where West has no clubs");
   }
 
+  /**
+   * End-to-end test: SolveAlphaMu on alpha_mu_play.txt board 1
+   * with a 10-trick play prefix at depth 1.
+   */
+  void TestEndToEndSolveAlphaMu()
+  {
+    // Board 1 from alpha_mu_play.txt
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;  // spades
+    deal.first = 0;  // North leads
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    const int declarerSeat = SEAT_SOUTH;
+
+    // 10-trick play prefix (40 cards)
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 40;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5");
+
+    const AlphaMuSolveResult result = SolveAlphaMu(
+      deal, declarerSeat, play, 1, 50);
+
+    Check(result.valid,
+      "end-to-end solve should produce a valid result");
+    Check(result.worldCount > 0,
+      "end-to-end solve should generate at least one world");
+    Check(result.survivingWorldCount > 0,
+      "end-to-end solve should have at least one surviving world");
+    Check(result.depthSearched == 1,
+      "end-to-end solve should search to the requested depth");
+    Check(result.rootFront.vectors.size() > 0,
+      "end-to-end solve should produce a non-empty root front");
+    Check(result.chosenMove.suit >= 0 && result.chosenMove.suit <= 3,
+      "end-to-end solve should choose a valid suit");
+    Check(result.totalSeconds > 0.0,
+      "end-to-end solve should record positive elapsed time");
+    Check(result.totalSeconds < 30.0,
+      "end-to-end solve at depth 1 should complete within 30 seconds");
+    Check(result.searchSeconds >= 0.0,
+      "end-to-end solve should record non-negative search time");
+    Check(result.worldGenerationSeconds >= 0.0,
+      "end-to-end solve should record non-negative world-generation time");
+
+    // The root report should have at least one child move
+    Check(result.rootReport.children.size() > 0,
+      "end-to-end solve should report at least one candidate move");
+  }
+
   void RunBridgeDDSTestSuite()
   {
     TestBridgeMultiTrickDDSLeaf();
@@ -3344,7 +3396,8 @@ namespace alpha_mu_prototype
        {"repeated DDS reinitialization OK", &TestRepeatedDDSReinitializationKeepsThreadContext},
        {"play history parse validation OK", &TestParsePlayHistoryValidation},
        {"partial-information world generation OK", &TestPartialInformationWorldGeneration},
-       {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation}
+       {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
+       {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu}
     };
 
     for (unsigned i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)

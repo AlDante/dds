@@ -1887,6 +1887,55 @@ namespace alpha_mu_prototype
 
   /** @brief Print a successful prototype status line with the standard prefix. */
   void PrintPrototypeStatus(const string& msg);
+
+
+  /** @brief Result of an end-to-end alpha-mu solve on a single board. */
+  struct AlphaMuSolveResult
+  {
+    BridgeMove chosenMove;
+    ParetoFront rootFront;
+    BridgeRootReport rootReport;
+    unsigned worldCount;
+    unsigned survivingWorldCount;
+    int depthSearched;
+    double worldGenerationSeconds;
+    double searchSeconds;
+    double totalSeconds;
+    unsigned ddsLeafCalls;
+    unsigned searchNodes;
+    bool valid;
+
+    AlphaMuSolveResult() :
+      chosenMove(),
+      rootFront(0),
+      rootReport(0),
+      worldCount(0),
+      survivingWorldCount(0),
+      depthSearched(0),
+      worldGenerationSeconds(0.0),
+      searchSeconds(0.0),
+      totalSeconds(0.0),
+      ddsLeafCalls(0),
+      searchNodes(0),
+      valid(false)
+    {
+    }
+  };
+
+  /**
+   * @brief End-to-end alpha-mu solve: build worlds from partial information, search, return result.
+   *
+   * This is the Milestone 1 entry point that connects world generation to search.
+   */
+  AlphaMuSolveResult SolveAlphaMu(
+      const dealPBN& deal,
+      const int declarerSeat,
+      const playTracePBN& play,
+      const int depth,
+      const unsigned maxWorlds);
+
+  /** @brief Print a human-readable summary of an alpha-mu solve result. */
+  void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);
 }
 
 #endif
