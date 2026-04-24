@@ -3611,6 +3611,33 @@ BridgeInformationState BuildInformationStateFromPlay(
     info.samplingSeed = samplingSeed;
     return info;
   }
+  static BridgeInformationState ApplyInformationOverrides(
+    const BridgeInformationState& base,
+    const BridgeInformationState& overrides,
+    const unsigned maxWorlds,
+    const unsigned samplingSeed)
+  {
+    BridgeInformationState merged(base);
+    merged.knownCardConstraints.insert(merged.knownCardConstraints.end(),
+      overrides.knownCardConstraints.begin(),
+      overrides.knownCardConstraints.end());
+    merged.biddingConstraints.insert(merged.biddingConstraints.end(),
+      overrides.biddingConstraints.begin(),
+      overrides.biddingConstraints.end());
+    merged.followSuitConstraints.insert(merged.followSuitConstraints.end(),
+      overrides.followSuitConstraints.begin(),
+      overrides.followSuitConstraints.end());
+    merged.plausibilityHints.insert(merged.plausibilityHints.end(),
+      overrides.plausibilityHints.begin(),
+      overrides.plausibilityHints.end());
+    merged.deriveFollowSuitConstraints =
+      overrides.deriveFollowSuitConstraints;
+    merged.deduplicateEquivalentWorlds =
+      overrides.deduplicateEquivalentWorlds;
+    merged.sampleLimit = maxWorlds;
+    merged.samplingSeed = samplingSeed;
+    return merged;
+  }
   // `WorldMask` is backed by a single 64-bit word, so oversized constructor
   // pools must be compacted before they become a BridgeState. Use the same
   // canonical sort-and-offset sampling rule as the world-generation pipeline so
@@ -3643,36 +3670,23 @@ BridgeInformationState BuildInformationStateFromPlay(
     sort(selected.begin(), selected.end());
     return selected;
   }
-BridgeState MakeBridgeStateFromPartialInformation(
+  static BridgeState MakeBridgeStateFromInformationState(
     const dealPBN& fullDeal,
     const int declarerSeat,
     const vector<PlayHistoryEvent>& playedCards,
-    const unsigned maxWorlds,
-    const unsigned samplingSeed)
+    const BridgeInformationState& information)
   {
     const HistoryDerivedWorldSpec spec =
       BuildWorldSpecFromDeal(fullDeal, declarerSeat, playedCards);
-    const BridgeInformationState info =
-      BuildInformationStateFromPlay(fullDeal, declarerSeat, playedCards,
-        maxWorlds, samplingSeed);
 
     const HistoryDerivedConstructionResult constructed =
-      ConstructCandidateWorldsFromHistory(spec, info);
+      ConstructCandidateWorldsFromHistory(spec, information);
 
     vector<ParsedWorld> worlds = constructed.worlds;
 
     if (worlds.empty())
-    {
       return MakeBridgeStateFromDDSDeal(fullDeal);
-    }
 
-    // Filter worlds by follow-suit evidence from the play history.
-    // If a defender discarded (played off-suit) at some point, they were
-    // void in the led suit from that point onward and cannot hold remaining
-    // cards in that suit.
-    //
-    // Build a void set: voidSuits[seat][suit] = true if the defender showed
-    // out of that suit at any point during play.
     bool voidSuits[4][4];
     memset(voidSuits, 0, sizeof(voidSuits));
     for (unsigned i = 0; i < playedCards.size(); i++)
@@ -3700,20 +3714,15 @@ BridgeState MakeBridgeStateFromPartialInformation(
     }
 
     if (survivingIndices.empty())
-    {
       return MakeBridgeStateFromDDSDeal(fullDeal);
-    }
 
-    const unsigned worldLimit =
-      min(64U, (maxWorlds == 0 ? 64U : maxWorlds));
+    const unsigned worldLimit = min(64U,
+      (information.sampleLimit == 0 ? 64U : information.sampleLimit));
 
-    // Compact oversized candidate sets before wrapping them in WorldMask. This
-    // avoids aliasing multiple constructor indices onto the same 64-bit mask bit
-    // and keeps later DDS leaves on legal equal-hand-count worlds.
     if (worlds.size() > 64 || survivingIndices.size() > worldLimit)
     {
       const vector<unsigned> selected = SelectDeterministicWorldIndices(
-        worlds, survivingIndices, worldLimit, info.samplingSeed);
+        worlds, survivingIndices, worldLimit, information.samplingSeed);
       vector<ParsedWorld> compacted;
       compacted.reserve(selected.size());
       for (unsigned i = 0; i < selected.size(); i++)
@@ -3729,14 +3738,13 @@ BridgeState MakeBridgeStateFromPartialInformation(
 
 #ifndef NDEBUG
     DebugCheckWorldMaskCapacity(static_cast<unsigned>(worlds.size()),
-      "MakeBridgeStateFromPartialInformation");
+      "MakeBridgeStateFromInformationState");
     Check(possibleMask.count == worlds.size(),
-      "MakeBridgeStateFromPartialInformation should keep WorldMask count aligned with the compacted world vector");
+      "MakeBridgeStateFromInformationState should keep WorldMask count aligned with the compacted world vector");
     Check(possibleMask.PopCount() == worlds.size(),
-      "MakeBridgeStateFromPartialInformation should leave every compacted world active initially");
+      "MakeBridgeStateFromInformationState should leave every compacted world active initially");
 #endif
 
-    // Build the state
     BridgeState state;
     state.worlds = worlds;
     state.possibleWorlds = possibleMask;
@@ -3744,7 +3752,6 @@ BridgeState MakeBridgeStateFromPartialInformation(
     const int trumpSuit = (fullDeal.trump == 4 ? -1 : fullDeal.trump);
     state.trumpSuit = trumpSuit;
 
-    // Determine current trick and player from the tail of the play
     unsigned cardsInCurrentTrick = playedCards.size() % 4;
     if (cardsInCurrentTrick > 0)
     {
@@ -3761,7 +3768,6 @@ BridgeState MakeBridgeStateFromPartialInformation(
     }
     else if (! playedCards.empty())
     {
-      // Last trick just completed; find the winner to determine next leader
       unsigned lastTrickStart = playedCards.size() - 4;
       vector<BridgeMove> lastTrick;
       vector<int> lastPlayers;
@@ -3787,9 +3793,22 @@ BridgeState MakeBridgeStateFromPartialInformation(
     state.maxTricksWon = 0;
 #ifndef NDEBUG
     DebugCheckBridgeStateMaskConsistency(state,
-      "MakeBridgeStateFromPartialInformation");
+      "MakeBridgeStateFromInformationState");
 #endif
     return state;
+  }
+BridgeState MakeBridgeStateFromPartialInformation(
+    const dealPBN& fullDeal,
+    const int declarerSeat,
+    const vector<PlayHistoryEvent>& playedCards,
+    const unsigned maxWorlds,
+    const unsigned samplingSeed)
+  {
+    const BridgeInformationState info =
+      BuildInformationStateFromPlay(fullDeal, declarerSeat, playedCards,
+        maxWorlds, samplingSeed);
+    return MakeBridgeStateFromInformationState(fullDeal, declarerSeat,
+      playedCards, info);
   }
 int SingleWorldFrontScore(
     const ParetoFront& front,
@@ -4653,8 +4672,24 @@ AlphaMuSolveResult SolveAlphaMu(
     const int prefixCards,
     const unsigned samplingSeed)
   {
-    AlphaMuSolveResult result;
     const int trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
+    AlphaMuDecisionPointRequest request;
+    request.deal = deal;
+    request.declarerSeat = declarerSeat;
+    request.contractLevel = 0;
+    request.playHistory = ParsePBNPlayHistory(play, deal.first, trumpSuit);
+    request.depth = depth;
+    request.maxWorlds = maxWorlds;
+    request.timeBudgetSeconds = timeBudgetSeconds;
+    request.prefixCards = prefixCards;
+    request.samplingSeed = samplingSeed;
+    return SolveAlphaMuDecisionPoint(request);
+  }
+
+AlphaMuSolveResult SolveAlphaMuDecisionPoint(
+    const AlphaMuDecisionPointRequest& request)
+  {
+    AlphaMuSolveResult result;
 
     const chrono::steady_clock::time_point totalStart =
       chrono::steady_clock::now();
@@ -4663,14 +4698,18 @@ AlphaMuSolveResult SolveAlphaMu(
     const chrono::steady_clock::time_point worldGenStart =
       chrono::steady_clock::now();
 
-    const vector<PlayHistoryEvent> fullHistory =
-      ParsePBNPlayHistory(play, deal.first, trumpSuit);
+    result.declarerSeat = request.declarerSeat;
+    result.leaderSeat = request.deal.first;
+    result.contractLevel = request.contractLevel;
+    result.contractTrumpSuit = (request.deal.trump == 4 ? -1 : request.deal.trump);
+
+    const vector<PlayHistoryEvent>& fullHistory = request.playHistory;
     result.fullPlayLength = static_cast<unsigned>(fullHistory.size());
-    if (prefixCards >= 0)
+    if (request.prefixCards >= 0)
     {
-      Check(static_cast<unsigned>(prefixCards) <= fullHistory.size(),
+      Check(static_cast<unsigned>(request.prefixCards) <= fullHistory.size(),
         "solve decision-point prefix should not exceed the available play history length");
-      result.prefixPlayLength = static_cast<unsigned>(prefixCards);
+      result.prefixPlayLength = static_cast<unsigned>(request.prefixCards);
     }
     else
       result.prefixPlayLength = static_cast<unsigned>(fullHistory.size());
@@ -4689,16 +4728,22 @@ AlphaMuSolveResult SolveAlphaMu(
     }
 
     const HistoryDerivedWorldSpec spec =
-      BuildWorldSpecFromDeal(deal, declarerSeat, history);
-    const BridgeInformationState information =
-      BuildInformationStateFromPlay(deal, declarerSeat, history, maxWorlds,
-        samplingSeed);
+      BuildWorldSpecFromDeal(request.deal, request.declarerSeat, history);
+    const BridgeInformationState information = ApplyInformationOverrides(
+      BuildInformationStateFromPlay(request.deal, request.declarerSeat, history,
+        request.maxWorlds, request.samplingSeed),
+      request.informationOverrides,
+      request.maxWorlds,
+      request.samplingSeed);
+    for (unsigned i = 0; i < information.biddingConstraints.size(); i++)
+      result.biddingConstraintTexts.push_back(
+        ConstraintToString(information.biddingConstraints[i]));
     const HistoryDerivedConstructionExplanation constructorExplanation =
       ExplainHistoryDerivedConstruction(spec, information);
     result.constructorStats = constructorExplanation.stats;
 
-    const BridgeState state = MakeBridgeStateFromPartialInformation(
-      deal, declarerSeat, history, maxWorlds, samplingSeed);
+    const BridgeState state = MakeBridgeStateFromInformationState(
+      request.deal, request.declarerSeat, history, information);
     result.worldExplanation.finalWorldMask = state.possibleWorlds;
     result.worldExplanation.plausibilityRankedWorldIndices =
       RankWorldsByPlausibility(state.worlds, state.possibleWorlds, information);
@@ -4721,7 +4766,7 @@ AlphaMuSolveResult SolveAlphaMu(
     }
     result.playerToMove = state.playerToMove;
     result.decisionOnDeclarerSide =
-      (SeatSide(state.playerToMove) == SeatSide(declarerSeat));
+      (SeatSide(state.playerToMove) == SeatSide(request.declarerSeat));
     if (result.hasActualPlayedMove)
     {
       Check(result.actualPlayedBy == state.playerToMove,
@@ -4759,8 +4804,9 @@ AlphaMuSolveResult SolveAlphaMu(
     }
     const int tricksRemaining = static_cast<int>(
       (maxCards + state.currentTrick.size()) / 4U);
-    const int maxSearchDepth = (depth <= 0 || depth > tricksRemaining)
-      ? tricksRemaining : depth;
+    const int maxSearchDepth =
+      (request.depth <= 0 || request.depth > tricksRemaining)
+      ? tricksRemaining : request.depth;
 
     SetMaxThreads(0);
     InitZobrist();
@@ -4777,7 +4823,7 @@ AlphaMuSolveResult SolveAlphaMu(
     BridgeRootReport bestReport(state.possibleWorlds.count);
     int bestDepth = 0;
 
-    if (timeBudgetSeconds > 0.0 && maxSearchDepth > 1)
+    if (request.timeBudgetSeconds > 0.0 && maxSearchDepth > 1)
     {
       // Iterative deepening with time budget
       const BridgeRootReport* prevReport = NULL;
@@ -4785,7 +4831,7 @@ AlphaMuSolveResult SolveAlphaMu(
       {
         const double elapsed =
           chrono::duration<double>(chrono::steady_clock::now() - searchStart).count();
-        if (d > 1 && elapsed > timeBudgetSeconds)
+        if (d > 1 && elapsed > request.timeBudgetSeconds)
           break;
 
         tt.Clear();
@@ -4867,7 +4913,8 @@ AlphaMuSolveResult SolveAlphaMu(
 
     if (result.survivingWorldCount > 0)
     {
-      const BridgeState actualState = MakeSingleWorldDecisionState(deal, history);
+      const BridgeState actualState = MakeSingleWorldDecisionState(request.deal,
+        history);
       const vector<BridgeChild> actualChildren = ExpandBridgeChildren(actualState);
       for (unsigned i = 0; i < actualChildren.size(); i++)
       {
@@ -4916,6 +4963,17 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
 
     cout << "  Chosen move: " << SuitName(result.chosenMove.suit)
          << " " << result.chosenMove.rank << endl;
+    cout << "  Contract: ";
+    if (result.contractLevel > 0)
+      cout << result.contractLevel;
+    else
+      cout << "?";
+    cout << (result.contractTrumpSuit < 0 ? "NT" :
+      (result.contractTrumpSuit == SUIT_SPADES ? "S" :
+       result.contractTrumpSuit == SUIT_HEARTS ? "H" :
+       result.contractTrumpSuit == SUIT_DIAMONDS ? "D" : "C"));
+    cout << " by " << SeatName(result.declarerSeat)
+         << " (leader=" << SeatName(result.leaderSeat) << ")" << endl;
     cout << "  Decision point: player=" << SeatName(result.playerToMove)
          << ", side="
          << (result.decisionOnDeclarerSide ? "declarer" : "defender")
@@ -4946,6 +5004,14 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
          << endl;
     cout << "  Search activity: nodes=" << result.searchNodes
          << ", DDS leaf calls=" << result.ddsLeafCalls << endl;
+    cout << "  Cut activity: none (current bridge runner uses full front search plus TT reuse only)" << endl;
+
+    if (! result.biddingConstraintTexts.empty())
+    {
+      cout << "  Bidding-derived constraints:" << endl;
+      for (unsigned i = 0; i < result.biddingConstraintTexts.size(); i++)
+        cout << "    - " << result.biddingConstraintTexts[i] << endl;
+    }
 
     if (result.hasActualPlayedMove)
     {

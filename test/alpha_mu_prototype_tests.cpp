@@ -3566,6 +3566,53 @@ namespace alpha_mu_prototype
       "decision-point solve should rank every surviving world for reporting");
   }
 
+  static void TestExplicitDecisionPointRequestAPI()
+  {
+    AlphaMuDecisionPointRequest request;
+    request.declarerSeat = SEAT_WEST;
+    request.contractLevel = 4;
+    request.deal.trump = 0;
+    request.deal.first = SEAT_NORTH;
+    strcpy(request.deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+    request.depth = 1;
+    request.maxWorlds = 50U;
+    request.prefixCards = 40;
+    request.samplingSeed = 7U;
+    request.informationOverrides.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 0));
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+    request.playHistory = ParsePBNPlayHistory(play, request.deal.first,
+      request.deal.trump);
+
+    const AlphaMuSolveResult first = SolveAlphaMuDecisionPoint(request);
+    const AlphaMuSolveResult second = SolveAlphaMuDecisionPoint(request);
+
+    Check(first.valid && second.valid,
+      "explicit decision-point request API should produce valid results on repeated runs");
+    Check(first.chosenMove == second.chosenMove,
+      "explicit decision-point request API should be deterministic under a fixed seed and configuration");
+    Check(first.declarerSeat == SEAT_WEST && first.leaderSeat == SEAT_NORTH &&
+          first.contractLevel == 4 && first.contractTrumpSuit == SUIT_SPADES,
+      "explicit decision-point request API should preserve the supplied declarer, leader, and contract metadata");
+    Check(first.biddingConstraintTexts.size() == 1 &&
+          first.biddingConstraintTexts[0].find("East must hold at least 0 HCP") != string::npos,
+      "explicit decision-point request API should surface the supplied bidding-derived constraints in reporting text");
+    Check(first.worldExplanation.worlds.size() == second.worldExplanation.worlds.size(),
+      "explicit decision-point request API should keep the decision-point world set stable across repeated runs");
+    for (unsigned i = 0; i < first.worldExplanation.worlds.size(); i++)
+    {
+      Check(first.worldExplanation.worlds[i].serializedWorld ==
+            second.worldExplanation.worlds[i].serializedWorld,
+        "explicit decision-point request API should preserve deterministic world ordering across repeated runs");
+    }
+  }
+
   void TestBridgeTranspositionTable()
   {
     // Use the same board as TestEndToEndSolveAlphaMu
@@ -3816,6 +3863,7 @@ namespace alpha_mu_prototype
        {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
        {"decision-point comparison reporting OK", &TestDecisionPointComparisonReporting},
+       {"explicit decision-point request API OK", &TestExplicitDecisionPointRequestAPI},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
        {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
 #ifndef NDEBUG

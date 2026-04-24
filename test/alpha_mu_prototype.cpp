@@ -3,6 +3,7 @@
  * @brief Thin command-line runner for the split alpha-mu prototype.
  */
 
+#include <cctype>
 #include <stdexcept>
 #include <string>
 
@@ -14,6 +15,13 @@ using namespace alpha_mu_prototype;
 
 namespace
 {
+  string Uppercase(const string& text)
+  {
+	string result(text);
+	for (unsigned i = 0; i < result.size(); i++)
+	  result[i] = static_cast<char>(toupper(static_cast<unsigned char>(result[i])));
+	return result;
+  }
   bool IsLongOption(const char * text)
   {
 	return text != NULL && strncmp(text, "--", 2) == 0;
@@ -120,6 +128,133 @@ namespace
 
 	return NormalizeAlphaMuBenchmarkOptions(options);
 	}
+  int ParseSeatToken(const string& text)
+  {
+	Check(text.size() == 1,
+	  "seat tokens should be one of N, E, S, or W");
+	const int seat = SeatIndex(Uppercase(text)[0]);
+	Check(seat >= 0,
+	  "seat tokens should be one of N, E, S, or W");
+	return seat;
+  }
+  int ParseTrumpToken(const string& text)
+  {
+	const string upper = Uppercase(text);
+	if (upper == "NT" || upper == "N")
+	  return -1;
+	Check(upper.size() == 1,
+	  "trump tokens should be S, H, D, C, or NT");
+	return SuitFromPlayChar(upper[0]);
+  }
+  int ParseHandTypeToken(const string& text)
+  {
+	const string upper = Uppercase(text);
+	if (upper == "BALANCED")
+	  return HAND_TYPE_BALANCED;
+	if (upper == "ONE_SUITER" || upper == "ONE-SUITER" || upper == "ONESUITER")
+	  return HAND_TYPE_ONE_SUITER;
+	if (upper == "TWO_SUITER" || upper == "TWO-SUITER" || upper == "TWOSUITER")
+	  return HAND_TYPE_TWO_SUITER;
+	if (upper == "THREE_SUITER" || upper == "THREE-SUITER" || upper == "THREESUITER")
+	  return HAND_TYPE_THREE_SUITER;
+	Check(false,
+	  "hand-type tokens should be balanced, one_suiter, two_suiter, or three_suiter");
+	return HAND_TYPE_BALANCED;
+  }
+  void ParseContractToken(
+	const string& text,
+	int& level,
+	int& trumpSuit)
+  {
+	Check(! text.empty(),
+	  "contract token should not be empty");
+	unsigned split = 0;
+	while (split < text.size() && isdigit(static_cast<unsigned char>(text[split])))
+	  split++;
+	Check(split > 0 && split < text.size(),
+	  "contract token should look like 3NT, 4S, 5H, 6D, or 7C");
+	Check(TryParseIntArgument(text.substr(0, split).c_str(), level) &&
+	      level >= 1 && level <= 7,
+	  "contract level should be an integer between 1 and 7");
+	trumpSuit = ParseTrumpToken(text.substr(split));
+  }
+  WorldConstraint ParseConstraintToken(const string& text)
+  {
+	const vector<string> parts = SplitString(text, ':', false);
+	Check(! parts.empty(),
+	  "constraint token should not be empty");
+	const string kind = Uppercase(parts[0]);
+	if (kind == "HAS_CARD")
+	{
+	  Check(parts.size() == 4 && parts[3].size() == 1,
+		"has_card constraint should look like has_card:E:S:Q");
+	  return WorldConstraint::HasCard(ParseSeatToken(parts[1]),
+		ParseTrumpToken(parts[2]), Uppercase(parts[3])[0]);
+	}
+	if (kind == "NOT_HAS_CARD")
+	{
+	  Check(parts.size() == 4 && parts[3].size() == 1,
+		"not_has_card constraint should look like not_has_card:W:H:T");
+	  return WorldConstraint::NotHasCard(ParseSeatToken(parts[1]),
+		ParseTrumpToken(parts[2]), Uppercase(parts[3])[0]);
+	}
+	if (kind == "MIN_LENGTH" || kind == "MAX_LENGTH")
+	{
+	  int count = 0;
+	  Check(parts.size() == 4 && TryParseIntArgument(parts[3].c_str(), count),
+		"length constraint should look like min_length:E:S:5");
+	  return (kind == "MIN_LENGTH" ?
+		WorldConstraint::MinLength(ParseSeatToken(parts[1]),
+		  ParseTrumpToken(parts[2]), count) :
+		WorldConstraint::MaxLength(ParseSeatToken(parts[1]),
+		  ParseTrumpToken(parts[2]), count));
+	}
+	if (kind == "MIN_HCP" || kind == "MAX_HCP")
+	{
+	  int count = 0;
+	  Check(parts.size() == 3 && TryParseIntArgument(parts[2].c_str(), count),
+		"HCP constraint should look like min_hcp:E:12");
+	  return (kind == "MIN_HCP" ?
+		WorldConstraint::MinHCP(ParseSeatToken(parts[1]), count) :
+		WorldConstraint::MaxHCP(ParseSeatToken(parts[1]), count));
+	}
+	if (kind == "BALANCED")
+	{
+	  Check(parts.size() == 2,
+		"balanced constraint should look like balanced:E");
+	  return WorldConstraint::Balanced(ParseSeatToken(parts[1]));
+	}
+	if (kind == "HAND_TYPE")
+	{
+	  Check(parts.size() == 3,
+		"hand_type constraint should look like hand_type:E:one_suiter");
+	  return WorldConstraint::HandTypeConstraint(ParseSeatToken(parts[1]),
+		ParseHandTypeToken(parts[2]));
+	}
+	if (kind == "PARTNERSHIP_MIN_LENGTH" || kind == "PARTNERSHIP_MAX_LENGTH")
+	{
+	  int count = 0;
+	  Check(parts.size() == 4 && TryParseIntArgument(parts[3].c_str(), count),
+		"partnership length constraint should look like partnership_min_length:E:H:8");
+	  return (kind == "PARTNERSHIP_MIN_LENGTH" ?
+		WorldConstraint::PartnershipMinLength(ParseSeatToken(parts[1]),
+		  ParseTrumpToken(parts[2]), count) :
+		WorldConstraint::PartnershipMaxLength(ParseSeatToken(parts[1]),
+		  ParseTrumpToken(parts[2]), count));
+	}
+	if (kind == "PARTNERSHIP_MIN_HCP" || kind == "PARTNERSHIP_MAX_HCP")
+	{
+	  int count = 0;
+	  Check(parts.size() == 3 && TryParseIntArgument(parts[2].c_str(), count),
+		"partnership HCP constraint should look like partnership_min_hcp:E:20");
+	  return (kind == "PARTNERSHIP_MIN_HCP" ?
+		WorldConstraint::PartnershipMinHCP(ParseSeatToken(parts[1]), count) :
+		WorldConstraint::PartnershipMaxHCP(ParseSeatToken(parts[1]), count));
+	}
+	Check(false,
+	  string("unknown constraint token kind ") + parts[0]);
+	return WorldConstraint();
+  }
 }
 
 
@@ -244,6 +379,128 @@ int main(int argc, char ** argv)
 
 	  ReportAlphaMuSolveResult(result);
 	  PrintPrototypeStatus("alpha-mu solve OK");
+	  return 0;
+	}
+	if (mode == "decision")
+	{
+	  AlphaMuDecisionPointRequest request;
+	  string dealPbn;
+	  string playCards;
+	  int explicitPlayCount = -1;
+	  bool haveDeal = false;
+	  bool haveLeader = false;
+	  bool haveDeclarer = false;
+	  bool haveContract = false;
+
+	  for (int a = 2; a < argc; a++)
+	  {
+		const string flag(argv[a]);
+		Check(IsLongOption(argv[a]),
+		  "decision mode expects only long options");
+		Check(a + 1 < argc,
+		  string("decision option ") + flag + " requires a value");
+		const string value(argv[++a]);
+
+		if (flag == "--deal-pbn")
+		{
+		  dealPbn = value;
+		  haveDeal = true;
+		}
+		else if (flag == "--leader")
+		{
+		  request.deal.first = ParseSeatToken(value);
+		  haveLeader = true;
+		}
+		else if (flag == "--declarer")
+		{
+		  request.declarerSeat = ParseSeatToken(value);
+		  haveDeclarer = true;
+		}
+		else if (flag == "--contract")
+		{
+		  int trumpSuit = -1;
+		  ParseContractToken(value, request.contractLevel, trumpSuit);
+		  request.deal.trump = (trumpSuit < 0 ? 4 : trumpSuit);
+		  haveContract = true;
+		}
+		else if (flag == "--play-cards")
+		  playCards = value;
+		else if (flag == "--play-count")
+		{
+		  Check(TryParseIntArgument(value.c_str(), explicitPlayCount) &&
+			  explicitPlayCount >= 0,
+			"decision play-count should be a non-negative integer");
+		}
+		else if (flag == "--prefix-cards")
+		{
+		  Check(TryParseIntArgument(value.c_str(), request.prefixCards) &&
+			  request.prefixCards >= 0,
+			"decision prefix-cards should be a non-negative integer");
+		}
+		else if (flag == "--depth")
+		{
+		  Check(TryParseIntArgument(value.c_str(), request.depth),
+			"decision depth should be a valid integer");
+		}
+		else if (flag == "--max-worlds")
+		{
+		  int parsed = 0;
+		  Check(TryParseIntArgument(value.c_str(), parsed) && parsed >= 0,
+			"decision max-worlds should be a non-negative integer");
+		  request.maxWorlds = static_cast<unsigned>(parsed);
+		}
+		else if (flag == "--time")
+		{
+		  Check(TryParseDoubleArgument(value.c_str(), request.timeBudgetSeconds),
+			"decision time budget should be a valid number");
+		}
+		else if (flag == "--seed")
+		{
+		  int parsed = 0;
+		  Check(TryParseIntArgument(value.c_str(), parsed) && parsed >= 0,
+			"decision seed should be a non-negative integer");
+		  request.samplingSeed = static_cast<unsigned>(parsed);
+		}
+		else if (flag == "--constraint")
+		  request.informationOverrides.biddingConstraints.push_back(
+			ParseConstraintToken(value));
+		else
+		  Check(false,
+			string("decision mode does not recognize option ") + flag);
+	  }
+
+	  Check(haveDeal,
+		"decision mode requires --deal-pbn");
+	  Check(haveLeader,
+		"decision mode requires --leader");
+	  Check(haveDeclarer,
+		"decision mode requires --declarer");
+	  Check(haveContract,
+		"decision mode requires --contract");
+	  Check(dealPbn.size() < sizeof(request.deal.remainCards),
+		"decision deal-pbn should fit into dealPBN.remainCards");
+	  strcpy(request.deal.remainCards, dealPbn.c_str());
+
+	  playTracePBN play;
+	  memset(&play, 0, sizeof(play));
+	  if (! playCards.empty())
+	  {
+		Check(playCards.size() % 2 == 0,
+		  "decision play-cards should consist of suit/rank pairs");
+		const int inferredCount = static_cast<int>(playCards.size() / 2);
+		play.number = (explicitPlayCount >= 0 ? explicitPlayCount : inferredCount);
+		Check(play.number <= inferredCount,
+		  "decision play-count should not exceed the supplied play-card pairs");
+		Check(playCards.size() < sizeof(play.cards),
+		  "decision play-cards should fit into playTracePBN.cards");
+		strcpy(play.cards, playCards.c_str());
+	  }
+	  request.playHistory = ParsePBNPlayHistory(play, request.deal.first,
+		(request.deal.trump == 4 ? -1 : request.deal.trump));
+
+	  const AlphaMuSolveResult result = SolveAlphaMuDecisionPoint(request);
+	  ReportAlphaMuSolveResult(result);
+	  PrintPrototypeStatus("alpha-mu decision OK");
 	  return 0;
 	}
 	if (mode == "tt_bench")

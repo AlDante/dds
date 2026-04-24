@@ -1803,6 +1803,38 @@ namespace alpha_mu_prototype
       const unsigned maxWorlds,
       const unsigned samplingSeed = 42U);
 
+  /** @brief Full explicit request for one post-mortem decision-point analysis. */
+  struct AlphaMuDecisionPointRequest
+  {
+    dealPBN deal;
+    int declarerSeat;
+    int contractLevel;
+    vector<PlayHistoryEvent> playHistory;
+    BridgeInformationState informationOverrides;
+    int depth;
+    unsigned maxWorlds;
+    double timeBudgetSeconds;
+    int prefixCards;
+    unsigned samplingSeed;
+
+    AlphaMuDecisionPointRequest() :
+      deal(),
+      declarerSeat(0),
+      contractLevel(0),
+      playHistory(),
+      informationOverrides(),
+      depth(1),
+      maxWorlds(50U),
+      timeBudgetSeconds(0.0),
+      prefixCards(-1),
+      samplingSeed(42U)
+    {
+      memset(&deal, 0, sizeof(deal));
+      informationOverrides.deriveFollowSuitConstraints = true;
+      informationOverrides.deduplicateEquivalentWorlds = true;
+    }
+  };
+
   /** @brief Convert a bridge continuation state into the DDS `dealPBN` leaf format. */
   dealPBN MakeDDSDealPBN( const BridgeState& state, const ParsedWorld& world);
   /** @brief Count the number of unresolved tricks remaining in one world. */
@@ -1975,10 +2007,15 @@ namespace alpha_mu_prototype
     ParetoFront rootFront;
     BridgeRootReport rootReport;
     WorldGenerationExplanation worldExplanation;
+    vector<string> biddingConstraintTexts;
     unsigned worldCount;
     unsigned survivingWorldCount;
     unsigned fullPlayLength;
     unsigned prefixPlayLength;
+    int declarerSeat;
+    int leaderSeat;
+    int contractLevel;
+    int contractTrumpSuit;
     int playerToMove;
     bool decisionOnDeclarerSide;
     int depthSearched;
@@ -2012,10 +2049,15 @@ namespace alpha_mu_prototype
       rootFront(0),
       rootReport(0),
       worldExplanation(),
+      biddingConstraintTexts(),
       worldCount(0),
       survivingWorldCount(0),
       fullPlayLength(0),
       prefixPlayLength(0),
+      declarerSeat(0),
+      leaderSeat(0),
+      contractLevel(0),
+      contractTrumpSuit(-1),
       playerToMove(0),
       decisionOnDeclarerSide(false),
       depthSearched(0),
@@ -2064,6 +2106,10 @@ namespace alpha_mu_prototype
       const double timeBudgetSeconds = 0.0,
       const int prefixCards = -1,
       const unsigned samplingSeed = 42U);
+
+  /** @brief Explicit decision-point runner used by the Workstream 3 CLI/API path. */
+  AlphaMuSolveResult SolveAlphaMuDecisionPoint(
+      const AlphaMuDecisionPointRequest& request);
 
   /** @brief Print a human-readable summary of an alpha-mu solve result. */
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);
