@@ -1156,6 +1156,40 @@ namespace alpha_mu_prototype
 
 
   /**
+   * @brief One soft plausibility preference used only for reporting/ranking.
+   *
+   * Unlike `WorldConstraint`, a plausibility hint does not reject a world. It
+   * contributes a weighted score that can be shown in explanations and used for
+   * deterministic ranking of already-surviving worlds.
+   */
+  struct WorldPlausibilityHint
+  {
+    WorldConstraint constraint;
+    int weight;
+    string label;
+
+    WorldPlausibilityHint() :
+      constraint(),
+      weight(1),
+      label()
+    {
+    }
+
+    static WorldPlausibilityHint Prefer(
+      const WorldConstraint& constraintArg,
+      const int weightArg = 1,
+      const string& labelArg = string())
+    {
+      WorldPlausibilityHint hint;
+      hint.constraint = constraintArg;
+      hint.weight = weightArg;
+      hint.label = labelArg;
+      return hint;
+    }
+  };
+
+
+  /**
    * @brief Partial-information package used to generate or explain worlds.
    *
    * The prototype separates known cards, bidding facts, follow-suit facts, play
@@ -1167,6 +1201,7 @@ namespace alpha_mu_prototype
     vector<WorldConstraint> knownCardConstraints;
     vector<WorldConstraint> biddingConstraints;
     vector<WorldConstraint> followSuitConstraints;
+    vector<WorldPlausibilityHint> plausibilityHints;
     vector<PlayHistoryEvent> playHistory;
     vector<PlayHistoryEvent> currentTrickHistory;
     bool deriveFollowSuitConstraints;
@@ -1178,6 +1213,7 @@ namespace alpha_mu_prototype
       knownCardConstraints(),
       biddingConstraints(),
       followSuitConstraints(),
+      plausibilityHints(),
       playHistory(),
       currentTrickHistory(),
       deriveFollowSuitConstraints(true),
@@ -1289,16 +1325,24 @@ namespace alpha_mu_prototype
     unsigned worldIndex;
     string serializedWorld;
     bool accepted;
+    int plausibilityScore;
+    int plausibilityMaxScore;
     string rejectionStage;
     string rejectionReason;
+    vector<string> satisfiedPlausibilityHints;
+    vector<string> unsatisfiedPlausibilityHints;
     vector<WorldExplanationStep> steps;
 
     WorldExplanation() :
       worldIndex(0),
       serializedWorld(),
       accepted(true),
+      plausibilityScore(0),
+      plausibilityMaxScore(0),
       rejectionStage(),
       rejectionReason(),
+      satisfiedPlausibilityHints(),
+      unsatisfiedPlausibilityHints(),
       steps()
     {
     }
@@ -1310,11 +1354,13 @@ namespace alpha_mu_prototype
   {
     vector<WorldConstraint> appliedFollowSuitConstraints;
     WorldMask finalWorldMask;
+    vector<unsigned> plausibilityRankedWorldIndices;
     vector<WorldExplanation> worlds;
 
     WorldGenerationExplanation() :
       appliedFollowSuitConstraints(),
       finalWorldMask(),
+      plausibilityRankedWorldIndices(),
       worlds()
     {
     }
@@ -1606,6 +1652,8 @@ namespace alpha_mu_prototype
   void RemoveCardFromWorld( ParsedWorld& world, const int player, const BridgeMove& move);
   /** @brief Render a constraint as explanatory text. */
   string ConstraintToString(const WorldConstraint& constraint);
+  /** @brief Render a plausibility hint label for explanations and reporting. */
+  string PlausibilityHintLabel(const WorldPlausibilityHint& hint);
   /** @brief Return the first failing constraint as user-facing explanatory text. */
   string FirstConstraintFailureReason( const ParsedWorld& world, const vector<WorldConstraint>& constraints);
   /** @brief Replay a complete prior history against a world and explain failure. */
@@ -1731,7 +1779,8 @@ namespace alpha_mu_prototype
       const dealPBN& fullDeal,
       const int declarerSeat,
       const vector<PlayHistoryEvent>& playedCards,
-      const unsigned maxWorlds);
+      const unsigned maxWorlds,
+      const unsigned samplingSeed = 42U);
 
   /**
    * @brief Create a multi-world BridgeState from a partial-information scenario.
@@ -1751,7 +1800,8 @@ namespace alpha_mu_prototype
       const dealPBN& fullDeal,
       const int declarerSeat,
       const vector<PlayHistoryEvent>& playedCards,
-      const unsigned maxWorlds);
+      const unsigned maxWorlds,
+      const unsigned samplingSeed = 42U);
 
   /** @brief Convert a bridge continuation state into the DDS `dealPBN` leaf format. */
   dealPBN MakeDDSDealPBN( const BridgeState& state, const ParsedWorld& world);
@@ -1836,6 +1886,10 @@ namespace alpha_mu_prototype
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const BridgeInformationState& information, WorldGenerationStats* stats);
   /** @brief Produce an explanation trace for every stage of possible-world filtering. */
   WorldGenerationExplanation ExplainPossibleWorldGeneration( const vector<ParsedWorld>& worlds, const BridgeInformationState& information);
+  /** @brief Sum the weights of all matching plausibility hints for one world. */
+  int EvaluateWorldPlausibility( const ParsedWorld& world, const BridgeInformationState& information, vector<string>* satisfiedLabels, vector<string>* unsatisfiedLabels);
+  /** @brief Rank accepted worlds by descending plausibility score, then canonically. */
+  vector<unsigned> RankWorldsByPlausibility( const vector<ParsedWorld>& worlds, const WorldMask& candidates, const BridgeInformationState& information);
   /** @brief Convenience overload for simple constraint-only world filtering. */
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const vector<WorldConstraint>& constraints);
   /** @brief Build a binary toy outcome vector from `0`, `1`, and `x` text. */
@@ -1920,12 +1974,32 @@ namespace alpha_mu_prototype
     BridgeMove chosenMove;
     ParetoFront rootFront;
     BridgeRootReport rootReport;
+    WorldGenerationExplanation worldExplanation;
     unsigned worldCount;
     unsigned survivingWorldCount;
+    unsigned fullPlayLength;
+    unsigned prefixPlayLength;
+    int playerToMove;
+    bool decisionOnDeclarerSide;
     int depthSearched;
     double worldGenerationSeconds;
     double searchSeconds;
     double totalSeconds;
+    HistoryDerivedConstructionStats constructorStats;
+    bool hasActualPlayedMove;
+    int actualPlayedBy;
+    BridgeMove actualPlayedMove;
+    bool hasDDSBestMove;
+    BridgeMove ddsBestMove;
+    int ddsBestScore;
+    bool hasChosenMoveMu;
+    double chosenMoveMu;
+    bool hasActualMoveMu;
+    double actualMoveMu;
+    bool hasChosenMoveDDSScore;
+    int chosenMoveDDSScore;
+    bool hasActualMoveDDSScore;
+    int actualMoveDDSScore;
     unsigned ddsLeafCalls;
     unsigned searchNodes;
     unsigned long long ttProbes;
@@ -1937,12 +2011,32 @@ namespace alpha_mu_prototype
       chosenMove(),
       rootFront(0),
       rootReport(0),
+      worldExplanation(),
       worldCount(0),
       survivingWorldCount(0),
+      fullPlayLength(0),
+      prefixPlayLength(0),
+      playerToMove(0),
+      decisionOnDeclarerSide(false),
       depthSearched(0),
       worldGenerationSeconds(0.0),
       searchSeconds(0.0),
       totalSeconds(0.0),
+      constructorStats(),
+      hasActualPlayedMove(false),
+      actualPlayedBy(0),
+      actualPlayedMove(),
+      hasDDSBestMove(false),
+      ddsBestMove(),
+      ddsBestScore(0),
+      hasChosenMoveMu(false),
+      chosenMoveMu(0.0),
+      hasActualMoveMu(false),
+      actualMoveMu(0.0),
+      hasChosenMoveDDSScore(false),
+      chosenMoveDDSScore(0),
+      hasActualMoveDDSScore(false),
+      actualMoveDDSScore(0),
       ddsLeafCalls(0),
       searchNodes(0),
       ttProbes(0),
@@ -1967,7 +2061,9 @@ namespace alpha_mu_prototype
       const playTracePBN& play,
       const int depth,
       const unsigned maxWorlds,
-      const double timeBudgetSeconds = 0.0);
+      const double timeBudgetSeconds = 0.0,
+      const int prefixCards = -1,
+      const unsigned samplingSeed = 42U);
 
   /** @brief Print a human-readable summary of an alpha-mu solve result. */
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);

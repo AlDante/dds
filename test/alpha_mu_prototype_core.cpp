@@ -692,6 +692,12 @@ string ConstraintToString(const WorldConstraint& constraint)
     }
     return oss.str();
   }
+string PlausibilityHintLabel(const WorldPlausibilityHint& hint)
+  {
+    if (! hint.label.empty())
+      return hint.label;
+    return ConstraintToString(hint.constraint);
+  }
 string FirstConstraintFailureReason(
     const ParsedWorld& world,
     const vector<WorldConstraint>& constraints)
@@ -2579,6 +2585,58 @@ WorldMask SampleWorldMaskDeterministically(
     sampledOutWorlds = static_cast<unsigned>(active.size()) - sampleLimit;
     return sampled;
   }
+int EvaluateWorldPlausibility(
+    const ParsedWorld& world,
+    const BridgeInformationState& information,
+    vector<string>* satisfiedLabels,
+    vector<string>* unsatisfiedLabels)
+  {
+    int score = 0;
+    for (unsigned i = 0; i < information.plausibilityHints.size(); i++)
+    {
+      const WorldPlausibilityHint& hint = information.plausibilityHints[i];
+      const string label = PlausibilityHintLabel(hint);
+      if (WorldMatchesConstraint(world, hint.constraint))
+      {
+        score += hint.weight;
+        if (satisfiedLabels != NULL)
+          satisfiedLabels->push_back(label);
+      }
+      else if (unsatisfiedLabels != NULL)
+        unsatisfiedLabels->push_back(label);
+    }
+    return score;
+  }
+vector<unsigned> RankWorldsByPlausibility(
+    const vector<ParsedWorld>& worlds,
+    const WorldMask& candidates,
+    const BridgeInformationState& information)
+  {
+    vector<unsigned> ranked;
+    for (unsigned i = 0; i < worlds.size(); i++)
+    {
+      if (candidates.Has(i))
+        ranked.push_back(i);
+    }
+
+    stable_sort(ranked.begin(), ranked.end(),
+      [&](const unsigned left, const unsigned right)
+      {
+        const int leftScore = EvaluateWorldPlausibility(worlds[left], information,
+          NULL, NULL);
+        const int rightScore = EvaluateWorldPlausibility(worlds[right], information,
+          NULL, NULL);
+        if (leftScore != rightScore)
+          return leftScore > rightScore;
+
+        const string leftKey = SerializePBNWorld(worlds[left]);
+        const string rightKey = SerializePBNWorld(worlds[right]);
+        if (leftKey != rightKey)
+          return leftKey < rightKey;
+        return left < right;
+      });
+    return ranked;
+  }
   /**
    * Run the staged possible-world pipeline used before alpha-mu search starts.
    *
@@ -2692,12 +2750,18 @@ WorldGenerationExplanation ExplainPossibleWorldGeneration(
     unsigned sampledOutWorlds = 0;
     explanation.finalWorldMask = SampleWorldMaskDeterministically(worlds, dedupMask,
       information.sampleLimit, information.samplingSeed, sampledOutWorlds);
+    explanation.plausibilityRankedWorldIndices = RankWorldsByPlausibility(worlds,
+      explanation.finalWorldMask, information);
 
     for (unsigned i = 0; i < worlds.size(); i++)
     {
       WorldExplanation world;
       world.worldIndex = i;
       world.serializedWorld = SerializePBNWorld(worlds[i]);
+      for (unsigned h = 0; h < information.plausibilityHints.size(); h++)
+        world.plausibilityMaxScore += information.plausibilityHints[h].weight;
+      world.plausibilityScore = EvaluateWorldPlausibility(worlds[i], information,
+        &world.satisfiedPlausibilityHints, &world.unsatisfiedPlausibilityHints);
 
       if (! knownMask.Has(i))
       {
@@ -3494,7 +3558,8 @@ BridgeInformationState BuildInformationStateFromPlay(
     const dealPBN& fullDeal,
     const int declarerSeat,
     const vector<PlayHistoryEvent>& playedCards,
-    const unsigned maxWorlds)
+    const unsigned maxWorlds,
+    const unsigned samplingSeed)
   {
     BridgeInformationState info;
     const ParsedWorld fullWorld = ParsePBNWorld(fullDeal.remainCards);
@@ -3543,7 +3608,7 @@ BridgeInformationState BuildInformationStateFromPlay(
     info.deriveFollowSuitConstraints = true;
     info.deduplicateEquivalentWorlds = true;
     info.sampleLimit = maxWorlds;
-    info.samplingSeed = 42;
+    info.samplingSeed = samplingSeed;
     return info;
   }
   // `WorldMask` is backed by a single 64-bit word, so oversized constructor
@@ -3582,12 +3647,14 @@ BridgeState MakeBridgeStateFromPartialInformation(
     const dealPBN& fullDeal,
     const int declarerSeat,
     const vector<PlayHistoryEvent>& playedCards,
-    const unsigned maxWorlds)
+    const unsigned maxWorlds,
+    const unsigned samplingSeed)
   {
     const HistoryDerivedWorldSpec spec =
       BuildWorldSpecFromDeal(fullDeal, declarerSeat, playedCards);
     const BridgeInformationState info =
-      BuildInformationStateFromPlay(fullDeal, declarerSeat, playedCards, maxWorlds);
+      BuildInformationStateFromPlay(fullDeal, declarerSeat, playedCards,
+        maxWorlds, samplingSeed);
 
     const HistoryDerivedConstructionResult constructed =
       ConstructCandidateWorldsFromHistory(spec, info);
@@ -4495,13 +4562,96 @@ DDSLeafEvalResult EvaluateDDSLeafThresholdParallel(
     cout << kPrototypeMessagePrefix << msg << "\n";
   }
 
+  static ParsedWorld BuildActualRemainingWorld(
+    const dealPBN& deal,
+    const vector<PlayHistoryEvent>& playedCards)
+  {
+    ParsedWorld world = ParsePBNWorld(deal.remainCards);
+    for (unsigned i = 0; i < playedCards.size(); i++)
+    {
+      Check(WorldHasCard(world, playedCards[i].player, playedCards[i].move.suit,
+            playedCards[i].move.rank),
+        "actual decision-point world reconstruction should only remove cards held by their recorded owner");
+      RemoveCardFromWorld(world, playedCards[i].player, playedCards[i].move);
+    }
+    return world;
+  }
+
+  static BridgeState MakeSingleWorldDecisionState(
+    const dealPBN& deal,
+    const vector<PlayHistoryEvent>& playedCards)
+  {
+    BridgeState state;
+    state.worlds.push_back(BuildActualRemainingWorld(deal, playedCards));
+    state.possibleWorlds = WorldMask(1, 0x1ULL);
+    state.trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
+
+    const unsigned cardsInCurrentTrick =
+      static_cast<unsigned>(playedCards.size() % 4);
+    if (cardsInCurrentTrick > 0)
+    {
+      const unsigned trickStart =
+        static_cast<unsigned>(playedCards.size()) - cardsInCurrentTrick;
+      state.trickLeader = playedCards[trickStart].player;
+      state.leadSuit = playedCards[trickStart].move.suit;
+      for (unsigned i = trickStart; i < playedCards.size(); i++)
+      {
+        state.currentTrick.push_back(playedCards[i].move);
+        state.currentTrickPlayers.push_back(playedCards[i].player);
+      }
+      state.playerToMove =
+        (state.trickLeader + static_cast<int>(cardsInCurrentTrick)) % 4;
+    }
+    else if (! playedCards.empty())
+    {
+      const unsigned lastTrickStart =
+        static_cast<unsigned>(playedCards.size()) - 4U;
+      vector<BridgeMove> lastTrick;
+      vector<int> lastPlayers;
+      for (unsigned i = lastTrickStart; i < playedCards.size(); i++)
+      {
+        lastTrick.push_back(playedCards[i].move);
+        lastPlayers.push_back(playedCards[i].player);
+      }
+      const unsigned winIdx = WinningCardIndex(lastTrick,
+        playedCards[lastTrickStart].move.suit, state.trumpSuit);
+      state.trickLeader = lastPlayers[winIdx];
+      state.playerToMove = state.trickLeader;
+      state.leadSuit = -1;
+    }
+    else
+    {
+      state.trickLeader = deal.first;
+      state.playerToMove = deal.first;
+      state.leadSuit = -1;
+    }
+
+    state.maxSide = SeatSide(state.playerToMove);
+    state.maxTricksWon = 0;
+    return state;
+  }
+
+  static const BridgeRootChildReport * FindRootChildReport(
+    const BridgeRootReport& report,
+    const BridgeMove& move)
+  {
+    for (unsigned i = 0; i < report.children.size(); i++)
+    {
+      if (report.children[i].move == move)
+        return &report.children[i];
+    }
+    return NULL;
+  }
+
 AlphaMuSolveResult SolveAlphaMu(
     const dealPBN& deal,
     const int declarerSeat,
     const playTracePBN& play,
     const int depth,
     const unsigned maxWorlds,
-    const double timeBudgetSeconds)
+    const double timeBudgetSeconds,
+    const int prefixCards,
+    const unsigned samplingSeed)
   {
     AlphaMuSolveResult result;
     const int trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
@@ -4513,11 +4663,70 @@ AlphaMuSolveResult SolveAlphaMu(
     const chrono::steady_clock::time_point worldGenStart =
       chrono::steady_clock::now();
 
-    const vector<PlayHistoryEvent> history =
+    const vector<PlayHistoryEvent> fullHistory =
       ParsePBNPlayHistory(play, deal.first, trumpSuit);
+    result.fullPlayLength = static_cast<unsigned>(fullHistory.size());
+    if (prefixCards >= 0)
+    {
+      Check(static_cast<unsigned>(prefixCards) <= fullHistory.size(),
+        "solve decision-point prefix should not exceed the available play history length");
+      result.prefixPlayLength = static_cast<unsigned>(prefixCards);
+    }
+    else
+      result.prefixPlayLength = static_cast<unsigned>(fullHistory.size());
+
+    const vector<PlayHistoryEvent>::difference_type prefixSize =
+      static_cast<vector<PlayHistoryEvent>::difference_type>(
+        result.prefixPlayLength);
+    vector<PlayHistoryEvent> history(fullHistory.begin(),
+      fullHistory.begin() + prefixSize);
+
+    if (result.prefixPlayLength < fullHistory.size())
+    {
+      result.hasActualPlayedMove = true;
+      result.actualPlayedBy = fullHistory[result.prefixPlayLength].player;
+      result.actualPlayedMove = fullHistory[result.prefixPlayLength].move;
+    }
+
+    const HistoryDerivedWorldSpec spec =
+      BuildWorldSpecFromDeal(deal, declarerSeat, history);
+    const BridgeInformationState information =
+      BuildInformationStateFromPlay(deal, declarerSeat, history, maxWorlds,
+        samplingSeed);
+    const HistoryDerivedConstructionExplanation constructorExplanation =
+      ExplainHistoryDerivedConstruction(spec, information);
+    result.constructorStats = constructorExplanation.stats;
 
     const BridgeState state = MakeBridgeStateFromPartialInformation(
-      deal, declarerSeat, history, maxWorlds);
+      deal, declarerSeat, history, maxWorlds, samplingSeed);
+    result.worldExplanation.finalWorldMask = state.possibleWorlds;
+    result.worldExplanation.plausibilityRankedWorldIndices =
+      RankWorldsByPlausibility(state.worlds, state.possibleWorlds, information);
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      WorldExplanation world;
+      world.worldIndex = i;
+      world.serializedWorld = SerializePBNWorld(state.worlds[i]);
+      world.accepted = state.possibleWorlds.Has(i);
+      for (unsigned h = 0; h < information.plausibilityHints.size(); h++)
+        world.plausibilityMaxScore += information.plausibilityHints[h].weight;
+      world.plausibilityScore = EvaluateWorldPlausibility(state.worlds[i],
+        information, &world.satisfiedPlausibilityHints,
+        &world.unsatisfiedPlausibilityHints);
+      AddWorldExplanationStep(world, "decision_world_set", world.accepted,
+        (world.accepted ?
+          "survived into the current compacted decision-point world set" :
+          "not active in the current compacted decision-point world set"));
+      result.worldExplanation.worlds.push_back(world);
+    }
+    result.playerToMove = state.playerToMove;
+    result.decisionOnDeclarerSide =
+      (SeatSide(state.playerToMove) == SeatSide(declarerSeat));
+    if (result.hasActualPlayedMove)
+    {
+      Check(result.actualPlayedBy == state.playerToMove,
+        "solve decision-point reporting should align the next recorded play with the computed player-to-move");
+    }
 
     const chrono::steady_clock::time_point worldGenEnd =
       chrono::steady_clock::now();
@@ -4557,7 +4766,13 @@ AlphaMuSolveResult SolveAlphaMu(
     InitZobrist();
     BridgeTranspositionTable tt(1U << 20);
     BridgeTTStats ttStats;
-    const SearchExecutionContext context;
+    BenchmarkBoardProgressContext progress;
+    progress.totalStart = searchStart;
+    progress.boardStart = searchStart;
+    progress.reportIntervalSeconds = 1.0e30;
+    progress.nextReportSeconds = 1.0e30;
+    SearchExecutionContext context;
+    context.benchmarkProgress = &progress;
 
     BridgeRootReport bestReport(state.possibleWorlds.count);
     int bestDepth = 0;
@@ -4617,6 +4832,8 @@ AlphaMuSolveResult SolveAlphaMu(
     result.ttProbes = ttStats.probes;
     result.ttHits = ttStats.hits;
     result.ttStores = ttStats.stores;
+    result.searchNodes = static_cast<unsigned>(progress.recursiveCalls);
+    result.ddsLeafCalls = static_cast<unsigned>(progress.ddsLeafCalls);
 
     // Choose the move with the highest mu
     if (! bestReport.children.empty())
@@ -4633,6 +4850,49 @@ AlphaMuSolveResult SolveAlphaMu(
         }
       }
       result.chosenMove = bestReport.children[bestIdx].move;
+      result.hasChosenMoveMu = true;
+      result.chosenMoveMu = bestReport.children[bestIdx].front.Mu();
+    }
+
+    if (result.hasActualPlayedMove)
+    {
+      const BridgeRootChildReport * actualReport = FindRootChildReport(bestReport,
+        result.actualPlayedMove);
+      if (actualReport != NULL)
+      {
+        result.hasActualMoveMu = true;
+        result.actualMoveMu = actualReport->front.Mu();
+      }
+    }
+
+    if (result.survivingWorldCount > 0)
+    {
+      const BridgeState actualState = MakeSingleWorldDecisionState(deal, history);
+      const vector<BridgeChild> actualChildren = ExpandBridgeChildren(actualState);
+      for (unsigned i = 0; i < actualChildren.size(); i++)
+      {
+        const int score = ExactBridgeDDSScoreForWorld(actualChildren[i].state, 0,
+          context);
+        if (! result.hasDDSBestMove || score > result.ddsBestScore ||
+            (score == result.ddsBestScore &&
+             BridgeMoveLess(actualChildren[i].move, result.ddsBestMove)))
+        {
+          result.hasDDSBestMove = true;
+          result.ddsBestMove = actualChildren[i].move;
+          result.ddsBestScore = score;
+        }
+        if (result.valid && actualChildren[i].move == result.chosenMove)
+        {
+          result.hasChosenMoveDDSScore = true;
+          result.chosenMoveDDSScore = score;
+        }
+        if (result.hasActualPlayedMove &&
+            actualChildren[i].move == result.actualPlayedMove)
+        {
+          result.hasActualMoveDDSScore = true;
+          result.actualMoveDDSScore = score;
+        }
+      }
     }
 
     result.totalSeconds =
@@ -4656,6 +4916,11 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
 
     cout << "  Chosen move: " << SuitName(result.chosenMove.suit)
          << " " << result.chosenMove.rank << endl;
+    cout << "  Decision point: player=" << SeatName(result.playerToMove)
+         << ", side="
+         << (result.decisionOnDeclarerSide ? "declarer" : "defender")
+         << ", play prefix=" << result.prefixPlayLength
+         << "/" << result.fullPlayLength << " cards" << endl;
     cout << "  Depth searched: " << result.depthSearched << " tricks" << endl;
     cout << "  Worlds: " << result.survivingWorldCount
          << " surviving / " << result.worldCount << " raw" << endl;
@@ -4666,9 +4931,70 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
     cout << "  Timing: " << result.totalSeconds << "s total ("
          << result.worldGenerationSeconds << "s world-gen, "
          << result.searchSeconds << "s search)" << endl;
+    cout << "  Constructor pruning: raw="
+         << result.constructorStats.rawAssignmentCount
+         << ", ownership=" << result.constructorStats.afterOwnershipCount
+         << ", card-location="
+         << result.constructorStats.afterCardLocationCount
+         << ", length=" << result.constructorStats.afterConstructorLengthCount
+         << ", HCP=" << result.constructorStats.afterConstructorHCPCount
+         << ", shape=" << result.constructorStats.afterConstructorBalancedCount
+         << ", final=" << result.constructorStats.finalWorldCount
+         << endl;
     cout << "  TT: " << result.ttStores << " stores, "
          << result.ttHits << " hits / " << result.ttProbes << " probes"
          << endl;
+    cout << "  Search activity: nodes=" << result.searchNodes
+         << ", DDS leaf calls=" << result.ddsLeafCalls << endl;
+
+    if (result.hasActualPlayedMove)
+    {
+      cout << "  Actual played move: " << SeatName(result.actualPlayedBy) << " "
+           << SuitName(result.actualPlayedMove.suit) << " "
+           << result.actualPlayedMove.rank;
+      if (result.hasActualMoveMu)
+        cout << " (alpha-mu mu=" << setprecision(4) << result.actualMoveMu << ")";
+      if (result.hasActualMoveDDSScore)
+        cout << " (DDS=" << setprecision(3) << result.actualMoveDDSScore << ")";
+      cout << endl;
+    }
+
+    if (result.hasDDSBestMove)
+    {
+      cout << "  DDS omniscient move: " << SuitName(result.ddsBestMove.suit)
+           << " " << result.ddsBestMove.rank
+           << " (DDS=" << setprecision(3) << result.ddsBestScore << ")"
+           << endl;
+    }
+
+    if (result.hasChosenMoveMu || result.hasChosenMoveDDSScore)
+    {
+      cout << "  Chosen move detail:";
+      if (result.hasChosenMoveMu)
+        cout << " mu=" << setprecision(4) << result.chosenMoveMu;
+      if (result.hasChosenMoveDDSScore)
+        cout << " DDS=" << setprecision(3) << result.chosenMoveDDSScore;
+      cout << endl;
+    }
+
+    if (result.hasActualPlayedMove && result.valid &&
+        ! (result.actualPlayedMove == result.chosenMove) &&
+        result.hasChosenMoveMu && result.hasActualMoveMu)
+    {
+      cout << "  Alpha-mu vs actual: chose a move with higher root mu by "
+           << setprecision(4)
+           << (result.chosenMoveMu - result.actualMoveMu) << endl;
+    }
+
+    if (result.hasDDSBestMove && result.valid &&
+        ! (result.ddsBestMove == result.chosenMove) &&
+        result.hasChosenMoveDDSScore)
+    {
+      cout << "  Alpha-mu vs DDS: chosen move trails the omniscient line by "
+           << setprecision(3)
+           << (result.ddsBestScore - result.chosenMoveDDSScore)
+           << " tricks on the actual world" << endl;
+    }
 
     if (! result.rootReport.children.empty())
     {
@@ -4681,6 +5007,21 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
              << ", vectors=" << child.front.vectors.size()
              << ", worlds=" << child.validWorlds.PopCount()
              << endl;
+      }
+    }
+    if (! result.worldExplanation.plausibilityRankedWorldIndices.empty())
+    {
+      cout << "  Top surviving worlds by plausibility:" << endl;
+      const unsigned worldLines = min(static_cast<unsigned>(3),
+        static_cast<unsigned>(result.worldExplanation.plausibilityRankedWorldIndices.size()));
+      for (unsigned i = 0; i < worldLines; i++)
+      {
+        const unsigned worldIndex =
+          result.worldExplanation.plausibilityRankedWorldIndices[i];
+        const WorldExplanation& world = result.worldExplanation.worlds[worldIndex];
+        cout << "    [" << worldIndex << "] score="
+             << world.plausibilityScore << "/" << world.plausibilityMaxScore
+             << " " << world.serializedWorld << endl;
       }
     }
     cout << setprecision(3);
