@@ -39,6 +39,15 @@ namespace
 	  return false;
 	}
   }
+  /** @brief Parse a floating-point CLI argument with full-string validation. */
+  bool TryParseDoubleArgument(
+	const char * text,
+	double& value)
+  {
+	char * end = NULL;
+	value = strtod(text, &end);
+	return end != NULL && * text != '\0' && * end == '\0';
+  }
   /** @brief Read an optional integer CLI argument or fall back to a default. */
   int ParseOptionalIntArgument(
 	const int argc,
@@ -182,7 +191,7 @@ int main(int argc, char ** argv)
 	if (mode == "solve")
 	{
 	  Check(argc >= 4,
-		"solve mode requires: <hand-file> <board-number> [depth] [max-worlds] [--time seconds]");
+		"solve mode requires: <hand-file> <board-number> [depth] [max-worlds] [--time seconds] [--prefix-cards n] [--seed n]");
 
 	  const string handFile(argv[2]);
 	  const int boardNumber = ParseOptionalIntArgument(
@@ -193,12 +202,27 @@ int main(int argc, char ** argv)
 		argc, argv, 5, 50, "solve max worlds");
 
 	  double timeBudget = 0.0;
+	  int prefixCards = -1;
+	  unsigned samplingSeed = 42U;
 	  for (int a = 4; a < argc - 1; a++)
 	  {
-		if (string(argv[a]) == "--time")
+		const string flag(argv[a]);
+		if (flag == "--time")
 		{
-		  timeBudget = atof(argv[a + 1]);
-		  break;
+		  Check(TryParseDoubleArgument(argv[a + 1], timeBudget),
+			"solve time budget should be a valid number");
+		}
+		else if (flag == "--prefix-cards")
+		{
+		  Check(TryParseIntArgument(argv[a + 1], prefixCards) && prefixCards >= 0,
+			"solve prefix-cards should be a non-negative integer");
+		}
+		else if (flag == "--seed")
+		{
+		  int parsedSeed = 0;
+		  Check(TryParseIntArgument(argv[a + 1], parsedSeed) && parsedSeed >= 0,
+			"solve seed should be a non-negative integer");
+		  samplingSeed = static_cast<unsigned>(parsedSeed);
 		}
 	  }
 
@@ -216,7 +240,7 @@ int main(int argc, char ** argv)
 
 	  const AlphaMuSolveResult result = SolveAlphaMu(
 		deal, declarerSeat, play, depth,
-		static_cast<unsigned>(maxWorlds), timeBudget);
+		static_cast<unsigned>(maxWorlds), timeBudget, prefixCards, samplingSeed);
 
 	  ReportAlphaMuSolveResult(result);
 	  PrintPrototypeStatus("alpha-mu solve OK");

@@ -705,6 +705,57 @@ namespace alpha_mu_prototype
   }
 
 
+  static void TestWorldPlausibilityReporting()
+  {
+    vector<ParsedWorld> worlds;
+    worlds.push_back(ParsePBNWorld("N:A... K.Q.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... K.J.. 2... 3..."));
+    worlds.push_back(ParsePBNWorld("N:A... .Q.. K... 3..."));
+
+    BridgeInformationState information;
+    information.plausibilityHints.push_back(WorldPlausibilityHint::Prefer(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_SPADES, 'K'),
+      5,
+      "East likely started with K of spades"));
+    information.plausibilityHints.push_back(WorldPlausibilityHint::Prefer(
+      WorldConstraint::HasCard(SEAT_EAST, SUIT_HEARTS, 'Q'),
+      3,
+      "East likely started with Q of hearts"));
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(worlds, information, &stats);
+    Check(mask == WorldMask(3, 0x7ULL),
+      "plausibility hints alone should not change the surviving world set");
+    Check(stats.finalWorldCount == 3,
+      "plausibility hints alone should leave all three candidate worlds alive");
+
+    const WorldGenerationExplanation explanation =
+      ExplainPossibleWorldGeneration(worlds, information);
+    Check(explanation.finalWorldMask == WorldMask(3, 0x7ULL),
+      "plausibility reporting should preserve the same surviving mask as hard filtering");
+    Check(explanation.plausibilityRankedWorldIndices.size() == 3,
+      "plausibility reporting should rank all surviving worlds");
+    Check(explanation.plausibilityRankedWorldIndices[0] == 0 &&
+          explanation.plausibilityRankedWorldIndices[1] == 1 &&
+          explanation.plausibilityRankedWorldIndices[2] == 2,
+      "plausibility reporting should order surviving worlds by descending score, then canonically");
+
+    Check(explanation.worlds[0].accepted && explanation.worlds[1].accepted &&
+          explanation.worlds[2].accepted,
+      "plausibility reporting should not mark any world rejected when no hard constraint fails");
+    Check(explanation.worlds[0].plausibilityScore == 8 &&
+          explanation.worlds[1].plausibilityScore == 5 &&
+          explanation.worlds[2].plausibilityScore == 3,
+      "plausibility reporting should sum the matched weighted hints per world");
+    Check(explanation.worlds[0].plausibilityMaxScore == 8,
+      "plausibility reporting should expose the total available hint weight");
+    Check(explanation.worlds[1].unsatisfiedPlausibilityHints.size() == 1 &&
+          explanation.worlds[1].unsatisfiedPlausibilityHints[0] ==
+            "East likely started with Q of hearts",
+      "plausibility reporting should list unmatched hints for partially plausible worlds");
+  }
+
+
   static void TestHistoryDerivedCandidateWorldConstruction()
   {
     HistoryDerivedWorldSpec spec;
@@ -3472,6 +3523,49 @@ namespace alpha_mu_prototype
       "end-to-end solve should report at least one candidate move");
   }
 
+  static void TestDecisionPointComparisonReporting()
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;
+    deal.first = 0;
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+
+    const int declarerSeat = (deal.first + 3) % 4;
+    const AlphaMuSolveResult result = SolveAlphaMu(
+      deal, declarerSeat, play, 1, 50, 0.0, 40, 7U);
+
+    Check(result.valid,
+      "decision-point solve should produce a valid result on the truncated real-board prefix");
+    Check(result.prefixPlayLength == 40 && result.fullPlayLength == 45,
+      "decision-point solve should preserve both the requested prefix length and the full play length");
+    Check(result.playerToMove == SEAT_WEST && result.decisionOnDeclarerSide,
+      "decision-point solve should stop on a declarer-side turn for the board-1 ten-trick prefix");
+    Check(result.hasActualPlayedMove && result.actualPlayedBy == SEAT_WEST &&
+          result.actualPlayedMove == BridgeMove(SUIT_SPADES, '4'),
+      "decision-point solve should expose the actual next played card after the selected prefix");
+    Check(result.hasDDSBestMove,
+      "decision-point solve should report a DDS omniscient comparison move");
+    Check(result.hasChosenMoveMu && result.hasChosenMoveDDSScore,
+      "decision-point solve should report both alpha-mu and DDS detail for the chosen move");
+    Check(result.hasActualMoveMu && result.hasActualMoveDDSScore,
+      "decision-point solve should report both alpha-mu and DDS detail for the actual next move when it remains legal");
+    Check(result.searchNodes > 0 && result.ddsLeafCalls > 0,
+      "decision-point solve should report non-zero search-node and DDS-leaf counts");
+    Check(result.worldExplanation.worlds.size() == result.worldCount,
+      "decision-point solve should attach a world explanation covering every surviving raw world in the compacted state");
+    Check(result.worldExplanation.plausibilityRankedWorldIndices.size() ==
+            result.survivingWorldCount,
+      "decision-point solve should rank every surviving world for reporting");
+  }
+
   void TestBridgeTranspositionTable()
   {
     // Use the same board as TestEndToEndSolveAlphaMu
@@ -3680,6 +3774,7 @@ namespace alpha_mu_prototype
       {"uneven seed-world seat counts OK", &TestBuildWorldSpecTracksUnevenSeatCounts},
       {"uneven current-trick world counts OK", &TestPartialInformationUnevenCurrentTrickCounts},
       {"follow-suit implications and world explanations OK", &TestFollowSuitImplicationsAndWorldExplanation},
+      {"world plausibility reporting OK", &TestWorldPlausibilityReporting},
       {"history-derived candidate world construction OK", &TestHistoryDerivedCandidateWorldConstruction},
       {"history-derived known-card construction OK", &TestHistoryDerivedConstructionUsesKnownCardLocation},
       {"history-derived known-card exclusion construction OK", &TestHistoryDerivedConstructionUsesKnownCardExclusion},
@@ -3720,6 +3815,7 @@ namespace alpha_mu_prototype
        {"partial-information world generation OK", &TestPartialInformationWorldGeneration},
        {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
+       {"decision-point comparison reporting OK", &TestDecisionPointComparisonReporting},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
        {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
 #ifndef NDEBUG
