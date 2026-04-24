@@ -899,12 +899,18 @@ namespace alpha_mu_prototype
     ParetoFront front;
     WorldMask validWorlds;
     WorldMask usefulWorlds;
+    double mu;
+    unsigned searchNodes;
+    unsigned ddsLeafCalls;
 
     explicit BridgeRootChildReport(const unsigned worldCount = 0) :
       move(),
       front(worldCount),
       validWorlds(WorldMask::None(worldCount)),
-      usefulWorlds(WorldMask::None(worldCount))
+      usefulWorlds(WorldMask::None(worldCount)),
+      mu(0.0),
+      searchNodes(0),
+      ddsLeafCalls(0)
     {
     }
   };
@@ -915,10 +921,18 @@ namespace alpha_mu_prototype
   {
     vector<BridgeRootChildReport> children;
     ParetoFront rootFront;
+    WorldMask validWorlds;
+    WorldMask usefulWorlds;
+    unsigned searchNodes;
+    unsigned ddsLeafCalls;
 
     explicit BridgeRootReport(const unsigned worldCount = 0) :
       children(),
-      rootFront(worldCount)
+      rootFront(worldCount),
+      validWorlds(WorldMask::None(worldCount)),
+      usefulWorlds(WorldMask::None(worldCount)),
+      searchNodes(0),
+      ddsLeafCalls(0)
     {
     }
   };

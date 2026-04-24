@@ -2293,14 +2293,29 @@ BridgeRootReport AnalyzeBridgeRoot(
       childReport.move = children[i].move;
       const int nextDepth = tricksRemaining - BridgeDepthCost(state,
         children[i].state);
+      BenchmarkBoardProgressContext childProgress;
+      childProgress.totalStart = chrono::steady_clock::now();
+      childProgress.boardStart = childProgress.totalStart;
+      childProgress.reportIntervalSeconds = 1.0e30;
+      childProgress.nextReportSeconds = 1.0e30;
+      SearchExecutionContext childContext(context);
+      childContext.benchmarkProgress = &childProgress;
       childReport.front = SearchBridgeState(children[i].state, nextDepth,
-        context);
+        childContext);
       childReport.validWorlds = childReport.front.ValidWorlds();
       childReport.usefulWorlds = childReport.front.UsefulWorlds();
+      childReport.mu = childReport.front.Mu();
+      childReport.searchNodes = static_cast<unsigned>(childProgress.recursiveCalls);
+      childReport.ddsLeafCalls = static_cast<unsigned>(childProgress.ddsLeafCalls);
+      report.searchNodes += childReport.searchNodes;
+      report.ddsLeafCalls += childReport.ddsLeafCalls;
       report.children.push_back(childReport);
       report.rootFront = ParetoFront::MaxMerge(report.rootFront,
         childReport.front);
     }
+
+    report.validWorlds = report.rootFront.ValidWorlds();
+    report.usefulWorlds = report.rootFront.UsefulWorlds();
 
     return report;
   }
@@ -2364,14 +2379,29 @@ BridgeRootReport AnalyzeBridgeRootWithTT(
       childReport.move = children[i].move;
       const int nextDepth = tricksRemaining - BridgeDepthCost(state,
         children[i].state);
+      BenchmarkBoardProgressContext childProgress;
+      childProgress.totalStart = chrono::steady_clock::now();
+      childProgress.boardStart = childProgress.totalStart;
+      childProgress.reportIntervalSeconds = 1.0e30;
+      childProgress.nextReportSeconds = 1.0e30;
+      SearchExecutionContext childContext(context);
+      childContext.benchmarkProgress = &childProgress;
       childReport.front = SearchBridgeStateWithTT(
-        children[i].state, nextDepth, context, tt, ttStats);
+        children[i].state, nextDepth, childContext, tt, ttStats);
       childReport.validWorlds = childReport.front.ValidWorlds();
       childReport.usefulWorlds = childReport.front.UsefulWorlds();
+      childReport.mu = childReport.front.Mu();
+      childReport.searchNodes = static_cast<unsigned>(childProgress.recursiveCalls);
+      childReport.ddsLeafCalls = static_cast<unsigned>(childProgress.ddsLeafCalls);
+      report.searchNodes += childReport.searchNodes;
+      report.ddsLeafCalls += childReport.ddsLeafCalls;
       report.children.push_back(childReport);
       report.rootFront = ParetoFront::MaxMerge(report.rootFront,
         childReport.front);
     }
+
+    report.validWorlds = report.rootFront.ValidWorlds();
+    report.usefulWorlds = report.rootFront.UsefulWorlds();
 
     return report;
   }
@@ -4878,8 +4908,8 @@ AlphaMuSolveResult SolveAlphaMuDecisionPoint(
     result.ttProbes = ttStats.probes;
     result.ttHits = ttStats.hits;
     result.ttStores = ttStats.stores;
-    result.searchNodes = static_cast<unsigned>(progress.recursiveCalls);
-    result.ddsLeafCalls = static_cast<unsigned>(progress.ddsLeafCalls);
+    result.searchNodes = bestReport.searchNodes;
+    result.ddsLeafCalls = bestReport.ddsLeafCalls;
 
     // Choose the move with the highest mu
     if (! bestReport.children.empty())
@@ -4983,7 +5013,10 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
     cout << "  Worlds: " << result.survivingWorldCount
          << " surviving / " << result.worldCount << " raw" << endl;
     cout << "  Root front: " << result.rootFront.vectors.size()
-         << " vectors, mu=" << setprecision(4) << result.rootFront.Mu() << endl;
+         << " vectors, mu=" << setprecision(4) << result.rootFront.Mu()
+         << ", valid_worlds=" << result.rootReport.validWorlds.PopCount()
+         << ", useful_worlds=" << result.rootReport.usefulWorlds.PopCount()
+         << endl;
 
     cout << setprecision(3);
     cout << "  Timing: " << result.totalSeconds << "s total ("
@@ -5069,9 +5102,12 @@ void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
       {
         const BridgeRootChildReport& child = result.rootReport.children[i];
         cout << "    " << SuitName(child.move.suit) << " " << child.move.rank
-             << ": mu=" << setprecision(4) << child.front.Mu()
+             << ": mu=" << setprecision(4) << child.mu
              << ", vectors=" << child.front.vectors.size()
-             << ", worlds=" << child.validWorlds.PopCount()
+             << ", valid_worlds=" << child.validWorlds.PopCount()
+             << ", useful_worlds=" << child.usefulWorlds.PopCount()
+             << ", nodes=" << child.searchNodes
+             << ", dds_leaf_calls=" << child.ddsLeafCalls
              << endl;
       }
     }

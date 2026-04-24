@@ -3613,6 +3613,93 @@ namespace alpha_mu_prototype
     }
   }
 
+  static void TestPracticalMultiWorldContinuationDepth2Stable()
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;
+    deal.first = 0;
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+
+    const int declarerSeat = (deal.first + 3) % 4;
+    const AlphaMuSolveResult first = SolveAlphaMu(
+      deal, declarerSeat, play, 2, 8, 0.0, 40, 7U);
+    const AlphaMuSolveResult second = SolveAlphaMu(
+      deal, declarerSeat, play, 2, 8, 0.0, 40, 7U);
+
+    Check(first.valid && second.valid,
+      "practical multi-world depth-2 continuation should produce valid results on repeated runs");
+    Check(first.survivingWorldCount > 2,
+      "practical multi-world depth-2 continuation should keep more than two surviving worlds");
+    Check(first.depthSearched == 2,
+      "practical multi-world depth-2 continuation should search the requested two tricks");
+    Check(first.rootReport.children.size() >= 2,
+      "practical multi-world depth-2 continuation should expose multiple candidate moves at the root");
+    Check(first.chosenMove == second.chosenMove,
+      "practical multi-world depth-2 continuation should keep the chosen move stable across repeated runs");
+    Check(first.rootReport.validWorlds == first.rootFront.ValidWorlds(),
+      "practical multi-world depth-2 continuation should record the root valid-world summary");
+    Check(first.rootReport.usefulWorlds == first.rootFront.UsefulWorlds(),
+      "practical multi-world depth-2 continuation should record the root useful-world summary");
+    Check(first.rootReport.searchNodes > 0 && first.rootReport.ddsLeafCalls > 0,
+      "practical multi-world depth-2 continuation should record aggregate root search and DDS-leaf activity");
+    for (unsigned i = 0; i < first.rootReport.children.size(); i++)
+    {
+      Check(first.rootReport.children[i].validWorlds.PopCount() > 0,
+        "every practical multi-world depth-2 child should cover at least one surviving world");
+      Check(first.rootReport.children[i].searchNodes > 0,
+        "every practical multi-world depth-2 child should record search activity");
+    }
+  }
+
+  static void TestPracticalPartialTrickContinuationDepth2Stable()
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;
+    deal.first = 0;
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+
+    const int declarerSeat = (deal.first + 3) % 4;
+    const AlphaMuSolveResult first = SolveAlphaMu(
+      deal, declarerSeat, play, 2, 8, 0.0, 34, 7U);
+    const AlphaMuSolveResult second = SolveAlphaMu(
+      deal, declarerSeat, play, 2, 8, 0.0, 34, 7U);
+
+    Check(first.valid && second.valid,
+      "practical partial-trick depth-2 continuation should produce valid results on repeated runs");
+    Check(first.survivingWorldCount > 2,
+      "practical partial-trick depth-2 continuation should keep more than two surviving worlds");
+    Check(first.depthSearched == 2,
+      "practical partial-trick depth-2 continuation should search the requested two tricks");
+    Check(first.prefixPlayLength == 34,
+      "practical partial-trick depth-2 continuation should preserve the selected 34-card prefix");
+    Check(first.playerToMove == SEAT_EAST,
+      "practical partial-trick depth-2 continuation should stop on East after the 34-card prefix");
+    Check(first.hasActualPlayedMove && first.actualPlayedMove == BridgeMove(SUIT_HEARTS, 'J'),
+      "practical partial-trick depth-2 continuation should expose the next-card transition across the partial trick");
+    Check(first.chosenMove == second.chosenMove,
+      "practical partial-trick depth-2 continuation should keep the chosen move stable across repeated runs");
+    Check(first.rootReport.children.size() == 1,
+      "practical partial-trick depth-2 continuation should preserve the single forced continuation at this decision point");
+    Check(first.rootReport.children[0].ddsLeafCalls > 0,
+      "practical partial-trick depth-2 continuation should reach DDS leaves after crossing the partial-trick boundary");
+  }
+
   void TestBridgeTranspositionTable()
   {
     // Use the same board as TestEndToEndSolveAlphaMu
@@ -3864,6 +3951,8 @@ namespace alpha_mu_prototype
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
        {"decision-point comparison reporting OK", &TestDecisionPointComparisonReporting},
        {"explicit decision-point request API OK", &TestExplicitDecisionPointRequestAPI},
+       {"practical multi-world depth-2 continuation OK", &TestPracticalMultiWorldContinuationDepth2Stable},
+       {"practical partial-trick depth-2 continuation OK", &TestPracticalPartialTrickContinuationDepth2Stable},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
        {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
 #ifndef NDEBUG
