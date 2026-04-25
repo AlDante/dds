@@ -152,6 +152,7 @@ PLAYREG_OBJ_FILES	= $(OBJ_DIR)/$(PLAYREG).o $(OBJ_DIR)/examples/hands.o
 
 ALPHAMU_SOURCE_FILES	=	\
 	parse.cpp		\
+	alpha_mu_prototype_support.cpp	\
 	alpha_mu_prototype_core.cpp	\
 	alpha_mu_prototype_decision.cpp	\
 	alpha_mu_prototype_reporting.cpp	\
