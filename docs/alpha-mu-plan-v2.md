@@ -1,5 +1,17 @@
 # Alpha-Mu Implementation Plan v2
 
+> **Status note (2026-04-24):** This document is still useful as an engineering
+> direction document, but parts of its starting-state description are now
+> historical rather than current. Since it was written, the repository has
+> gained a working `solve` / `decision` path, bridge-state TT support, richer
+> root reporting, practical real-board depth-2 continuation regressions, and an
+> initial split of the prototype into
+> `alpha_mu_prototype.cpp`, `alpha_mu_prototype_core.*`, and
+> `alpha_mu_prototype_tests.*`. The immediate next work is now continued
+> `Workstream 5` extraction while keeping those practical continuation and
+> reporting regressions green. For the authoritative current status and immediate
+> next work, use `docs/action-plan.md` and `docs/alpha-mu-roadmap.md`.
+
 ## Context
 
 This plan replaces the incremental stage-based roadmap in `alpha-mu-roadmap.md` and the cycle-based plan in `action-plan.md` with a single, concrete engineering plan that works directly from the current codebase state toward a complete, testable, performant alpha-mu engine.

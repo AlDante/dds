@@ -28,6 +28,15 @@ not yet a complete post-mortem evaluator.
 A reasonable practical estimate is that the repository is currently about
 **50% complete overall** toward that end-state.
 
+One important nuance is that progress is no longer strictly stage-by-stage:
+
+- the currently scoped `Stage 3` / `Workstream 4` pieces are already present and
+  regression-backed,
+- an initial `Stage 4` / `Workstream 5` file split has already started,
+- so the main immediate engineering pressure has shifted to continuing the
+  `Stage 4` extraction work without regressing the newly landed continuation
+  coverage.
+
 ### What is already strong
 
 The current implementation already includes:
@@ -49,6 +58,8 @@ The current implementation already includes:
 - multi-trick continuation search,
 - DDS-backed leaf evaluation,
 - root reporting,
+- an initial split prototype layout across CLI, shared core, and regression
+  files under `test/`,
 - debug-only invariants for world-mask and DDS-leaf legality,
 - and DDS-versus-alpha-mu comparison tooling.
 
@@ -59,10 +70,10 @@ missing or immature:
 
 - richer world construction from realistic bidding and play histories,
 - world plausibility / weighting rather than only set membership,
-- broader and deeper practical continuation search,
+- broader and deeper practical continuation search beyond the current depth-2 practical coverage,
 - a first-class decision-point post-mortem analysis workflow,
 - broader bridge-backed coverage of the paper motifs,
-- durable engine modules outside the current monolithic test-area implementation,
+- durable engine modules outside the current still-oversized test-area core implementation,
 - and performance maturity for nontrivial analysis depths.
 
 ## Percent-complete estimate by subsystem
@@ -159,6 +170,19 @@ recommendation that is understandable without reading the internals.
 Broaden bridge-search coverage enough that the decision-point evaluator is not
 limited to narrow showcase continuations.
 
+### Current status
+
+This stage is functionally landed at the currently targeted scope:
+
+- targeted multi-world continuation regressions are present,
+- the three-world deeper root-report regression is present,
+- practical real-board depth-2 continuation regressions are present for both the
+  40-card trick-boundary prefix and the 34-card partial-trick prefix on board 1
+  of `hands/alpha_mu_play.txt`,
+- root child summaries already include valid/useful-world masks, `mu`, search
+  nodes, and DDS leaf calls,
+- and the current regression suite reports both practical depth-2 cases passing.
+
 ### Main work
 
 - add more practical continuation families,
@@ -174,17 +198,36 @@ limited to narrow showcase continuations.
 - deeper bridge-backed searches,
 - and stronger root reporting suitable for post-mortem review.
 
+The first part of the reporting deliverable is already present; the follow-on
+work is simply to broaden coverage beyond the currently landed depth-2
+practical cases.
+
 ### Completion signal
 
 This stage is done when the bridge-search layer covers a broad enough family of
 realistic continuation patterns that the engine can analyze more than isolated
-showcase cases.
+showcase cases. The current depth-2 practical real-board slice now satisfies the
+original immediate `Workstream 4` intent, even though larger continuation
+families remain future work.
 
 ## Stage 4: 80% to 88%
 
 ### Goal
 
 Turn the current monolithic implementation into durable engine code.
+
+### Current status
+
+This stage has already started in a limited file-level sense:
+
+- `test/alpha_mu_prototype.cpp` is now a thin runner,
+- `test/alpha_mu_prototype_core.*` contains the shared prototype API and
+  implementation,
+- and `test/alpha_mu_prototype_tests.*` contains the regression entry points.
+
+The remaining work is to continue beyond that first split into smaller durable
+modules with clearer ownership boundaries, rather than leaving most alpha-mu
+logic inside one very large core implementation file under `test/`.
 
 ### Main work
 
@@ -204,7 +247,7 @@ Turn the current monolithic implementation into durable engine code.
 ### Completion signal
 
 This stage is done when alpha-mu is maintainable engine code rather than a
-single growing implementation file under `test/`.
+single oversized core implementation file under `test/`.
 
 ## Stage 5: 88% to 95%
 
@@ -256,12 +299,12 @@ Promote alpha-mu to a first-class supported repository component.
 
 If progress should be maximized from the current state, the best next steps are:
 
-1. richer realistic information-state construction,
-2. world plausibility / weighting,
-3. a stable single-decision post-mortem analysis entry point,
-4. broader bridge continuation families and deeper regressions,
-5. extraction of alpha-mu components into durable modules,
-6. stronger alpha-mu-specific instrumentation and benchmark visibility.
+1. continue extraction of alpha-mu components into smaller durable modules,
+2. richer realistic information-state construction,
+3. world plausibility / weighting,
+4. broader bridge continuation families beyond the current depth-2 practical coverage,
+5. stronger alpha-mu-specific instrumentation and benchmark visibility,
+6. continued benchmark-backed validation while the code moves.
 
 ## Short version
 

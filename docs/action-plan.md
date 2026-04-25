@@ -6,6 +6,23 @@ This document turns the staged roadmap in `implementation-plan.md` and
 `alpha-mu-roadmap.md` into the **next concrete execution cycle** toward a
 complete alpha-mu engine for post-mortem declarer-play evaluation.
 
+## Status update (2026-04-24)
+
+Current repository state is ahead of the original sequencing in this plan:
+
+- `Workstream 1` through `Workstream 4` are functionally landed at their current scoped goals,
+- the focused `bridge_dds` regression bundle is currently green,
+- the full `alpha_mu_prototype` suite is currently green,
+- practical real-board depth-2 continuation regressions are present for both the 40-card trick-boundary prefix and the 34-card partial-trick prefix on board 1 of `hands/alpha_mu_play.txt`,
+- richer root-report summaries are present,
+- and `Workstream 5` has already started in one important sense because the prototype is no longer a single file: the CLI runner, shared core, and test suite are already split across `test/alpha_mu_prototype.cpp`, `test/alpha_mu_prototype_core.*`, and `test/alpha_mu_prototype_tests.*`.
+
+So the practical next step is:
+
+1. treat `Workstream 5` as the active implementation workstream,
+2. continue extracting smaller durable modules beyond the current first file-level split,
+3. preserve the newly landed depth-2 continuation and root-report regressions while code moves.
+
 The immediate aim is not to demonstrate paper semantics in isolation. It is to
 deliver the next vertical slice of a real decision-point evaluator that can take
 an actual hand history, reconstruct a plausible information state, and recommend
@@ -16,8 +33,8 @@ a move under uncertainty.
 1. Preserve the current DDS-side benchmarked baseline.
 2. Make the information state significantly more realistic.
 3. Deliver a stable single-decision post-mortem alpha-mu analysis path.
-4. Start extracting durable engine modules from the current monolithic
-   implementation.
+4. Continue extracting durable engine modules from the current split but still
+   test-area-local implementation.
 5. Add the instrumentation needed to judge recommendation quality and runtime
    cost separately.
 
@@ -154,38 +171,69 @@ Provide a stable alpha-mu entry point for analyzing a single real decision.
 Ensure the decision-point evaluator is supported by meaningful continuation
 search rather than only narrow showcase trees.
 
+### Current status
+
+This workstream is **functionally landed at the current planned scope**.
+
+Already present today:
+
+- targeted bridge-backed multi-world continuation regressions,
+- three-world root reporting over a deeper continuation,
+- practical real-board depth-2 continuation regressions on `hands/alpha_mu_play.txt` board 1 with `prefixCards=40` and `prefixCards=34`,
+- root child summaries including valid worlds, useful worlds, `mu`, search nodes, and DDS leaf counts,
+- and focused plus full regression suites that are currently passing.
+
 ### Tasks
 
-1. add more realistic multi-world continuation regressions,
-2. extend mixed merge/split bridge cases across more tricks,
-3. verify partial-trick to next-trick transitions under deeper search,
-4. strengthen root summaries for move/front/world/cut visibility,
-5. continue to keep DDS only as the leaf oracle.
+1. keep the practical real-board depth-2 regressions green,
+2. preserve the richer root summaries already exposed at the solve/reporting layer,
+3. extend mixed merge/split bridge cases further only as follow-on coverage,
+4. continue to keep DDS only as the leaf oracle.
 
 ### Success tests
 
 - more than two surviving worlds in practical bridge-backed continuation tests,
 - deeper searched prefixes than the current showcase depth,
+- practical trick-boundary and partial-trick depth-2 real-board regressions stay green,
 - stable move selection across repeated runs.
 
 ## Workstream 5 — extract durable modules while growing features
 
 ### Goal
 
-Stop accumulating all alpha-mu growth in one monolithic implementation file.
+Continue the initial prototype split until alpha-mu growth is no longer trapped
+inside one oversized core implementation unit under `test/`.
+
+### Current status
+
+This workstream has already **started**:
+
+- the CLI runner is isolated in `test/alpha_mu_prototype.cpp`,
+- the shared data structures and implementation live in
+  `test/alpha_mu_prototype_core.h` and `test/alpha_mu_prototype_core.cpp`,
+- and the regression bundles are isolated in
+  `test/alpha_mu_prototype_tests.h` and `test/alpha_mu_prototype_tests.cpp`.
+
+The next `Workstream 5` step is therefore not the first split, but the next
+smaller extraction from `alpha_mu_prototype_core.cpp` into more durable units.
 
 ### Tasks
 
-1. extract information-state and world-construction code into a dedicated unit,
-2. extract Pareto-front and outcome-vector logic into a dedicated unit,
-3. extract bridge-state transition helpers into a dedicated unit,
-4. keep the runner and tests working while code moves,
-5. keep alpha-mu outside the core DDS recursion.
+1. extract information-state and world-construction helpers into a dedicated
+   unit,
+2. extract Pareto-front / outcome-vector logic into a dedicated unit,
+3. extract bridge-state transition and legality helpers into a dedicated unit,
+4. extract root-report / solve-report formatting helpers away from core search
+   control,
+5. keep the runner and tests working while code moves,
+6. keep alpha-mu outside the core DDS recursion.
 
 ### Success tests
 
 - no regression failures after extraction,
 - cleaner ownership boundaries,
+- smaller and more coherent implementation units than the current
+  `alpha_mu_prototype_core.cpp`,
 - easier addition of new world-generation and reporting features.
 
 ## Workstream 6 — instrumentation for the next optimization cycle
@@ -247,4 +295,3 @@ This cycle is done when all of the following are true:
 4. the implementation is measurably more modular than at the start of the
    cycle,
 5. DDS baseline checks remain green and benchmark-backed.
-
