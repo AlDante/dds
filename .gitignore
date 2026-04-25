@@ -23,6 +23,7 @@ __pycache__/
 /src/build/
 /test/build/
 /examples/build/
+/build/
 /src/cmake-build-debug/
 /test/libdds.so
 /examples/libdds.so
