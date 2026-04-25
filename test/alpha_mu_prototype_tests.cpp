@@ -3858,8 +3858,12 @@ namespace alpha_mu_prototype
       "/tmp/alpha_mu_prototype_worldmask_assert_output.txt";
     remove(outputPath.c_str());
 
-    const string command =
-      ShellQuote(exe) +
+    string command;
+    const char * dyldLibraryPath = getenv("DYLD_LIBRARY_PATH");
+    if (dyldLibraryPath != NULL && *dyldLibraryPath != '\0')
+      command += string("DYLD_LIBRARY_PATH=") + ShellQuote(dyldLibraryPath) + " ";
+
+    command += ShellQuote(exe) +
       " debug_assert_worldmask_capacity > " +
       ShellQuote(outputPath) + " 2>&1";
     const int status = system(command.c_str());

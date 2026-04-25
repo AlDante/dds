@@ -37,6 +37,8 @@ It is meant to validate the core paper semantics before deeper optimization work
 - `test/alpha_mu_prototype.cpp` — thin CLI runner / mode dispatcher
 - `test/alpha_mu_prototype_core.h` — shared types and callable prototype API
 - `test/alpha_mu_prototype_core.cpp` — actual alpha-mu prototype implementation
+- `test/alpha_mu_prototype_decision.cpp` — decision-point solve assembly and DDS/actual-play comparison helpers
+- `test/alpha_mu_prototype_reporting.cpp` — benchmark, comparison, and solve-result formatting/reporting helpers
 - `test/alpha_mu_prototype_tests.cpp` — regression suite and grouped test runners
 
 ## What it checks
@@ -102,7 +104,7 @@ The targeted `bridge_dds` mode now checks:
 - a controlled two-world continuation that preserves sparse exact-score fronts after a deeper searched bridge continuation,
 - and a controlled three-world continuation with one merged DDS-backed root branch and three split sparse branches after one searched trick.
 
-The next planned non-performance step is extending this bridge-search control beyond the current first larger three-world continuation case to deeper mixed merge/split continuations and from these richer visible-seed histories toward broader realistic possible-world generation.
+The next planned non-performance step is extending this bridge-search control beyond the current first larger three-world continuation case to deeper mixed merge/split continuations and from these richer visible-seed histories toward broader realistic possible-world generation, while continuing the `Workstream 5` split of reporting and world/state helpers out of the oversized core implementation unit.
 
 ## DDS vs alpha-mu comparison mode
 

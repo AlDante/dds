@@ -1795,6 +1795,18 @@ namespace alpha_mu_prototype
       const vector<PlayHistoryEvent>& playedCards,
       const unsigned maxWorlds,
       const unsigned samplingSeed = 42U);
+  /** @brief Merge explicit decision-point overrides into a play-derived information state. */
+  BridgeInformationState ApplyInformationOverrides(
+      const BridgeInformationState& base,
+      const BridgeInformationState& overrides,
+      const unsigned maxWorlds,
+      const unsigned samplingSeed);
+  /** @brief Build a compacted bridge search state from an already prepared information state. */
+  BridgeState MakeBridgeStateFromInformationState(
+      const dealPBN& fullDeal,
+      const int declarerSeat,
+      const vector<PlayHistoryEvent>& playedCards,
+      const BridgeInformationState& information);
 
   /**
    * @brief Create a multi-world BridgeState from a partial-information scenario.
