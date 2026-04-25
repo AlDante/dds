@@ -58,7 +58,7 @@ The current implementation already includes:
 - multi-trick continuation search,
 - DDS-backed leaf evaluation,
 - root reporting,
-- an initial split prototype layout across CLI, shared core, and regression
+- an initial split solver layout across CLI, shared core, and regression
   files under `test/`,
 - debug-only invariants for world-mask and DDS-leaf legality,
 - and DDS-versus-alpha-mu comparison tooling.
@@ -220,10 +220,10 @@ Turn the current monolithic implementation into durable engine code.
 
 This stage has already started in a limited file-level sense:
 
-- `test/alpha_mu_prototype.cpp` is now a thin runner,
-- `test/alpha_mu_prototype_core.*` contains the shared prototype API and
+- `test/alpha_mu.cpp` is now a thin runner,
+- `test/alpha_mu_core.*` contains the shared alpha-mu API and
   implementation,
-- and `test/alpha_mu_prototype_tests.*` contains the regression entry points.
+- and `test/alpha_mu_tests.*` contains the regression entry points.
 
 The remaining work is to continue beyond that first split into smaller durable
 modules with clearer ownership boundaries, rather than leaving most alpha-mu

@@ -32,7 +32,7 @@ PERF_LOG_DIR       ?= test/build/perf_runs
 
 perf-build:
 	$(MAKE) -C src macos
-	$(MAKE) -C test -f Makefiles/Makefile_Mac_clang dtest regression_api alpha_mu_prototype
+	$(MAKE) -C test -f Makefiles/Makefile_Mac_clang dtest regression_api alpha_mu
 
 DDS_LIB_DIR  = src/build
 
@@ -44,7 +44,7 @@ perf-check: perf-build
 	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/regression_api
 	@echo ""
 	@echo "=== Correctness: alpha_mu list9 depth 2 (serial, verify only) ==="
-	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/alpha_mu_prototype benchmark_alpha \
+	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/alpha_mu benchmark_alpha \
 		../$(PERF_HANDS) $(PERF_DEPTH) 0 \
 		--parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0
 
@@ -54,7 +54,7 @@ perf-bench: perf-build
 	LOG="$(PERF_LOG_DIR)/list9_depth2_board$(PERF_BOARD_WORKERS)_$$TIMESTAMP.log"; \
 	echo "=== Performance benchmark: $(PERF_HANDS) depth $(PERF_DEPTH), $(PERF_BOARD_WORKERS) board workers ==="; \
 	echo "Log: $$LOG"; \
-	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/alpha_mu_prototype benchmark_alpha \
+	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/alpha_mu benchmark_alpha \
 		../$(PERF_HANDS) $(PERF_DEPTH) 0 \
 		--parallel board --board-workers $(PERF_BOARD_WORKERS) 2>&1 | tee "../$$LOG"; \
 	echo ""; \

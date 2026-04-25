@@ -127,7 +127,7 @@ For the current plan:
 
 ## Success criteria for future alpha-mu work
 
-When a real alpha-mu prototype exists, evaluate it on these sets using:
+When a real alpha-mu solver implementation exists, evaluate it on these sets using:
 
 - correctness,
 - selected move stability,

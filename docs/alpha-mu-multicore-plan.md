@@ -1,6 +1,6 @@
 # Alpha-Mu Multicore Implementation Plan
 
-This document records the staged plan for making the `alpha_mu_prototype` use multiple cores without destabilizing DDS correctness.
+This document records the staged plan for making the `alpha_mu` use multiple cores without destabilizing DDS correctness.
 
 ## Objective
 
@@ -20,7 +20,7 @@ The current exact alpha-mu benchmark path is serial:
 - DDS leaf evaluation uses `SolveBoardPBN()` one world at a time,
 - DDS multithreading exists primarily behind batch APIs such as `SolveAllBoards()`.
 
-That means the current prototype does not naturally use all cores for alpha-mu benchmark runs.
+That means the current solver does not naturally use all cores for alpha-mu benchmark runs.
 
 ## Parallelisation recommendation
 
@@ -46,10 +46,10 @@ Goal:
 
 Key files:
 
-- `test/alpha_mu_prototype_core.h`
-- `test/alpha_mu_prototype_core.cpp`
-- `test/alpha_mu_prototype.cpp`
-- `test/alpha_mu_prototype_tests.cpp`
+- `test/alpha_mu_core.h`
+- `test/alpha_mu_core.cpp`
+- `test/alpha_mu.cpp`
+- `test/alpha_mu_tests.cpp`
 
 Key regressions:
 
@@ -68,11 +68,11 @@ Goal:
 
 Key files:
 
-- `test/alpha_mu_prototype_core.h`
-- `test/alpha_mu_prototype_core.cpp`
-- `test/alpha_mu_prototype.cpp`
-- `test/run_alpha_mu_prototype_benchmark.py`
-- `test/alpha_mu_prototype_tests.cpp`
+- `test/alpha_mu_core.h`
+- `test/alpha_mu_core.cpp`
+- `test/alpha_mu.cpp`
+- `test/run_alpha_mu_benchmark.py`
+- `test/alpha_mu_tests.cpp`
 
 Acceptance criteria:
 
@@ -90,8 +90,8 @@ Goal:
 
 Key files:
 
-- `test/run_alpha_mu_prototype_benchmark.py`
-- `test/alpha_mu_prototype_core.cpp`
+- `test/run_alpha_mu_benchmark.py`
+- `test/alpha_mu_core.cpp`
 - `docs/profiling.md`
 - `docs/performance.md`
 
@@ -138,8 +138,8 @@ This PR should only proceed if profiling shows that single-board latency remains
 
 At each milestone, rerun:
 
-- `alpha_mu_prototype` default suite,
-- `alpha_mu_prototype bridge_dds`,
+- `alpha_mu` default suite,
+- `alpha_mu bridge_dds`,
 - `regression_api`,
 - `dtest -f ../hands/list10.txt -s solve`,
 - `dtest -f ../hands/list100.txt -s solve`.

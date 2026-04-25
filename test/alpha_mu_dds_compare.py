@@ -72,8 +72,8 @@ def build_steps(root: Path) -> list[tuple[str, list[str], Path]]:
     return [
         ("build_library", ["make", "macos"], root / "src"),
         (
-            "build_alpha_mu_prototype",
-            ["make", "-f", "Makefiles/Makefile_Mac_clang", "alpha_mu_prototype"],
+            "build_alpha_mu",
+            ["make", "-f", "Makefiles/Makefile_Mac_clang", "alpha_mu"],
             root / "test",
         ),
     ]
@@ -81,7 +81,7 @@ def build_steps(root: Path) -> list[tuple[str, list[str], Path]]:
 
 def dds_command(workload: dict[str, Any]) -> list[str]:
     return [
-        "./build/alpha_mu_prototype",
+        "./build/alpha_mu",
         "benchmark_dds",
         workload["hand_file"],
         str(int(workload.get("max_boards", 0))),
@@ -90,7 +90,7 @@ def dds_command(workload: dict[str, Any]) -> list[str]:
 
 def alpha_command(workload: dict[str, Any], depth: int) -> list[str]:
     return [
-        "./build/alpha_mu_prototype",
+        "./build/alpha_mu",
         "benchmark_alpha",
         workload["hand_file"],
         str(depth),
@@ -200,7 +200,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append("")
     lines.append("## Notes")
     lines.append("")
-    lines.append("- This compares exact one-world DDS solves with exact one-world alpha-mu prototype solves on the same boards.")
+    lines.append("- This compares exact one-world DDS solves with exact one-world alpha-mu solves on the same boards.")
     lines.append("- DDS and alpha-mu are benchmarked in separate process invocations to avoid cross-method cache reuse skew.")
     lines.append("- Alpha-mu depth `0` is a direct DDS-backed leaf benchmark with front-handling overhead.")
     lines.append("- Alpha-mu depths `>= 1` search that many full tricks before handing the remainder to DDS, while still checking for exact score agreement on every board.")
@@ -210,7 +210,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Compare original DDS solve speed against one-world alpha-mu prototype solve speed."
+        description="Compare original DDS solve speed against one-world alpha-mu solve speed."
     )
     parser.add_argument("--repeats", type=int, default=3, help="Measured repeats per workload.")
     parser.add_argument("--warmups", type=int, default=1, help="Unmeasured warmup runs per workload.")
@@ -222,7 +222,7 @@ def main() -> int:
         default=[],
         help="Optional workload name filter. Repeat to keep more than one workload.",
     )
-    parser.add_argument("--skip-build", action="store_true", help="Skip rebuilding the library and alpha_mu_prototype binary.")
+    parser.add_argument("--skip-build", action="store_true", help="Skip rebuilding the library and alpha_mu binary.")
     parser.add_argument(
         "--output-dir",
         default="",

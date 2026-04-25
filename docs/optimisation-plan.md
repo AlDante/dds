@@ -123,7 +123,7 @@ This biases macOS towards scheduling DDS search threads on the 8 performance cor
 
 **Risk:** Purely advisory. If the system is under load, the scheduler may still migrate. No correctness impact.
 
-**Implementation:** One-liner in the board-parallel worker thread entry point (alpha-mu prototype's `std::thread` lambda or GCD block).
+**Implementation:** One-liner in the board-parallel worker thread entry point (the alpha-mu solver's `std::thread` lambda or GCD block).
 
 #### 6. CLZ intrinsic
 

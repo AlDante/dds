@@ -1,5 +1,5 @@
 // pmu_single_run.cpp — Run a single serial alpha-mu benchmark board with PMU counters.
-// Compile alongside the existing alpha_mu_prototype object files.
+// Compile alongside the existing alpha_mu object files.
 // Must run with sudo for PMU access.
 
 #include <cstdio>
@@ -7,9 +7,9 @@
 #include <ctime>
 #include <mach/mach_time.h>
 #include "pmu_counters.h"
-#include "alpha_mu_prototype_core.h"
+#include "alpha_mu_core.h"
 
-using namespace alpha_mu_prototype;
+using namespace alpha_mu;
 
 int main(int argc, char* argv[])
 {

@@ -8,9 +8,9 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 
 - `test/alpha_mu_benchmark.py`
 - `test/alpha_mu_dds_compare.py`
-- `test/run_alpha_mu_prototype_benchmark.py`
-- `test/alpha_mu_prototype.cpp`
-- `test/README.alpha-mu-prototype.md`
+- `test/run_alpha_mu_benchmark.py`
+- `test/alpha_mu.cpp`
+- `test/README.alpha-mu-solver.md`
 
 ## What the runner does
 
@@ -98,30 +98,30 @@ python3 test/alpha_mu_benchmark.py --output-dir /tmp/dds-alpha-mu-run
 - If `AnalyseLaterBoard` does not appear in the summary, the next improvement should be to add a dedicated play-analysis workload.
 - The workflow is measurement-only; it does not alter deep search semantics.
 
-## Prototype
+## Alpha-Mu solver
 
-The repository also now contains a separate first alpha-mu prototype runner:
+The repository also now contains a separate alpha-mu solver runner:
 
-- build target: `alpha_mu_prototype`
-- source: `test/alpha_mu_prototype.cpp`
+- build target: `alpha_mu`
+- source: `test/alpha_mu.cpp`
 
-Unlike the benchmark runner, the prototype is not a DDS root-policy measurement tool. It is a separate semantics-oriented test component for Pareto fronts, toy alpha-mu search, and a DDS-backed leaf-evaluation demo.
+Unlike the benchmark runner, the solver runner is not a DDS root-policy measurement tool. It is a separate semantics-oriented test component for Pareto fronts, toy alpha-mu search, and a DDS-backed leaf-evaluation demo.
 
-The new `test/alpha_mu_dds_compare.py` runner sits between the two: it uses the prototype's exact one-world bridge benchmark modes to compare original DDS solve speed against alpha-mu solve speed on the same boards, while also checking score agreement at each measured alpha-mu depth.
+The new `test/alpha_mu_dds_compare.py` runner sits between the two: it uses the solver's exact one-world bridge benchmark modes to compare original DDS solve speed against alpha-mu solve speed on the same boards, while also checking score agreement at each measured alpha-mu depth.
 
-For longer single benchmark runs, `test/run_alpha_mu_prototype_benchmark.py` streams output live, preserves machine-readable `ALPHA_MU_BENCHMARK_PROGRESS ...`, `ALPHA_MU_BENCHMARK_CHECKPOINT ...`, and `ALPHA_MU_BENCHMARK_BOARD ...` lines in the log, and updates a `.status.json` sidecar so interrupted runs still leave partial progress behind, including the latest in-flight board snapshot, completed board numbers, and per-board timings.
+For longer single benchmark runs, `test/run_alpha_mu_benchmark.py` streams output live, preserves machine-readable `ALPHA_MU_BENCHMARK_PROGRESS ...`, `ALPHA_MU_BENCHMARK_CHECKPOINT ...`, and `ALPHA_MU_BENCHMARK_BOARD ...` lines in the log, and updates a `.status.json` sidecar so interrupted runs still leave partial progress behind, including the latest in-flight board snapshot, completed board numbers, and per-board timings.
 
 Example depth-2 baseline run from the repository root:
 
 ```zsh
-python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list1.txt --depth 2 --checkpoint-seconds 30
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list1.txt --depth 2 --checkpoint-seconds 30
 ```
 
 Skip specific 1-based board numbers or ranges while keeping checkpointed partial progress:
 
 ```zsh
-python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 3 --skip-boards 2 --checkpoint-seconds 60 --heartbeat-seconds 60
-python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list100.txt --depth 2 --skip-boards 2,5-7 --checkpoint-seconds 30
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --skip-boards 2 --checkpoint-seconds 60 --heartbeat-seconds 60
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list100.txt --depth 2 --skip-boards 2,5-7 --checkpoint-seconds 30
 ```
 
 For very long boards, `ALPHA_MU_BENCHMARK_PROGRESS ...` lines report the current board number, elapsed time on that board, recursive call count, DDS leaf-call count, tricks remaining, active worlds, current trick size, and player to move. The sidecar mirrors the latest such snapshot as `current_board_progress`.

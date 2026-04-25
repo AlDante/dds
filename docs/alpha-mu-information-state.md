@@ -13,7 +13,7 @@ The goal is to make it explicit which inputs are treated as:
   without changing the hard world set.
 
 This is the contract behind `BridgeInformationState` in
-`test/alpha_mu_prototype_core.h`.
+`test/alpha_mu_core.h`.
 
 ## Current structure
 

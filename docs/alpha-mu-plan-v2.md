@@ -5,9 +5,9 @@
 > historical rather than current. Since it was written, the repository has
 > gained a working `solve` / `decision` path, bridge-state TT support, richer
 > root reporting, practical real-board depth-2 continuation regressions, and an
-> initial split of the prototype into
-> `alpha_mu_prototype.cpp`, `alpha_mu_prototype_core.*`, and
-> `alpha_mu_prototype_tests.*`. The immediate next work is now continued
+> initial split of the solver into
+> `alpha_mu.cpp`, `alpha_mu_core.*`, and
+> `alpha_mu_tests.*`. The immediate next work is now continued
 > `Workstream 5` extraction while keeping those practical continuation and
 > reporting regressions green. For the authoritative current status and immediate
 > next work, use `docs/action-plan.md` and `docs/alpha-mu-roadmap.md`.
@@ -18,16 +18,16 @@ This plan replaces the incremental stage-based roadmap in `alpha-mu-roadmap.md` 
 
 ### What exists today
 
-The prototype lives in four files under `test/` totalling ~9,500 lines:
+The current solver lives in four files under `test/` totalling ~9,500 lines:
 
 | File | Lines | Role |
 |------|------:|------|
-| `alpha_mu_prototype_core.h` | 1,892 | All data structures and function declarations |
-| `alpha_mu_prototype_core.cpp` | 4,046 | All implementation logic in one file |
-| `alpha_mu_prototype_tests.cpp` | 3,358 | 48 regression tests |
-| `alpha_mu_prototype.cpp` | 189 | CLI runner (test/benchmark/compare modes) |
+| `alpha_mu_core.h` | 1,892 | All data structures and function declarations |
+| `alpha_mu_core.cpp` | 4,046 | All implementation logic in one file |
+| `alpha_mu_tests.cpp` | 3,358 | 48 regression tests |
+| `alpha_mu.cpp` | 189 | CLI runner (test/benchmark/compare modes) |
 
-The prototype already implements:
+The current solver already implements:
 
 - **Core semantics**: WorldMask, OutcomeVector, ParetoFront, dominance, Max-union, Min-product/min
 - **Paper cuts**: early cut, root cut, deep alpha cut, cut-on-win, world cuts, useful-world maintenance
@@ -63,7 +63,7 @@ The prototype already implements:
 
 ## Milestone 1: End-to-end single-board alpha-mu run
 
-**Goal**: A user can run `./build/alpha_mu_prototype solve <deal.txt> <board> <depth>` and get back a chosen move with a front summary, using real partial-information world generation and DDS leaf evaluation.
+**Goal**: A user can run `./build/alpha_mu solve <deal.txt> <board> <depth>` and get back a chosen move with a front summary, using real partial-information world generation and DDS leaf evaluation.
 
 ### Work
 
@@ -90,7 +90,7 @@ The prototype already implements:
 
 ### Completion signal
 
-`./build/alpha_mu_prototype solve ../hands/alpha_mu_play.txt 1 1` prints a move recommendation with timing.
+`./build/alpha_mu solve ../hands/alpha_mu_play.txt 1 1` prints a move recommendation with timing.
 
 ---
 
@@ -199,14 +199,14 @@ At least one real board searched to depth 3 with correct results in < 60 seconds
 
 3. **PMU integration**: option to run the solve path under the existing `pmu_counters.h` infrastructure. Record IPC, branch mispredictions, L1D misses for the search phase.
 
-4. **Benchmark suite**: `./build/alpha_mu_prototype benchmark_alpha ../hands/alpha_mu_showcase.txt 3 --parallel board --board-workers 8` with structured output parseable by `test/run_alpha_mu_prototype_benchmark.py`.
+4. **Benchmark suite**: `./build/alpha_mu benchmark_alpha ../hands/alpha_mu_showcase.txt 3 --parallel board --board-workers 8` with structured output parseable by `test/run_alpha_mu_benchmark.py`.
 
 5. **Performance log entry** with baseline numbers for all showcase boards at depths 1-3.
 
 ### Refactoring in this milestone
 
 - Extract search control (iterative deepening, TT management, cut logic) into `alpha_mu_search.h` / `.cpp`.
-- The monolithic `alpha_mu_prototype_core.cpp` should now be split into ~5 focused files.
+- The monolithic `alpha_mu_core.cpp` should now be split into ~5 focused files.
 
 ### Performance checkpoint
 
@@ -269,7 +269,7 @@ Depth 3 in < 30s on most showcase boards. At least one board searchable to depth
 
 ### Performance checkpoint
 
-- Public API overhead vs direct prototype call (should be negligible).
+- Public API overhead vs direct solver call (should be negligible).
 
 ### Completion signal
 

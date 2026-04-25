@@ -12,10 +12,10 @@ Current repository state is ahead of the original sequencing in this plan:
 
 - `Workstream 1` through `Workstream 4` are functionally landed at their current scoped goals,
 - the focused `bridge_dds` regression bundle is currently green,
-- the full `alpha_mu_prototype` suite is currently green,
+- the full `alpha_mu` suite is currently green,
 - practical real-board depth-2 continuation regressions are present for both the 40-card trick-boundary prefix and the 34-card partial-trick prefix on board 1 of `hands/alpha_mu_play.txt`,
 - richer root-report summaries are present,
-- and `Workstream 5` has already started in one important sense because the prototype is no longer a single file: the CLI runner, shared core, and test suite are already split across `test/alpha_mu_prototype.cpp`, `test/alpha_mu_prototype_core.*`, and `test/alpha_mu_prototype_tests.*`.
+- and `Workstream 5` has already started in one important sense because the alpha-mu solver is no longer a single file: the CLI runner, shared core, and test suite are already split across `test/alpha_mu.cpp`, `test/alpha_mu_core.*`, and `test/alpha_mu_tests.*`.
 
 So the practical next step is:
 
@@ -201,21 +201,21 @@ Already present today:
 
 ### Goal
 
-Continue the initial prototype split until alpha-mu growth is no longer trapped
+Continue the initial solver split until alpha-mu growth is no longer trapped
 inside one oversized core implementation unit under `test/`.
 
 ### Current status
 
 This workstream has already **started**:
 
-- the CLI runner is isolated in `test/alpha_mu_prototype.cpp`,
+- the CLI runner is isolated in `test/alpha_mu.cpp`,
 - the shared data structures and implementation live in
-  `test/alpha_mu_prototype_core.h` and `test/alpha_mu_prototype_core.cpp`,
+  `test/alpha_mu_core.h` and `test/alpha_mu_core.cpp`,
 - and the regression bundles are isolated in
-  `test/alpha_mu_prototype_tests.h` and `test/alpha_mu_prototype_tests.cpp`.
+  `test/alpha_mu_tests.h` and `test/alpha_mu_tests.cpp`.
 
 The next `Workstream 5` step is therefore not the first split, but the next
-smaller extraction from `alpha_mu_prototype_core.cpp` into more durable units.
+smaller extraction from `alpha_mu_core.cpp` into more durable units.
 
 ### Tasks
 
@@ -233,7 +233,7 @@ smaller extraction from `alpha_mu_prototype_core.cpp` into more durable units.
 - no regression failures after extraction,
 - cleaner ownership boundaries,
 - smaller and more coherent implementation units than the current
-  `alpha_mu_prototype_core.cpp`,
+  `alpha_mu_core.cpp`,
 - easier addition of new world-generation and reporting features.
 
 ## Workstream 6 — instrumentation for the next optimization cycle

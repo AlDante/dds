@@ -1,6 +1,6 @@
 # Profiling Procedure
 
-This page records the current practical profiling workflow for DDS and the alpha-mu prototype on macOS.
+This page records the current practical profiling workflow for DDS and the alpha-mu solver on macOS.
 
 It is deliberately separate from `performance.md`:
 
@@ -56,7 +56,7 @@ the library and test binaries with the same override:
 cd /Users/david/Documents/dev/CLionProjects/dds/src
 make M1_MAX_BUILD=0 macos
 cd /Users/david/Documents/dev/CLionProjects/dds/test
-make -f Makefiles/Makefile_Mac_clang M1_MAX_BUILD=0 alpha_mu_prototype
+make -f Makefiles/Makefile_Mac_clang M1_MAX_BUILD=0 alpha_mu
 ```
 
 The same override also works with `PROFILE_BUILD=1` and `PGO_MODE=...` when
@@ -93,7 +93,7 @@ cd /Users/david/Documents/dev/CLionProjects/dds/test
 make -f Makefiles/Makefile_Mac_clang pgo_generate_binaries
 export DYLD_LIBRARY_PATH=../src/build-pgo-generate
 export LLVM_PROFILE_FILE=../src/build-pgo-generate/pgo-data/alpha_mu_%p.profraw
-./build-pgo-generate/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10
+./build-pgo-generate/alpha_mu benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10
 cd /Users/david/Documents/dev/CLionProjects/dds/src
 make pgo_merge
 make macos_pgo_use
@@ -124,7 +124,7 @@ Important profiled binaries include:
 - `test/build-profile/dtest`
 - `test/build-profile/regression_api`
 - `test/build-profile/play_analysis_benchmark`
-- `test/build-profile/alpha_mu_prototype`
+- `test/build-profile/alpha_mu`
 
 ## Recommended first profiling target
 
@@ -134,7 +134,7 @@ From `test/`:
 
 ```zsh
 cd /Users/david/Documents/dev/CLionProjects/dds/test
-DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list10.txt 3 1 2
+DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu benchmark_alpha ../hands/list10.txt 3 1 2
 ```
 
 Arguments:
@@ -153,7 +153,7 @@ To profile the larger depth-3 run directly:
 
 ```zsh
 cd /Users/david/Documents/dev/CLionProjects/dds/test
-DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list10.txt 3 0 2
+DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu benchmark_alpha ../hands/list10.txt 3 0 2
 ```
 
 This means:
@@ -166,7 +166,7 @@ For board-parallel throughput profiling on the same workload, use explicit bench
 
 ```zsh
 cd /Users/david/Documents/dev/CLionProjects/dds/test
-DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list10.txt 3 0 2 --parallel board --board-workers 4
+DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu benchmark_alpha ../hands/list10.txt 3 0 2 --parallel board --board-workers 4
 ```
 
 The machine-readable benchmark output now records the reported `parallel`, `board_workers`, `root_workers`, `dds_thread_id`, and `configured_board_workers` fields on progress, per-board, checkpoint, and summary lines. In board-parallel mode, recursive progress lines are intentionally suppressed so worker output does not interleave unpredictably.
@@ -193,10 +193,10 @@ DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/play_analysis_benchmark
 
 ### Setup
 
-Use these values when profiling the alpha-mu prototype.
+Use these values when profiling the alpha-mu solver.
 
 - Executable:
-  - `/Users/david/Documents/dev/CLionProjects/dds/test/build-profile/alpha_mu_prototype`
+  - `/Users/david/Documents/dev/CLionProjects/dds/test/build-profile/alpha_mu`
 - Working directory:
   - `/Users/david/Documents/dev/CLionProjects/dds/test`
 - Environment:
@@ -234,7 +234,7 @@ Example:
 
 ```zsh
 cd /Users/david/Documents/dev/CLionProjects/dds/test
-DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list10.txt 3 1 2
+DYLD_LIBRARY_PATH=../src/build-profile ./build-profile/alpha_mu benchmark_alpha ../hands/list10.txt 3 1 2
 sample <PID> 10 -file /tmp/alpha_mu_depth3_sample.txt
 ```
 

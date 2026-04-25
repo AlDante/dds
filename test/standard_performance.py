@@ -70,13 +70,13 @@ DEFAULT_WORKLOADS = [
         short_workload=True,
     ),
     workload_definition(
-        "alpha_mu_prototype_default",
-        ["./build/alpha_mu_prototype"],
+        "alpha_mu_default",
+        ["./build/alpha_mu"],
         short_workload=True,
     ),
     workload_definition(
-        "alpha_mu_prototype_bridge_dds",
-        ["./build/alpha_mu_prototype", "bridge_dds"],
+        "alpha_mu_bridge_dds",
+        ["./build/alpha_mu", "bridge_dds"],
         short_workload=True,
     ),
 ]
@@ -146,7 +146,7 @@ def build_steps(root: Path) -> list[tuple[str, list[str], Path]]:
                 "regression_api",
                 "dtest",
                 "play_analysis_benchmark",
-                "alpha_mu_prototype",
+                "alpha_mu",
             ],
             root / "test",
         ),

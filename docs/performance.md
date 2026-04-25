@@ -72,8 +72,8 @@ Default workloads:
 2. `dtest_solve_list10`
 3. `dtest_solve_list100`
 4. `play_analysis_benchmark`
-5. `alpha_mu_prototype_default`
-6. `alpha_mu_prototype_bridge_dds`
+5. `alpha_mu_default`
+6. `alpha_mu_bridge_dds`
 
 The default requested repeat count is `1` so the routine can be used after every important code change without becoming too disruptive.
 
@@ -89,8 +89,8 @@ This covers:
 - `dtest_solve_list10`
 - `dtest_solve_list100`
 - `play_analysis_benchmark`
-- `alpha_mu_prototype_default`
-- `alpha_mu_prototype_bridge_dds`
+- `alpha_mu_default`
+- `alpha_mu_bridge_dds`
 
 The goal is to suppress transient startup and scheduling noise without materially lengthening the standardized suite.
 
@@ -103,13 +103,13 @@ python3 test/standard_performance.py --repeats 3
 For deeper alpha-mu benchmark instrumentation, keep using the dedicated runner:
 
 ```zsh
-python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2
 ```
 
 For board-parallel throughput experiments, pass the parallel settings explicitly, for example:
 
 ```zsh
-python3 test/run_alpha_mu_prototype_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --board-workers 4
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --board-workers 4
 ```
 
 ## Recorded results
@@ -122,5 +122,5 @@ Raw per-run logs and machine-readable summaries are written to:
 
 - `test/build/performance_runs/<timestamp>/`
 
-For deeper alpha-mu benchmarks outside the standardized suite, see the recorded serial baseline in `docs/performance-log.md` dated `2026-04-18 08:46:32`, which captures the `hands/list10.txt` depth-3 pre-parallelisation run and its strong board-to-board timing skew. Board-parallel runs recorded through `test/run_alpha_mu_prototype_benchmark.py` also preserve the reported parallel mode and worker counts in their log and status outputs.
+For deeper alpha-mu benchmarks outside the standardized suite, see the recorded serial baseline in `docs/performance-log.md` dated `2026-04-18 08:46:32`, which captures the `hands/list10.txt` depth-3 pre-parallelisation run and its strong board-to-board timing skew. Board-parallel runs recorded through `test/run_alpha_mu_benchmark.py` also preserve the reported parallel mode and worker counts in their log and status outputs.
 

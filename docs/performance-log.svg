@@ -188,13 +188,13 @@
 <text x="1068.00" y="140.00" font-size="16" font-weight="700" fill="#111827">Workloads</text>
 <line x1="1068.00" y1="161.00" x2="1096.00" y2="161.00" stroke="#4C78A8" stroke-width="4" stroke-linecap="round" />
 <circle cx="1082.00" cy="161.00" r="4.50" fill="#4C78A8" stroke="#ffffff" stroke-width="1.5" />
-<text x="1108.00" y="166.00" font-size="13" fill="#111827">alpha_mu_prototype_bridge_dds</text>
+<text x="1108.00" y="166.00" font-size="13" fill="#111827">alpha_mu_bridge_dds</text>
 <line x1="1068.00" y1="187.00" x2="1096.00" y2="187.00" stroke="#F58518" stroke-width="4" stroke-linecap="round" />
 <circle cx="1082.00" cy="187.00" r="4.50" fill="#F58518" stroke="#ffffff" stroke-width="1.5" />
-<text x="1108.00" y="192.00" font-size="13" fill="#111827">alpha_mu_prototype_default</text>
+<text x="1108.00" y="192.00" font-size="13" fill="#111827">alpha_mu_default</text>
 <line x1="1068.00" y1="213.00" x2="1096.00" y2="213.00" stroke="#54A24B" stroke-width="4" stroke-linecap="round" />
 <circle cx="1082.00" cy="213.00" r="4.50" fill="#54A24B" stroke="#ffffff" stroke-width="1.5" />
-<text x="1108.00" y="218.00" font-size="13" fill="#111827">alpha_mu_prototype_list10_depth2</text>
+<text x="1108.00" y="218.00" font-size="13" fill="#111827">alpha_mu_list10_depth2</text>
 <line x1="1068.00" y1="239.00" x2="1096.00" y2="239.00" stroke="#E45756" stroke-width="4" stroke-linecap="round" />
 <circle cx="1082.00" cy="239.00" r="4.50" fill="#E45756" stroke="#ffffff" stroke-width="1.5" />
 <text x="1108.00" y="244.00" font-size="13" fill="#111827">dtest_solve_list10</text>
@@ -223,7 +223,7 @@
 <text x="1108.00" y="446.00" font-size="13" fill="#111827">Individual board timings when recorded</text>
 <text x="1068.00" y="426.00" font-size="16" font-weight="700" fill="#111827">Latest entry</text>
 <text x="1068.00" y="450.00" font-size="13" fill="#374151">2026-04-16 20:38:05 / 8b27edf dirty</text>
-<text x="1068.00" y="472.00" font-size="13" fill="#374151">Cumulative series: alpha_mu_prototype_list10_depth2</text>
-<text x="1068.00" y="494.00" font-size="13" fill="#374151">Per-board series: alpha_mu_prototype_list10_depth2</text>
+<text x="1068.00" y="472.00" font-size="13" fill="#374151">Cumulative series: alpha_mu_list10_depth2</text>
+<text x="1068.00" y="494.00" font-size="13" fill="#374151">Per-board series: alpha_mu_list10_depth2</text>
 <text x="1068.00" y="516.00" font-size="13" fill="#374151">Recorded individual board timings: 10</text>
 </svg>

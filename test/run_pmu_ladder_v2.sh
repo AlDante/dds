@@ -23,7 +23,7 @@ run_benchmark() {
   cd "$SRC" && make -j8 2>&1 | tail -1
   cp "$SRC/build/libdds.so" "$TEST_BUILD/build/"
   cd "$TEST_BUILD"
-  ./alpha_mu_prototype benchmark_alpha "$HANDS" 2 1 \
+  ./alpha_mu benchmark_alpha "$HANDS" 2 1 \
     --parallel serial --board-workers 1 --root-workers 1 \
     2>&1 | tee "$logfile"
   echo ""

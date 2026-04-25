@@ -4,11 +4,11 @@ Date: 2026-04-19
 
 ## Scope
 
-This plan covers the DDS core library (`src/`) and the alpha-mu prototype (`test/alpha_mu_prototype_*`).
+This plan covers the DDS core library (`src/`) and the alpha-mu solver code (`test/alpha_mu_*`).
 
-## Phase 1: Alpha-mu prototype modernisation (low risk, high readability gain)
+## Phase 1: Alpha-mu solver modernisation (low risk, high readability gain)
 
-1. **Replace `NULL` with `nullptr`** throughout `alpha_mu_prototype_core.h/.cpp`
+1. **Replace `NULL` with `nullptr`** throughout `alpha_mu_core.h/.cpp`
 2. **Use `__builtin_popcountll`** in `WorldMask::PopCount()` instead of manual bit loop
 3. **Use range-based for loops** where iterating over vectors with index-only access
 4. **Add `[[nodiscard]]`** to pure query functions returning important values

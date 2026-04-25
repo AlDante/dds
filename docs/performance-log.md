@@ -65,8 +65,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.144 | 0.166 | 0.121 | 0.233 |
 | `dtest_solve_list100` | 1.188 | 1.222 | 1.187 | 1.290 |
 | `play_analysis_benchmark` | 0.107 | 0.106 | 0.103 | 0.109 |
-| `alpha_mu_prototype_default` | 0.150 | 0.250 | 0.149 | 0.452 |
-| `alpha_mu_prototype_bridge_dds` | 0.431 | 0.430 | 0.424 | 0.434 |
+| `alpha_mu_default` | 0.150 | 0.250 | 0.149 | 0.452 |
+| `alpha_mu_bridge_dds` | 0.431 | 0.430 | 0.424 | 0.434 |
 
 ## 2026-04-12 11:21:28 — commit `2bec9d9` (dirty)
 
@@ -80,16 +80,16 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.225 | 0.225 | 0.225 | 0.225 |
 | `dtest_solve_list100` | 1.239 | 1.239 | 1.239 | 1.239 |
 | `play_analysis_benchmark` | 0.177 | 0.177 | 0.177 | 0.177 |
-| `alpha_mu_prototype_default` | 0.193 | 0.193 | 0.193 | 0.193 |
-| `alpha_mu_prototype_bridge_dds` | 0.581 | 0.581 | 0.581 | 0.581 |
+| `alpha_mu_default` | 0.193 | 0.193 | 0.193 | 0.193 |
+| `alpha_mu_bridge_dds` | 0.581 | 0.581 | 0.581 | 0.581 |
 
 ## 2026-04-12 12:45:42 — commit `e537788` (dirty)
 
 - Output bundle: `test/build/performance_runs/20260412-124110`
 - Platform: `macOS-26.4-arm-64bit`
 - Repeats per workload: `1`
-- Graph outliers: `alpha_mu_prototype_bridge_dds`
-- Note: `alpha_mu_prototype_bridge_dds` used a temporary overly heavy targeted regression variant before the targeted-scope trim, so it is not directly comparable with later stabilized bridge-dds timings.
+- Graph outliers: `alpha_mu_bridge_dds`
+- Note: `alpha_mu_bridge_dds` used a temporary overly heavy targeted regression variant before the targeted-scope trim, so it is not directly comparable with later stabilized bridge-dds timings.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |
@@ -97,8 +97,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.253 | 0.253 | 0.253 | 0.253 |
 | `dtest_solve_list100` | 1.243 | 1.243 | 1.243 | 1.243 |
 | `play_analysis_benchmark` | 0.178 | 0.178 | 0.178 | 0.178 |
-| `alpha_mu_prototype_default` | 0.422 | 0.422 | 0.422 | 0.422 |
-| `alpha_mu_prototype_bridge_dds` | 44.806 | 44.806 | 44.806 | 44.806 |
+| `alpha_mu_default` | 0.422 | 0.422 | 0.422 | 0.422 |
+| `alpha_mu_bridge_dds` | 44.806 | 44.806 | 44.806 | 44.806 |
 
 ## 2026-04-12 12:50:43 — commit `e537788` (dirty)
 
@@ -112,8 +112,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.192 | 0.192 | 0.192 | 0.192 |
 | `dtest_solve_list100` | 1.275 | 1.275 | 1.275 | 1.275 |
 | `play_analysis_benchmark` | 0.106 | 0.106 | 0.106 | 0.106 |
-| `alpha_mu_prototype_default` | 0.249 | 0.249 | 0.249 | 0.249 |
-| `alpha_mu_prototype_bridge_dds` | 0.472 | 0.472 | 0.472 | 0.472 |
+| `alpha_mu_default` | 0.249 | 0.249 | 0.249 | 0.249 |
+| `alpha_mu_bridge_dds` | 0.472 | 0.472 | 0.472 | 0.472 |
 
 ## 2026-04-12 17:12:16 — commit `04290a6` (dirty)
 
@@ -129,8 +129,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 7.579 | 7.579 | 7.579 | 7.579 |
 | `dtest_solve_list100` | 2.874 | 2.874 | 2.874 | 2.874 |
 | `play_analysis_benchmark` | 0.208 | 0.208 | 0.208 | 0.208 |
-| `alpha_mu_prototype_default` | 0.341 | 0.341 | 0.341 | 0.341 |
-| `alpha_mu_prototype_bridge_dds` | 0.571 | 0.571 | 0.571 | 0.571 |
+| `alpha_mu_default` | 0.341 | 0.341 | 0.341 | 0.341 |
+| `alpha_mu_bridge_dds` | 0.571 | 0.571 | 0.571 | 0.571 |
 
 ## 2026-04-13 06:47:57 — commit `6a0afe7` (dirty)
 
@@ -140,8 +140,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 - Timing stabilization:
   - `dtest_solve_list10`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
   - `dtest_solve_list100`: 1 unmeasured warmup run and at least 3 measured repeats to reduce short-run startup noise.
-- Graph outliers: `alpha_mu_prototype_default`
-- Note: `alpha_mu_prototype_default` was a single-run wall-clock outlier; repeated reruns remained near the historical ~0.15-0.2 s range and the later stabilized entry supersedes it for trend interpretation.
+- Graph outliers: `alpha_mu_default`
+- Note: `alpha_mu_default` was a single-run wall-clock outlier; repeated reruns remained near the historical ~0.15-0.2 s range and the later stabilized entry supersedes it for trend interpretation.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |
@@ -149,8 +149,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.129 | 0.149 | 0.116 | 0.201 |
 | `dtest_solve_list100` | 1.239 | 1.233 | 1.211 | 1.248 |
 | `play_analysis_benchmark` | 0.150 | 0.150 | 0.150 | 0.150 |
-| `alpha_mu_prototype_default` | 16.432 | 16.432 | 16.432 | 16.432 |
-| `alpha_mu_prototype_bridge_dds` | 0.443 | 0.443 | 0.443 | 0.443 |
+| `alpha_mu_default` | 16.432 | 16.432 | 16.432 | 16.432 |
+| `alpha_mu_bridge_dds` | 0.443 | 0.443 | 0.443 | 0.443 |
 
 ## 2026-04-13 09:54:02 — commit `e83103f` (dirty)
 
@@ -161,8 +161,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
   - `dtest_solve_list10`: 1 unmeasured warmup run; 6 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
   - `dtest_solve_list100`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
   - `play_analysis_benchmark`: 1 unmeasured warmup run; 10 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
-  - `alpha_mu_prototype_default`: 1 unmeasured warmup run; 7 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
-  - `alpha_mu_prototype_bridge_dds`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_default`: 1 unmeasured warmup run; 7 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_bridge_dds`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |
@@ -170,8 +170,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.194 | 0.191 | 0.171 | 0.199 |
 | `dtest_solve_list100` | 2.347 | 2.346 | 2.344 | 2.348 |
 | `play_analysis_benchmark` | 0.107 | 0.107 | 0.103 | 0.114 |
-| `alpha_mu_prototype_default` | 0.156 | 0.157 | 0.154 | 0.162 |
-| `alpha_mu_prototype_bridge_dds` | 0.449 | 0.450 | 0.448 | 0.454 |
+| `alpha_mu_default` | 0.156 | 0.157 | 0.154 | 0.162 |
+| `alpha_mu_bridge_dds` | 0.449 | 0.450 | 0.448 | 0.454 |
 
 ## 2026-04-13 21:05:52 — commit `75252de`
 
@@ -182,8 +182,8 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
   - `dtest_solve_list10`: 1 unmeasured warmup run; 9 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
   - `dtest_solve_list100`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
   - `play_analysis_benchmark`: 1 unmeasured warmup run; 10 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
-  - `alpha_mu_prototype_default`: 1 unmeasured warmup run; 7 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
-  - `alpha_mu_prototype_bridge_dds`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_default`: 1 unmeasured warmup run; 7 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
+  - `alpha_mu_bridge_dds`: 1 unmeasured warmup run; 3 measured repeats; minimum measured repeat count raised from requested 1 to 3; cumulative measured wall time target ≥ 1.0 s; automatic repeats capped at 10 unless the user requests more.
 
 | Workload | Median (s) | Mean (s) | Min (s) | Max (s) |
 | --- | ---: | ---: | ---: | ---: |
@@ -191,57 +191,57 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 | `dtest_solve_list10` | 0.121 | 0.124 | 0.109 | 0.143 |
 | `dtest_solve_list100` | 1.250 | 1.249 | 1.202 | 1.296 |
 | `play_analysis_benchmark` | 0.106 | 0.108 | 0.098 | 0.131 |
-| `alpha_mu_prototype_default` | 0.147 | 0.147 | 0.139 | 0.154 |
-| `alpha_mu_prototype_bridge_dds` | 0.449 | 0.448 | 0.437 | 0.458 |
+| `alpha_mu_default` | 0.147 | 0.147 | 0.139 | 0.154 |
+| `alpha_mu_bridge_dds` | 0.449 | 0.448 | 0.437 | 0.458 |
 
 ## 2026-04-16 17:10:55 — commit `e11ce28` (dirty)
 
 - Output log: `test/build/alpha_mu_depth2_list10.log`
 - Status sidecar: `test/build/alpha_mu_depth2_list10.log.status.json`
 - Platform: `macOS-26.4.1-arm64-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Checkpoint interval: `30 s`
 - Heartbeat interval: `30 s`
 
 | Workload | Boards | Total (s) | Per board (s) |
 | --- | ---: | ---: | ---: |
-| `alpha_mu_prototype_list10_depth2` | 10 | 653.456 | 65.346 |
+| `alpha_mu_list10_depth2` | 10 | 653.456 | 65.346 |
 
 ## 2026-04-16 19:19:08 — commit `b12ad9e`
 
 - Output log: `test/build/list10_alpha_mu_depth2_20260416-190836.log`
 - Status sidecar: `test/build/list10_alpha_mu_depth2_20260416-190836.log.status.json`
 - Platform: `macOS-26.4.1-arm64-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Checkpoint interval: `30 s`
 - Heartbeat interval: `30 s`
 
 | Workload | Boards | Total (s) | Per board (s) |
 | --- | ---: | ---: | ---: |
-| `alpha_mu_prototype_list10_depth2` | 10 | 631.195 | 63.120 |
+| `alpha_mu_list10_depth2` | 10 | 631.195 | 63.120 |
 
 ## 2026-04-16 20:38:05 — commit `8b27edf` (dirty)
 
 - Output log: `test/build/list10_alpha_mu_depth2_20260416-202717.log`
 - Status sidecar: `test/build/list10_alpha_mu_depth2_20260416-202717.log.status.json`
 - Platform: `macOS-26.4.1-arm64-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Checkpoint interval: `30 s`
 - Heartbeat interval: `30 s`
 
 | Workload | Boards | Total (s) | Per board (s) |
 | --- | ---: | ---: | ---: |
-| `alpha_mu_prototype_list10_depth2` | 10 | 647.090 | 64.709 |
+| `alpha_mu_list10_depth2` | 10 | 647.090 | 64.709 |
 
-- Per-board timings for `alpha_mu_prototype_list10_depth2` (s): `33.676, 424.807, 18.545, 33.332, 14.847, 29.519, 9.362, 50.346, 18.946, 13.711`
+- Per-board timings for `alpha_mu_list10_depth2` (s): `33.676, 424.807, 18.545, 33.332, 14.847, 29.519, 9.362, 50.346, 18.946, 13.711`
 
 ## 2026-04-18 08:46:32 — pre-parallelisation depth-3 alpha-mu baseline
 
 - Output log: `test/build/list10_alpha_mu_depth3_skip2_long.log`
 - Status sidecar: `test/build/list10_alpha_mu_depth3_skip2_long.log.status.json`
 - Platform: `macOS-26.4.1-arm64-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
-- Command: `./build/alpha_mu_prototype benchmark_alpha hands/list10.txt 3 0 2`
+- Benchmark mode: `alpha_mu benchmark_alpha`
+- Command: `./build/alpha_mu benchmark_alpha hands/list10.txt 3 0 2`
 - Checkpoint interval: `60 s`
 - Heartbeat interval: `60 s`
 - Result: `returncode=0`, `mismatches=0`
@@ -249,9 +249,9 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 
 | Workload | Boards | Total (s) | Per board (s) |
 | --- | ---: | ---: | ---: |
-| `alpha_mu_prototype_list10_depth3_skip2` | 9 | 42065.418 | 4673.935 |
+| `alpha_mu_list10_depth3_skip2` | 9 | 42065.418 | 4673.935 |
 
-- Per-board timings for `alpha_mu_prototype_list10_depth3_skip2` (s): `4559.504, 3883.365, 4634.658, 3851.057, 7581.362, 2623.548, 5916.843, 5429.650, 3585.430`
+- Per-board timings for `alpha_mu_list10_depth3_skip2` (s): `4559.504, 3883.365, 4634.658, 3851.057, 7581.362, 2623.548, 5916.843, 5429.650, 3585.430`
 - Fastest board: `7` at `2623.548 s`
 - Slowest board: `6` at `7581.362 s`
 - Conclusion: the nearly `3x` spread between boards makes this a strong pre-parallelisation baseline for PR 2 and argues for dynamic queue-based board scheduling rather than static board partitioning.
@@ -261,17 +261,17 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 - Output log: `test/build-profile/list9_alpha_mu_depth2_board10_profile.log`
 - Sample profile: `test/build-profile/list9_alpha_mu_depth2_board10_profile.sample.txt`
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
-- Command: `./build-profile/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`
+- Command: `./build-profile/alpha_mu benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`
 - Result: `mismatches=0`
 - Note: `hands/list9.txt` contains `9` boards, so the run requested `10` board workers but correctly clamped to `configured_board_workers=9`.
 
 | Workload | Boards | Total (s) | Per board (s) |
 | --- | ---: | ---: | ---: |
-| `alpha_mu_prototype_list9_depth2_board_parallel_profile` | 9 | 60.683 | 35.109 |
+| `alpha_mu_list9_depth2_board_parallel_profile` | 9 | 60.683 | 35.109 |
 
-- Per-board timings for `alpha_mu_prototype_list9_depth2_board_parallel_profile` (s): `44.944, 29.038, 43.490, 27.337, 43.830, 15.335, 60.678, 28.566, 22.766`
+- Per-board timings for `alpha_mu_list9_depth2_board_parallel_profile` (s): `44.944, 29.038, 43.490, 27.337, 43.830, 15.335, 60.678, 28.566, 22.766`
 - Fastest board: `6` at `15.335 s`
 - Slowest board: `7` at `60.678 s`
 - Conclusion: with one board worker per board, total wall time almost exactly matched the slowest board, which confirms that the board-parallel scheduler is distributing the `list9` depth-2 workload effectively.
@@ -280,7 +280,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-18 12:04:48 — M1 Max-specific `ABsearch` follow-up on `list9` depth 2
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Workload: `../hands/list9.txt`, depth `2`, `--parallel board --board-workers 10`
 - Result: all three runs completed with `mismatches=0`
 - Baseline output log: `test/build/list9_alpha_mu_depth2_board10_release_baseline.log`
@@ -307,11 +307,11 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-18 — staged data-structure follow-up on `list9` depth 2
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Workload: `../hands/list9.txt`, depth `2`, `--parallel board --board-workers 10`
 - Stage order used for safe rollout: `8.1` hot/cold `ThreadData`, then `8.5` hot-field co-location in `pos`, then `8.4` packed `moveType`, then `8.3` depth-local scratch state.
 - Regression checks run after each stage: `regression_api`, `dtest -f ../hands/list10.txt -s solve`, and `play_analysis_benchmark`.
-- Focused performance check after each stage: `alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`.
+- Focused performance check after each stage: `alpha_mu benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10`.
 - Result summary: all focused `dtest` and `play_analysis_benchmark` runs completed successfully; `alpha_mu` stayed exact with `mismatches=0` in every staged run.
 
 | Stage | Change | Output log | Total (s) | Per board (s) | Delta vs fresh stage-0 baseline |
@@ -334,7 +334,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-18 — matched single-board profiling ladder on `list9` board `7`
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Focused workload: `../hands/list9.txt`, depth `2`, board `7` only via skip spec `1-6,8-9`, `--parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0`
 - Purpose: remove all-board and board-parallel noise and check where the severe current-tree slowdown first appears on the earlier slow board `7`.
@@ -360,7 +360,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — matched full-`list9` serial ladder across stages `1`/`2`/`3`/current
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Workload: `../hands/list9.txt`, depth `2`, all `9` boards, `--parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0`
 - Purpose: broaden the earlier board-`7`-only profiling ladder to the full `list9` hand set while keeping the same serial profiling build and staged source states.
@@ -386,7 +386,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — matched full-`list9` board-parallel rerun with `10` requested workers
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Workload: `../hands/list9.txt`, depth `2`, all `9` boards, `--parallel board --board-workers 10 --root-workers 1 --dds-thread-id 0`
 - Scheduler note: `list9` contains only `9` boards, so every run requested `10` board workers but correctly reported `configured_board_workers=9`; this is therefore the closest board-parallel rerun of the earlier `10`-worker setup without changing the hand set.
@@ -411,7 +411,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — isolated `DepthLocal` shadow-state revert hypothesis test
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Hypothesis under test: keep the post-`8.3` `ThreadData::lowestWin` removal, but remove only the `DepthLocal` win-rank / best-move shadow state from `ABsearch*` so `posPoint->winRanks[depth]` becomes the direct hot-path state again.
 - Code shape: `src/ABsearch.h`, `src/ABsearch.cpp`, and `src/ABsearch_m1max.cpp` reverted the `DepthLocal` layer only; `src/Memory.h` remained in the post-`8.3` state with `ThreadData::lowestWin` still absent.
@@ -431,7 +431,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — isolated `ThreadData::lowestWin` restore follow-up
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: `build-profile` (`-O2 -g -fno-omit-frame-pointer`)
 - Hypothesis under test: starting from the earlier `DepthLocal`-only revert, restore `ThreadDataHot::lowestWin` in `src/Memory.h` to test whether the remaining regression is primarily due to the hot-struct layout change from removing that array.
 - Code shape: `src/ABsearch.h`, `src/ABsearch.cpp`, and `src/ABsearch_m1max.cpp` stayed in the `DepthLocal`-reverted state; `src/Memory.h` restored `ThreadDataHot::lowestWin`.
@@ -454,13 +454,13 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — Phase 1: NEON intrinsics in `ABsearch_m1max.cpp` + P-core QoS pinning
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: release (`-O3 -flto`)
 - Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
 - Make target: `make perf-bench`
 - Changes:
   - Replaced scalar 4-suit winRanks operations with ARM NEON `uint16x4_t` intrinsics in all `ABsearch_m1max.cpp` helper functions (`DDSM1ZeroWinRanks`, `DDSM1CopyChildWinRanks`, `DDSM1OrChildWinRanks`, `DDSM1CopyMakeWinRanks`, `DDSM1OrMakeWinRanks`)
-  - Added `pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)` to board-worker threads in `alpha_mu_prototype_core.cpp` to bias macOS scheduling towards M1 Max performance cores
+  - Added `pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)` to board-worker threads in `alpha_mu_core.cpp` to bias macOS scheduling towards M1 Max performance cores
   - Added `make perf`, `make perf-build`, `make perf-check`, `make perf-bench` targets to top-level `Makefile`
 - Result: all runs completed with `mismatches=0`
 
@@ -480,7 +480,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — Phase 2: QuickTricks `highestRankFast` CLZ intrinsic + scalar OR
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: release (`-O3 -flto`)
 - Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
 - Make target: `make perf-bench`
@@ -496,12 +496,12 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-19 — Code modernisation pass (readability + maintainability)
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Build: release (`-O3 -flto`)
 - Workload: `hands/list9.txt`, depth `2`, `--parallel board --board-workers 8`
 - Make target: `make perf-bench`
 - Changes (no algorithmic modifications):
-  - Replaced `NULL` with `nullptr` throughout `alpha_mu_prototype_core.h/.cpp` and `alpha_mu_prototype.cpp`
+  - Replaced `NULL` with `nullptr` throughout `alpha_mu_core.h/.cpp` and `alpha_mu.cpp`
   - Replaced manual popcount loop in `WorldMask::PopCount()` with `__builtin_popcountll` intrinsic
   - Replaced `map<string, TTEntry>::const_iterator` with `auto` in `TranspositionTable::Lookup`
   - Removed `using namespace std` from `Memory.h` header; qualified with `std::` to prevent namespace pollution across all includers
@@ -519,7 +519,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 - Interpretation:
   - as expected, the readability/maintainability changes produced no measurable performance difference
   - correctness confirmed by `mismatches=0` across all boards
-  - the `__builtin_popcountll` change eliminates a hot-path manual loop in the alpha-mu prototype but does not affect DDS core performance
+  - the `__builtin_popcountll` change eliminates a hot-path manual loop in alpha-mu but does not affect DDS core performance
 
 ## 2026-04-19 — Phase 3: QuickTricks context-struct refactor (§9.1 + §9.2 + §9.6)
 
@@ -558,7 +558,7 @@ All three instrumentation runs produced identical `root_stats_by_context` payloa
 ## 2026-04-20 — CPU-time benchmark ladder across historical commits
 
 - Platform: `macOS-26.4.1-arm-64bit`
-- Benchmark mode: `alpha_mu_prototype benchmark_alpha`
+- Benchmark mode: `alpha_mu benchmark_alpha`
 - Workload: `../hands/list9.txt`, depth `2`, `--parallel serial --board-workers 1 --root-workers 1`
 - Build: release (`-O3 -flto`), same test binary (with `getrusage` instrumentation), library rebuilt from each commit's `src/`
 - Metric: **process CPU time** via `getrusage(RUSAGE_SELF)` — stable across runs, unaffected by thread scheduling

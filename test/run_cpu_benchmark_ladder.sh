@@ -55,7 +55,7 @@ for entry in "${COMMITS[@]}"; do
   # Run the benchmark
   echo "  Running benchmark..."
   DYLD_LIBRARY_PATH="$SRC_DIR/build" \
-    "$TEST_DIR/build/alpha_mu_prototype" benchmark_alpha "$HANDS" 2 0 \
+    "$TEST_DIR/build/alpha_mu" benchmark_alpha "$HANDS" 2 0 \
     --parallel serial --board-workers 1 --root-workers 1 --dds-thread-id 0 \
     2>&1 | tee "$LOGFILE"
 

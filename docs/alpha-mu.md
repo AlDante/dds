@@ -109,7 +109,7 @@ A good DDS-side alpha-mu support path should preserve the following invariants:
 The roadmap now has to split into two tracks:
 
 1. **Continue modest DDS root-policy improvements** where they pay off.
-2. **Start a separate alpha-mu prototype track** for the actual paper algorithm:
+2. **Start a separate alpha-mu implementation track** for the actual paper algorithm:
    - possible worlds,
    - vectors,
    - Pareto fronts,
@@ -128,7 +128,7 @@ A successful DDS-side support step will:
 
 A successful **first real alpha-mu step** will additionally:
 
-- reproduce the paper's search semantics on a small, controlled prototype,
+- reproduce the paper's search semantics on a small, controlled implementation slice,
 - run over multiple worlds rather than one perfect-information deal,
 - maintain Pareto fronts correctly,
 - demonstrate at least early/root-cut behavior before more aggressive optimizations are attempted.
