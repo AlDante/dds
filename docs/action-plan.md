@@ -209,8 +209,10 @@ inside one oversized core implementation unit under `test/`.
 This workstream has already **started**:
 
 - the CLI runner is isolated in `test/alpha_mu.cpp`,
-- the shared data structures and implementation live in
-  `test/alpha_mu_core.h` and `test/alpha_mu_core.cpp`,
+- the shared data structures live in `test/alpha_mu_core.h`,
+- information-state and world-construction helpers can be extracted into
+  focused units such as `test/alpha_mu_worlds.cpp`,
+- and the bridge search / TT core remains in `test/alpha_mu_core.cpp`,
 - and the regression bundles are isolated in
   `test/alpha_mu_tests.h` and `test/alpha_mu_tests.cpp`.
 
