@@ -757,6 +757,7 @@ namespace alpha_mu
         front = ParetoFront::MaxMerge(front, childFront);
         complete = complete && childComplete;
         if (context.bridgeSearch.enableAncestorCuts &&
+            i + 1U < children.size() &&
             childFront.WinsAll(usefulWorlds))
         {
           NoteCutOnWinCut();
@@ -965,6 +966,7 @@ namespace alpha_mu
         front = ParetoFront::MaxMerge(front, childFront);
         complete = complete && childComplete;
         if (context.bridgeSearch.enableAncestorCuts &&
+            i + 1U < children.size() &&
             childFront.WinsAll(usefulWorlds))
         {
           NoteCutOnWinCut();

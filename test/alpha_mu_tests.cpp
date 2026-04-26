@@ -2576,6 +2576,7 @@ namespace alpha_mu
     exact.values[0] = 1;
     exact.values[1] = 1;
 
+
     Check(front.vectors.size() == 1 && FrontContains(front, exact),
       "bridge cut-on-win should preserve the exact winning root front when the first Max child already wins in every useful world");
     Check(stats.cutOnWinCuts == 1,
@@ -2592,13 +2593,13 @@ namespace alpha_mu
     InitZobrist();
     BridgeTranspositionTable tt(1U << 8);
     BridgeTTStats firstStats;
-    const BridgeRootReport first = AnalyzeBridgeRootWithTT(state, 1,
+    const BridgeRootReport first = AnalyzeBridgeRootWithTT(state, 2,
       context, &tt, &firstStats, NULL);
 
     BridgeSearchStats stats;
     SetActiveBridgeSearchStats(&stats);
     BridgeTTStats secondStats;
-    const BridgeRootReport second = AnalyzeBridgeRootWithTT(state, 2,
+    const BridgeRootReport second = AnalyzeBridgeRootWithTT(state, 3,
       context, &tt, &secondStats, &first);
     SetActiveBridgeSearchStats(NULL);
 
@@ -4184,6 +4185,14 @@ namespace alpha_mu
 
   void RunBridgeDDSTestSuite()
   {
+    TestBridgeAncestorEarlyCutAtRootMax();
+    PrintAlphaMuStatus("bridge optimistic completion and early cut OK");
+    TestBridgeAncestorEarlyCutPreservesExactTTReuse();
+    PrintAlphaMuStatus("bridge optimistic-cut TT exactness OK");
+    TestBridgeCutOnWin();
+    PrintAlphaMuStatus("bridge cut-on-win OK");
+    TestBridgeRootCut();
+    PrintAlphaMuStatus("bridge root-cut OK");
     TestBridgeMultiTrickDDSLeaf();
     PrintAlphaMuStatus("multi-trick bridge DDS leaf search OK");
     PrintAlphaMuStatus("all checks passed");
