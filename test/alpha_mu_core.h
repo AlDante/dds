@@ -955,6 +955,7 @@ namespace alpha_mu
     double mu;
     unsigned searchNodes;
     unsigned ddsLeafCalls;
+    double ddsLeafSeconds;
 
     explicit BridgeRootChildReport(const unsigned worldCount = 0) :
       move(),
@@ -963,7 +964,8 @@ namespace alpha_mu
       usefulWorlds(WorldMask::None(worldCount)),
       mu(0.0),
       searchNodes(0),
-      ddsLeafCalls(0)
+      ddsLeafCalls(0),
+      ddsLeafSeconds(0.0)
     {
     }
   };
@@ -978,6 +980,7 @@ namespace alpha_mu
     WorldMask usefulWorlds;
     unsigned searchNodes;
     unsigned ddsLeafCalls;
+    double ddsLeafSeconds;
 
     explicit BridgeRootReport(const unsigned worldCount = 0) :
       children(),
@@ -985,7 +988,8 @@ namespace alpha_mu
       validWorlds(WorldMask::None(worldCount)),
       usefulWorlds(WorldMask::None(worldCount)),
       searchNodes(0),
-      ddsLeafCalls(0)
+      ddsLeafCalls(0),
+      ddsLeafSeconds(0.0)
     {
     }
   };
@@ -1576,6 +1580,7 @@ namespace alpha_mu
     double nextReportSeconds;
     unsigned long long recursiveCalls;
     unsigned long long ddsLeafCalls;
+    double ddsLeafSeconds;
 
     BenchmarkBoardProgressContext() :
       method(),
@@ -1593,7 +1598,8 @@ namespace alpha_mu
       boardStart(),
       nextReportSeconds(0.0),
       recursiveCalls(0ULL),
-      ddsLeafCalls(0ULL)
+      ddsLeafCalls(0ULL),
+      ddsLeafSeconds(0.0)
     {
     }
   };
@@ -2101,6 +2107,7 @@ namespace alpha_mu
     int depthSearched;
     double worldGenerationSeconds;
     double searchSeconds;
+    double ddsLeafSeconds;
     double totalSeconds;
     HistoryDerivedConstructionStats constructorStats;
     WorldGenerationStats worldGenerationStats;
@@ -2145,6 +2152,7 @@ namespace alpha_mu
       depthSearched(0),
       worldGenerationSeconds(0.0),
       searchSeconds(0.0),
+      ddsLeafSeconds(0.0),
       totalSeconds(0.0),
       constructorStats(),
       worldGenerationStats(),

@@ -50,6 +50,7 @@ instrumentation slice:
 - constructor-local pruning counts,
 - frontier dominance-reduction activity,
 - TT probes / hits / stores,
+- search-time split between bridge-search work and DDS leaf time,
 - and bridge-search cut / termination counters.
 
 ## What it checks

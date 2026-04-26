@@ -189,9 +189,13 @@ namespace alpha_mu
          << endl;
 
     cout << setprecision(3);
+    const double nonDDSSearchSeconds =
+      max(0.0, result.searchSeconds - result.ddsLeafSeconds);
     cout << "  Timing: " << result.totalSeconds << "s total ("
          << result.worldGenerationSeconds << "s world-gen, "
-         << result.searchSeconds << "s search)" << endl;
+         << result.searchSeconds << "s search = "
+         << nonDDSSearchSeconds << "s bridge-search + "
+         << result.ddsLeafSeconds << "s DDS leaves)" << endl;
     cout << "  Constructor pruning: raw="
          << result.constructorStats.rawAssignmentCount
          << ", ownership=" << result.constructorStats.afterOwnershipCount

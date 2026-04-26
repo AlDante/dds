@@ -3515,6 +3515,9 @@ namespace alpha_mu
       "end-to-end solve at depth 1 should complete within 30 seconds");
     Check(result.searchSeconds >= 0.0,
       "end-to-end solve should record non-negative search time");
+    Check(result.ddsLeafSeconds >= 0.0 &&
+          result.ddsLeafSeconds <= result.searchSeconds,
+      "end-to-end solve should keep DDS leaf time within the total search time");
     Check(result.worldGenerationSeconds >= 0.0,
       "end-to-end solve should record non-negative world-generation time");
 
@@ -3559,6 +3562,9 @@ namespace alpha_mu
       "decision-point solve should report both alpha-mu and DDS detail for the actual next move when it remains legal");
     Check(result.searchNodes > 0 && result.ddsLeafCalls > 0,
       "decision-point solve should report non-zero search-node and DDS-leaf counts");
+    Check(result.ddsLeafSeconds > 0.0 &&
+          result.ddsLeafSeconds <= result.searchSeconds,
+      "decision-point solve should report a positive DDS-leaf time that stays within the total search time");
     Check(result.bridgeSearchStats.frontInsertAttempts > 0 &&
           result.bridgeSearchStats.frontAcceptedInserts > 0,
       "decision-point solve should report frontier insert activity");

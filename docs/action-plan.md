@@ -258,6 +258,7 @@ Already present today:
 - constructor-local pruning counts are exposed in `AlphaMuSolveResult`,
 - frontier activity now records insert attempts, accepted inserts, dominance rejections, and dominated-vector removal counts,
 - TT probes / hits / stores are already exposed,
+- the decision-point runner now splits search time into bridge-search time and DDS leaf time,
 - and bridge-search cut/termination counters now distinguish empty-world, TT-hit, DDS-leaf, no-move, and terminal-front returns.
 
 ### Tasks

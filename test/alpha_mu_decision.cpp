@@ -314,6 +314,8 @@ namespace alpha_mu
     result.rootFront = bestReport.rootFront;
     result.depthSearched = bestDepth;
     result.valid = ! bestReport.rootFront.vectors.empty();
+    result.ddsLeafSeconds = (progress.ddsLeafSeconds > 0.0 ?
+      progress.ddsLeafSeconds : bestReport.ddsLeafSeconds);
     result.ttProbes = ttStats.probes;
     result.ttHits = ttStats.hits;
     result.ttStores = ttStats.stores;

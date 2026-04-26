@@ -393,8 +393,14 @@ namespace alpha_mu
         context.benchmarkProgress->ddsLeafCalls++;
 
       const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
+      const chrono::steady_clock::time_point ddsStart =
+        chrono::steady_clock::now();
       const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut,
         context.ddsThreadId);
+      const double ddsElapsed = chrono::duration<double>(
+        chrono::steady_clock::now() - ddsStart).count();
+      if (context.benchmarkProgress != NULL)
+        context.benchmarkProgress->ddsLeafSeconds += ddsElapsed;
       ostringstream ddsTag;
       ddsTag << "SolveBoardPBN bridge DDS leaf"
              << " world=" << worldIndex
@@ -629,8 +635,10 @@ namespace alpha_mu
       childReport.mu = childReport.front.Mu();
       childReport.searchNodes = static_cast<unsigned>(childProgress.recursiveCalls);
       childReport.ddsLeafCalls = static_cast<unsigned>(childProgress.ddsLeafCalls);
+      childReport.ddsLeafSeconds = childProgress.ddsLeafSeconds;
       report.searchNodes += childReport.searchNodes;
       report.ddsLeafCalls += childReport.ddsLeafCalls;
+      report.ddsLeafSeconds += childReport.ddsLeafSeconds;
       report.children.push_back(childReport);
       report.rootFront = ParetoFront::MaxMerge(report.rootFront,
         childReport.front);
@@ -711,8 +719,10 @@ namespace alpha_mu
       childReport.mu = childReport.front.Mu();
       childReport.searchNodes = static_cast<unsigned>(childProgress.recursiveCalls);
       childReport.ddsLeafCalls = static_cast<unsigned>(childProgress.ddsLeafCalls);
+      childReport.ddsLeafSeconds = childProgress.ddsLeafSeconds;
       report.searchNodes += childReport.searchNodes;
       report.ddsLeafCalls += childReport.ddsLeafCalls;
+      report.ddsLeafSeconds += childReport.ddsLeafSeconds;
       report.children.push_back(childReport);
       report.rootFront = ParetoFront::MaxMerge(report.rootFront,
         childReport.front);

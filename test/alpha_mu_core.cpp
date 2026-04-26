@@ -707,6 +707,7 @@ void MaybeReportBenchmarkBoardProgress(
          << " elapsed_seconds=" << totalElapsed
          << " recursive_calls=" << progress->recursiveCalls
          << " dds_leaf_calls=" << progress->ddsLeafCalls
+         << " dds_leaf_seconds=" << progress->ddsLeafSeconds
          << " tricks_remaining=" << tricksRemaining
          << " active_worlds=" << state.possibleWorlds.PopCount()
          << " current_trick_size=" << state.currentTrick.size()
