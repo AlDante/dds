@@ -12,6 +12,7 @@ namespace alpha_mu
   using namespace std;
 
 #ifndef NDEBUG
+  /** @brief Enforce the Stage 0 compact-world mask invariant for bridge search. */
   static void DebugCheckWorldMaskCapacity(
     const unsigned worldCount,
     const string& context)
@@ -23,6 +24,7 @@ namespace alpha_mu
     Check(worldCount <= 64U, oss.str());
   }
 
+  /** @brief Enforce Stage 0 consistency between the active-world mask and the world vector. */
   static void DebugCheckBridgeStateMaskConsistency(
     const BridgeState& state,
     const string& context)
@@ -30,6 +32,76 @@ namespace alpha_mu
     DebugCheckWorldMaskCapacity(static_cast<unsigned>(state.worlds.size()), context);
     Check(state.possibleWorlds.count == state.worlds.size(),
       context + " should keep BridgeState.worlds and possibleWorlds.count in sync");
+    if (state.possibleWorlds.count < 64U)
+    {
+      const unsigned long long mask =
+        (state.possibleWorlds.count == 0U ? 0ULL :
+          ((1ULL << state.possibleWorlds.count) - 1ULL));
+      Check((state.possibleWorlds.bits & ~mask) == 0ULL,
+        context + " should not set active-world bits outside the compacted world vector");
+    }
+  }
+
+  /** @brief Enforce Stage 0 partial-trick and seat-order invariants for bridge search. */
+  static void DebugCheckBridgeStateTrickConsistency(
+    const BridgeState& state,
+    const string& context)
+  {
+    Check(state.currentTrick.size() == state.currentTrickPlayers.size(),
+      context + " should keep currentTrick and currentTrickPlayers aligned");
+    Check(state.currentTrick.size() <= 3U,
+      context + " should only represent partial tricks of size 0..3");
+    Check(state.playerToMove >= 0 && state.playerToMove < 4,
+      context + " should keep playerToMove within the four bridge seats");
+    Check(state.trickLeader >= 0 && state.trickLeader < 4,
+      context + " should keep trickLeader within the four bridge seats");
+    Check(state.leadSuit >= -1 && state.leadSuit < 4,
+      context + " should keep leadSuit in the bridge suit range or -1 when no partial trick exists");
+    Check(state.trumpSuit >= -1 && state.trumpSuit < 4,
+      context + " should keep trumpSuit in the bridge suit range or -1 for notrump");
+
+    if (state.currentTrick.empty())
+    {
+      Check(state.leadSuit == -1,
+        context + " should clear leadSuit when no partial trick is present");
+      return;
+    }
+
+    Check(state.leadSuit == state.currentTrick[0].suit,
+      context + " should keep leadSuit equal to the first card of the current partial trick");
+    for (unsigned i = 0; i < state.currentTrickPlayers.size(); i++)
+    {
+      const int expectedPlayer = (state.trickLeader + static_cast<int>(i)) % 4;
+      Check(state.currentTrickPlayers[i] == expectedPlayer,
+        context + " should preserve seat order inside the current partial trick");
+    }
+    Check(state.playerToMove ==
+          (state.trickLeader + static_cast<int>(state.currentTrick.size())) % 4,
+      context + " should advance playerToMove by the number of cards already played into the current partial trick");
+  }
+
+  /** @brief Enforce Stage 0 sparse-front validity against the searched bridge state. */
+  static void DebugCheckFrontForBridgeState(
+    const ParetoFront& front,
+    const BridgeState& state,
+    const string& context)
+  {
+    Check(front.worldCount == state.possibleWorlds.count,
+      context + " should return a front whose world count matches the searched bridge state");
+    for (unsigned i = 0; i < front.vectors.size(); i++)
+    {
+      const OutcomeVector& vec = front.vectors[i];
+      Check(vec.valid.count == state.possibleWorlds.count,
+        context + " should keep every outcome vector aligned with the searched bridge state world count");
+      for (unsigned w = 0; w < state.possibleWorlds.count; w++)
+      {
+        if (vec.valid.Has(w))
+        {
+          Check(state.possibleWorlds.Has(w),
+            context + " should not report a valid world outside the active bridge-state mask");
+        }
+      }
+    }
   }
 
   static void DebugCheckDDSLeafWorld(
@@ -41,7 +113,9 @@ namespace alpha_mu
       "DDS leaf validation requires currentTrick and currentTrickPlayers to stay aligned");
 
     unsigned playedInCurrentTrick[4] = {0, 0, 0, 0};
-    for (unsigned i = 0; i < state.currentTrickPlayers.size(); i++)
+    const unsigned currentTrickSize =
+      static_cast<unsigned>(state.currentTrickPlayers.size());
+    for (unsigned i = 0; i < currentTrickSize; i++)
     {
       const int player = state.currentTrickPlayers[i];
       Check(player >= 0 && player < 4,
@@ -77,6 +151,78 @@ namespace alpha_mu
     }
   }
 #endif
+
+#ifndef NDEBUG
+  static void DebugCheckBridgeSearchContext(
+    const BridgeState& state,
+    const SearchExecutionContext& context,
+    const string& tag)
+  {
+    if (context.bridgeSearch.hasUsefulWorlds)
+    {
+      Check(context.bridgeSearch.usefulWorlds.count == state.possibleWorlds.count,
+        tag + " should keep useful-world masks aligned with the bridge-state world count");
+      Check((context.bridgeSearch.usefulWorlds.bits & ~state.possibleWorlds.bits) == 0ULL,
+        tag + " should keep useful worlds within the currently active bridge-state worlds");
+    }
+
+    for (unsigned i = 0; i < context.bridgeSearch.upperMaxFronts.size(); i++)
+    {
+      Check(context.bridgeSearch.upperMaxFronts[i] != NULL,
+        tag + " should not carry null ancestor Max-front pointers");
+      Check(context.bridgeSearch.upperMaxFronts[i]->worldCount ==
+            state.possibleWorlds.count,
+        tag + " should keep ancestor Max fronts aligned with the searched bridge-state world count");
+    }
+
+    if (context.bridgeSearch.hasOptimisticValues)
+    {
+      Check(context.bridgeSearch.optimisticValues.valid.count ==
+            state.possibleWorlds.count,
+        tag + " should keep optimistic completion values aligned with the searched bridge-state world count");
+      Check(context.bridgeSearch.optimisticValues.values.size() ==
+            state.possibleWorlds.count,
+        tag + " should keep optimistic completion storage aligned with the searched bridge-state world count");
+    }
+  }
+#endif
+
+  static WorldMask BridgeSearchUsefulWorlds(
+    const BridgeState& state,
+    const SearchExecutionContext& context)
+  {
+    if (! context.bridgeSearch.hasUsefulWorlds)
+      return state.possibleWorlds;
+
+    return context.bridgeSearch.usefulWorlds.Intersection(state.possibleWorlds);
+  }
+
+  static SearchExecutionContext WithBridgeSearchUsefulWorlds(
+    const SearchExecutionContext& context,
+    const WorldMask& usefulWorlds)
+  {
+    SearchExecutionContext childContext(context);
+    childContext.bridgeSearch.hasUsefulWorlds = true;
+    childContext.bridgeSearch.usefulWorlds = usefulWorlds;
+    return childContext;
+  }
+
+  static ParetoFront MakeBridgeZeroFront(const BridgeState& state)
+  {
+    ParetoFront front(state.possibleWorlds.count);
+    OutcomeVector vec(state.possibleWorlds.count);
+    vec.valid = state.possibleWorlds;
+    front.Insert(vec);
+    return front;
+  }
+
+  static bool CanUseBridgeSingleWorldCut(
+    const BridgeState& state,
+    const unsigned worldIndex)
+  {
+    return worldIndex < state.worlds.size() &&
+      RemainingTricksInWorld(state, state.worlds[worldIndex]) >= 3;
+  }
 
   dealPBN MakeDDSDealPBN(
     const BridgeState& state,
@@ -344,6 +490,8 @@ namespace alpha_mu
 #ifndef NDEBUG
     DebugCheckBridgeStateMaskConsistency(state,
       "MakeBridgeDDSLeafFront");
+    DebugCheckBridgeStateTrickConsistency(state,
+      "MakeBridgeDDSLeafFront");
 #endif
     vector<unsigned> active;
     for (unsigned i = 0; i < state.worlds.size(); i++)
@@ -419,6 +567,10 @@ namespace alpha_mu
     }
 
     front.Insert(vec);
+#ifndef NDEBUG
+    DebugCheckFrontForBridgeState(front, state,
+      "MakeBridgeDDSLeafFront");
+#endif
     return front;
   }
 
@@ -439,12 +591,32 @@ namespace alpha_mu
     const int tricksRemaining,
     const SearchExecutionContext& context)
   {
+#ifndef NDEBUG
+    DebugCheckBridgeStateMaskConsistency(state,
+      "SearchBridgeStateInternal");
+    DebugCheckBridgeStateTrickConsistency(state,
+      "SearchBridgeStateInternal");
+    DebugCheckBridgeSearchContext(state, context,
+      "SearchBridgeStateInternal");
+#endif
     MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
-    if (state.possibleWorlds.Empty())
+    const WorldMask usefulWorlds = BridgeSearchUsefulWorlds(state, context);
+
+    if (usefulWorlds.Empty())
     {
       NoteEmptyWorldCut();
-      return MakeZeroFront(state.possibleWorlds.count);
+      return MakeBridgeZeroFront(state);
+    }
+
+    if (usefulWorlds.PopCount() == 1U)
+    {
+      const unsigned world = SoleWorldIndex(usefulWorlds);
+      if (CanUseBridgeSingleWorldCut(state, world))
+      {
+        const int value = ExactBridgeDDSScoreForWorld(state, world, context);
+        return MakeSingleWorldFront(state.possibleWorlds.count, world, value);
+      }
     }
 
     if (tricksRemaining <= 0)
@@ -467,22 +639,33 @@ namespace alpha_mu
       {
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
+        const SearchExecutionContext childContext =
+          WithBridgeSearchUsefulWorlds(context,
+            usefulWorlds.Intersection(children[i].state.possibleWorlds));
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateInternal(children[i].state, nextDepth, context));
+          SearchBridgeStateInternal(children[i].state, nextDepth, childContext));
       }
+#ifndef NDEBUG
+      DebugCheckFrontForBridgeState(front, state,
+        "SearchBridgeStateInternal Max path");
+#endif
       return front;
     }
 
     ParetoFront front(state.possibleWorlds.count);
     bool initialized = false;
+    WorldMask currentUseful = usefulWorlds;
     for (unsigned i = 0; i < children.size(); i++)
     {
       const int nextDepth = tricksRemaining - BridgeDepthCost(state,
         children[i].state);
+      const SearchExecutionContext childContext =
+        WithBridgeSearchUsefulWorlds(context,
+          currentUseful.Intersection(children[i].state.possibleWorlds));
       const ParetoFront childFront = SearchBridgeStateInternal(
         children[i].state,
         nextDepth,
-        context);
+        childContext);
       if (! initialized)
       {
         front = childFront;
@@ -490,7 +673,13 @@ namespace alpha_mu
       }
       else
         front = ParetoFront::MinProduct(front, childFront);
+
+      currentUseful = currentUseful.Intersection(front.UsefulWorlds());
     }
+#ifndef NDEBUG
+    DebugCheckFrontForBridgeState(front, state,
+      "SearchBridgeStateInternal Min path");
+#endif
     return front;
   }
 
@@ -525,19 +714,17 @@ namespace alpha_mu
     BridgeTranspositionTable* tt,
     BridgeTTStats* ttStats)
   {
+#ifndef NDEBUG
+    DebugCheckBridgeStateMaskConsistency(state,
+      "SearchBridgeStateWithTT");
+    DebugCheckBridgeStateTrickConsistency(state,
+      "SearchBridgeStateWithTT");
+    DebugCheckBridgeSearchContext(state, context,
+      "SearchBridgeStateWithTT");
+#endif
     MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
-    if (state.possibleWorlds.Empty())
-    {
-      NoteEmptyWorldCut();
-      return MakeZeroFront(state.possibleWorlds.count);
-    }
-
-    if (tricksRemaining <= 0)
-    {
-      NoteDDSLeafCut();
-      return MakeBridgeDDSLeafFront(state, context);
-    }
+    const WorldMask usefulWorlds = BridgeSearchUsefulWorlds(state, context);
 
     unsigned long long hash = 0;
     if (tt != NULL)
@@ -546,15 +733,57 @@ namespace alpha_mu
       if (ttStats != NULL)
         ttStats->probes++;
 
-      const ParetoFront* cached = tt->Probe(hash, state.possibleWorlds.bits);
+      const ParetoFront* cached = tt->Probe(hash, usefulWorlds.bits);
       if (cached != NULL)
       {
         if (ttStats != NULL)
           ttStats->hits++;
         NoteTTCut();
+#ifndef NDEBUG
+        DebugCheckFrontForBridgeState(*cached, state,
+          "SearchBridgeStateWithTT cached TT front");
+#endif
         return *cached;
       }
     }
+
+    if (usefulWorlds.Empty())
+    {
+      NoteEmptyWorldCut();
+      const ParetoFront zeroFront = MakeBridgeZeroFront(state);
+      if (tt != NULL)
+      {
+        if (ttStats != NULL)
+          ttStats->stores++;
+        tt->Store(hash, usefulWorlds.bits, zeroFront);
+      }
+      return zeroFront;
+    }
+
+    if (usefulWorlds.PopCount() == 1U)
+    {
+      const unsigned world = SoleWorldIndex(usefulWorlds);
+      if (CanUseBridgeSingleWorldCut(state, world))
+      {
+        const int value = ExactBridgeDDSScoreForWorld(state, world, context);
+        const ParetoFront singleFront = MakeSingleWorldFront(
+          state.possibleWorlds.count, world, value);
+        if (tt != NULL)
+        {
+          if (ttStats != NULL)
+            ttStats->stores++;
+          tt->Store(hash, usefulWorlds.bits, singleFront);
+        }
+        return singleFront;
+      }
+    }
+
+    if (tricksRemaining <= 0)
+    {
+      NoteDDSLeafCut();
+      return MakeBridgeDDSLeafFront(state, context);
+    }
+
 
     const vector<BridgeChild> children = ExpandBridgeChildren(state);
     if (children.empty())
@@ -571,20 +800,27 @@ namespace alpha_mu
       {
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
+        const SearchExecutionContext childContext =
+          WithBridgeSearchUsefulWorlds(context,
+            usefulWorlds.Intersection(children[i].state.possibleWorlds));
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateWithTT(children[i].state, nextDepth, context,
+          SearchBridgeStateWithTT(children[i].state, nextDepth, childContext,
             tt, ttStats));
       }
     }
     else
     {
       bool initialized = false;
+      WorldMask currentUseful = usefulWorlds;
       for (unsigned i = 0; i < children.size(); i++)
       {
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
+        const SearchExecutionContext childContext =
+          WithBridgeSearchUsefulWorlds(context,
+            currentUseful.Intersection(children[i].state.possibleWorlds));
         const ParetoFront childFront = SearchBridgeStateWithTT(
-          children[i].state, nextDepth, context, tt, ttStats);
+          children[i].state, nextDepth, childContext, tt, ttStats);
         if (! initialized)
         {
           front = childFront;
@@ -592,6 +828,8 @@ namespace alpha_mu
         }
         else
           front = ParetoFront::MinProduct(front, childFront);
+
+        currentUseful = currentUseful.Intersection(front.UsefulWorlds());
       }
     }
 
@@ -599,9 +837,17 @@ namespace alpha_mu
     {
       if (ttStats != NULL)
         ttStats->stores++;
-      tt->Store(hash, state.possibleWorlds.bits, front);
+#ifndef NDEBUG
+      DebugCheckFrontForBridgeState(front, state,
+        "SearchBridgeStateWithTT stored TT front");
+#endif
+      tt->Store(hash, usefulWorlds.bits, front);
     }
 
+#ifndef NDEBUG
+    DebugCheckFrontForBridgeState(front, state,
+      "SearchBridgeStateWithTT result");
+#endif
     return front;
   }
 
@@ -630,6 +876,10 @@ namespace alpha_mu
       childContext.benchmarkProgress = &childProgress;
       childReport.front = SearchBridgeState(children[i].state, nextDepth,
         childContext);
+#ifndef NDEBUG
+      DebugCheckFrontForBridgeState(childReport.front, children[i].state,
+        "AnalyzeBridgeRoot child front");
+#endif
       childReport.validWorlds = childReport.front.ValidWorlds();
       childReport.usefulWorlds = childReport.front.UsefulWorlds();
       childReport.mu = childReport.front.Mu();
@@ -714,6 +964,10 @@ namespace alpha_mu
       childContext.benchmarkProgress = &childProgress;
       childReport.front = SearchBridgeStateWithTT(
         children[i].state, nextDepth, childContext, tt, ttStats);
+#ifndef NDEBUG
+      DebugCheckFrontForBridgeState(childReport.front, children[i].state,
+        "AnalyzeBridgeRootWithTT child front");
+#endif
       childReport.validWorlds = childReport.front.ValidWorlds();
       childReport.usefulWorlds = childReport.front.UsefulWorlds();
       childReport.mu = childReport.front.Mu();

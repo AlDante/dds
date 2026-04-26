@@ -1606,6 +1606,36 @@ namespace alpha_mu
 
 
 
+  /**
+   * @brief Stage-1 scaffolding for optimization-paper bridge-search controls.
+   *
+   * The current bridge search does not yet consume all of these fields. They are
+   * introduced here so later Stage 1 slices can port useful-world maintenance,
+   * optimistic completion, ancestor-front cuts, and tighter TT exactness rules
+   * into the real bridge-backed search without overloading unrelated execution
+   * state.
+   */
+  struct BridgeSearchControlContext
+  {
+    bool hasUsefulWorlds;
+    WorldMask usefulWorlds;
+    vector<const ParetoFront *> upperMaxFronts;
+    bool hasOptimisticValues;
+    OutcomeVector optimisticValues;
+    bool requireExactTTFronts;
+
+    BridgeSearchControlContext() :
+      hasUsefulWorlds(false),
+      usefulWorlds(),
+      upperMaxFronts(),
+      hasOptimisticValues(false),
+      optimisticValues(),
+      requireExactTTFronts(false)
+    {
+    }
+  };
+
+
   /** @brief Explicit execution context carried through bridge search and DDS leaf calls. */
   struct SearchExecutionContext
   {
@@ -1614,13 +1644,15 @@ namespace alpha_mu
     int boardWorkers;
     int rootWorkers;
     BenchmarkBoardProgressContext * benchmarkProgress;
+    BridgeSearchControlContext bridgeSearch;
 
     SearchExecutionContext() :
       ddsThreadId(0),
       parallelMode(ALPHA_MU_PARALLEL_SERIAL),
       boardWorkers(1),
       rootWorkers(1),
-      benchmarkProgress(NULL)
+      benchmarkProgress(NULL),
+      bridgeSearch()
     {
     }
   };

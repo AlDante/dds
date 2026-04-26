@@ -6,6 +6,10 @@ This document turns the staged roadmap in `implementation-plan.md` and
 `alpha-mu-roadmap.md` into the **next concrete execution cycle** toward a
 complete alpha-mu engine for post-mortem declarer-play evaluation.
 
+For the full repository-grade completion plan, including stage-by-stage
+definitions of done and the M1 Max performance program, see
+`docs/alpha-mu-completion-plan.md`.
+
 ## Status update (2026-04-25)
 
 Current repository state is ahead of the original sequencing in this plan:

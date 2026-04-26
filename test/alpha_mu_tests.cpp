@@ -2380,6 +2380,19 @@ namespace alpha_mu
       "bridge search control should keep the lead that wins only in the first world");
     Check(FrontContains(front, MakeBinaryOutcome("x1")),
       "bridge search control should keep the lead that wins only in the second world");
+
+    SearchExecutionContext singleWorldContext;
+    singleWorldContext.bridgeSearch.hasUsefulWorlds = true;
+    singleWorldContext.bridgeSearch.usefulWorlds = WorldMask(2, 0x1ULL);
+    SearchExecutionContext emptyUsefulContext;
+    emptyUsefulContext.bridgeSearch.hasUsefulWorlds = true;
+    emptyUsefulContext.bridgeSearch.usefulWorlds = WorldMask(2, 0x0ULL);
+    const ParetoFront zeroUsefulFront = SearchBridgeState(state, 1,
+      emptyUsefulContext);
+    OutcomeVector zeroUseful(2);
+    zeroUseful.valid = WorldMask(2, 0x3ULL);
+    Check(FrontContains(zeroUsefulFront, zeroUseful),
+      "bridge search control should apply the real zero-useful-world cut without introducing worlds outside the active bridge-state mask");
   }
 
 
@@ -2929,6 +2942,15 @@ namespace alpha_mu
     const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[0]);
     const SearchExecutionContext context = MakeSearchExecutionContext(0, NULL,
       ALPHA_MU_PARALLEL_SERIAL, 1, 1);
+
+    Check(! context.bridgeSearch.hasUsefulWorlds,
+      "explicit execution context should default Stage 1 useful-world scaffolding to disabled");
+    Check(context.bridgeSearch.upperMaxFronts.empty(),
+      "explicit execution context should default Stage 1 ancestor-front scaffolding to an empty set");
+    Check(! context.bridgeSearch.hasOptimisticValues,
+      "explicit execution context should default Stage 1 optimistic-value scaffolding to disabled");
+    Check(! context.bridgeSearch.requireExactTTFronts,
+      "explicit execution context should default Stage 1 exact-TT scaffolding to the current permissive bridge-search mode");
 
     const ParetoFront defaultLeafFront = SearchBridgeState(state, 0);
     const ParetoFront explicitLeafFront = SearchBridgeState(state, 0, context);
@@ -3743,8 +3765,37 @@ namespace alpha_mu
     Check(state.possibleWorlds.PopCount() > 0,
       "TT test: should have surviving worlds");
 
+    unsigned singleWorldIndex = 0;
+    while (singleWorldIndex < state.possibleWorlds.count &&
+           ! state.possibleWorlds.Has(singleWorldIndex))
+    {
+      singleWorldIndex++;
+    }
+    Check(singleWorldIndex < state.possibleWorlds.count,
+      "TT test: should expose at least one active world for the Stage 1 single-world cut");
+
     const int depth = 1;
     SearchExecutionContext context;
+
+    SearchExecutionContext singleWorldContext;
+    singleWorldContext.bridgeSearch.hasUsefulWorlds = true;
+    singleWorldContext.bridgeSearch.usefulWorlds = WorldMask(
+      state.possibleWorlds.count,
+      (1ULL << singleWorldIndex));
+
+    const ParetoFront singleWorldFront = SearchBridgeState(
+      state, depth, singleWorldContext);
+    const ParetoFront expectedSingleWorldFront = MakeSingleWorldFront(
+      state.possibleWorlds.count,
+      singleWorldIndex,
+      ExactBridgeDDSScoreForWorld(state, singleWorldIndex, singleWorldContext));
+    Check(singleWorldFront.ToString() == expectedSingleWorldFront.ToString(),
+      "TT test: real bridge search should collapse a single useful world to the exact DDS-backed front");
+
+    const ParetoFront singleWorldTTCapableFront = SearchBridgeStateWithTT(
+      state, depth, singleWorldContext, NULL, NULL);
+    Check(singleWorldTTCapableFront.ToString() == expectedSingleWorldFront.ToString(),
+      "TT test: TT-capable bridge search should preserve the same exact single-world cut result");
 
     // Search without TT
     const ParetoFront frontNoTT = SearchBridgeStateInternal(
