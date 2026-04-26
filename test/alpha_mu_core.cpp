@@ -61,6 +61,18 @@ namespace alpha_mu
       gActiveBridgeSearchStats->minProductCalls++;
   }
 
+  void NoteOptimisticCompletion()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->optimisticCompletions++;
+  }
+
+  void NoteEarlyAlphaCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->earlyAlphaCuts++;
+  }
+
   void NoteEmptyWorldCut()
   {
     if (gActiveBridgeSearchStats != NULL)

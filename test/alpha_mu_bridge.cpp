@@ -207,6 +207,70 @@ namespace alpha_mu
     return childContext;
   }
 
+  static SearchExecutionContext WithBridgeSearchUpperMaxFront(
+    const SearchExecutionContext& context,
+    const ParetoFront* upperMaxFront)
+  {
+    SearchExecutionContext childContext(context);
+    if (childContext.bridgeSearch.enableAncestorCuts && upperMaxFront != NULL)
+      childContext.bridgeSearch.upperMaxFronts.push_back(upperMaxFront);
+    return childContext;
+  }
+
+  static OutcomeVector MakeBridgeOptimisticValues(
+    const BridgeState& state,
+    const SearchExecutionContext& context)
+  {
+    OutcomeVector optimistic(state.possibleWorlds.count);
+    optimistic.valid = state.possibleWorlds;
+    for (unsigned i = 0; i < state.worlds.size(); i++)
+    {
+      if (state.possibleWorlds.Has(i))
+        optimistic.values[i] = state.maxTricksWon +
+          RemainingTricksInWorld(state, state.worlds[i]);
+    }
+
+    if (context.bridgeSearch.hasOptimisticValues)
+    {
+      for (unsigned i = 0; i < optimistic.values.size(); i++)
+      {
+        if (context.bridgeSearch.optimisticValues.valid.Has(i))
+          optimistic.values[i] = max(optimistic.values[i],
+            context.bridgeSearch.optimisticValues.values[i]);
+      }
+    }
+
+    return optimistic;
+  }
+
+  static bool ShouldBridgeEarlyCut(
+    const BridgeState& state,
+    const WorldMask& usefulWorlds,
+    const ParetoFront& front,
+    const SearchExecutionContext& context)
+  {
+    if (! context.bridgeSearch.enableAncestorCuts ||
+        context.bridgeSearch.upperMaxFronts.empty())
+    {
+      return false;
+    }
+
+    const ParetoFront optimisticFront = front.CompleteOptimistically(
+      usefulWorlds,
+      MakeBridgeOptimisticValues(state, context));
+    if (optimisticFront.ValidWorlds().PopCount() > front.ValidWorlds().PopCount())
+      NoteOptimisticCompletion();
+
+    if (context.bridgeSearch.upperMaxFronts.back()->DominatesFront(
+          optimisticFront))
+    {
+      NoteEarlyAlphaCut();
+      return true;
+    }
+
+    return false;
+  }
+
   static ParetoFront MakeBridgeZeroFront(const BridgeState& state)
   {
     ParetoFront front(state.possibleWorlds.count);
@@ -586,18 +650,19 @@ namespace alpha_mu
     return (state.currentTrick.size() == 3 && child.currentTrick.empty() ? 1 : 0);
   }
 
-  ParetoFront SearchBridgeStateInternal(
+  static ParetoFront SearchBridgeStateInternalExact(
     const BridgeState& state,
     const int tricksRemaining,
-    const SearchExecutionContext& context)
+    const SearchExecutionContext& context,
+    bool * exactComplete)
   {
 #ifndef NDEBUG
     DebugCheckBridgeStateMaskConsistency(state,
-      "SearchBridgeStateInternal");
+      "SearchBridgeStateInternalExact");
     DebugCheckBridgeStateTrickConsistency(state,
-      "SearchBridgeStateInternal");
+      "SearchBridgeStateInternalExact");
     DebugCheckBridgeSearchContext(state, context,
-      "SearchBridgeStateInternal");
+      "SearchBridgeStateInternalExact");
 #endif
     MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
@@ -606,6 +671,8 @@ namespace alpha_mu
     if (usefulWorlds.Empty())
     {
       NoteEmptyWorldCut();
+      if (exactComplete != NULL)
+        *exactComplete = true;
       return MakeBridgeZeroFront(state);
     }
 
@@ -615,6 +682,8 @@ namespace alpha_mu
       if (CanUseBridgeSingleWorldCut(state, world))
       {
         const int value = ExactBridgeDDSScoreForWorld(state, world, context);
+        if (exactComplete != NULL)
+          *exactComplete = true;
         return MakeSingleWorldFront(state.possibleWorlds.count, world, value);
       }
     }
@@ -622,6 +691,8 @@ namespace alpha_mu
     if (tricksRemaining <= 0)
     {
       NoteDDSLeafCut();
+      if (exactComplete != NULL)
+        *exactComplete = true;
       return MakeBridgeDDSLeafFront(state, context);
     }
 
@@ -629,32 +700,42 @@ namespace alpha_mu
     if (children.empty())
     {
       NoteNoMoveLeafCut();
+      if (exactComplete != NULL)
+        *exactComplete = true;
       return MakeBridgeDDSLeafFront(state, context);
     }
 
     if (SeatSide(state.playerToMove) == state.maxSide)
     {
       ParetoFront front(state.possibleWorlds.count);
+      bool complete = true;
       for (unsigned i = 0; i < children.size(); i++)
       {
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
-        const SearchExecutionContext childContext =
-          WithBridgeSearchUsefulWorlds(context,
-            usefulWorlds.Intersection(children[i].state.possibleWorlds));
+        SearchExecutionContext childContext = WithBridgeSearchUsefulWorlds(
+          context,
+          usefulWorlds.Intersection(children[i].state.possibleWorlds));
+        childContext = WithBridgeSearchUpperMaxFront(childContext, &front);
+        bool childComplete = false;
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateInternal(children[i].state, nextDepth, childContext));
+          SearchBridgeStateInternalExact(children[i].state, nextDepth,
+            childContext, &childComplete));
+        complete = complete && childComplete;
       }
 #ifndef NDEBUG
       DebugCheckFrontForBridgeState(front, state,
-        "SearchBridgeStateInternal Max path");
+        "SearchBridgeStateInternalExact Max path");
 #endif
+      if (exactComplete != NULL)
+        *exactComplete = complete;
       return front;
     }
 
     ParetoFront front(state.possibleWorlds.count);
     bool initialized = false;
     WorldMask currentUseful = usefulWorlds;
+    bool complete = true;
     for (unsigned i = 0; i < children.size(); i++)
     {
       const int nextDepth = tricksRemaining - BridgeDepthCost(state,
@@ -662,10 +743,13 @@ namespace alpha_mu
       const SearchExecutionContext childContext =
         WithBridgeSearchUsefulWorlds(context,
           currentUseful.Intersection(children[i].state.possibleWorlds));
-      const ParetoFront childFront = SearchBridgeStateInternal(
+      bool childComplete = false;
+      const ParetoFront childFront = SearchBridgeStateInternalExact(
         children[i].state,
         nextDepth,
-        childContext);
+        childContext,
+        &childComplete);
+      complete = complete && childComplete;
       if (! initialized)
       {
         front = childFront;
@@ -675,12 +759,29 @@ namespace alpha_mu
         front = ParetoFront::MinProduct(front, childFront);
 
       currentUseful = currentUseful.Intersection(front.UsefulWorlds());
+      if (ShouldBridgeEarlyCut(state, currentUseful, front, context))
+      {
+        complete = false;
+        break;
+      }
     }
 #ifndef NDEBUG
     DebugCheckFrontForBridgeState(front, state,
-      "SearchBridgeStateInternal Min path");
+      "SearchBridgeStateInternalExact Min path");
 #endif
+    if (exactComplete != NULL)
+      *exactComplete = complete;
     return front;
+  }
+
+  ParetoFront SearchBridgeStateInternal(
+    const BridgeState& state,
+    const int tricksRemaining,
+    const SearchExecutionContext& context)
+  {
+    bool exactComplete = false;
+    return SearchBridgeStateInternalExact(state, tricksRemaining, context,
+      &exactComplete);
   }
 
   ParetoFront SearchBridgeStateInternal(
@@ -707,20 +808,21 @@ namespace alpha_mu
       SearchExecutionContext());
   }
 
-  ParetoFront SearchBridgeStateWithTT(
+  static ParetoFront SearchBridgeStateWithTTExact(
     const BridgeState& state,
     const int tricksRemaining,
     const SearchExecutionContext& context,
     BridgeTranspositionTable* tt,
-    BridgeTTStats* ttStats)
+    BridgeTTStats* ttStats,
+    bool * exactComplete)
   {
 #ifndef NDEBUG
     DebugCheckBridgeStateMaskConsistency(state,
-      "SearchBridgeStateWithTT");
+      "SearchBridgeStateWithTTExact");
     DebugCheckBridgeStateTrickConsistency(state,
-      "SearchBridgeStateWithTT");
+      "SearchBridgeStateWithTTExact");
     DebugCheckBridgeSearchContext(state, context,
-      "SearchBridgeStateWithTT");
+      "SearchBridgeStateWithTTExact");
 #endif
     MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
@@ -741,8 +843,10 @@ namespace alpha_mu
         NoteTTCut();
 #ifndef NDEBUG
         DebugCheckFrontForBridgeState(*cached, state,
-          "SearchBridgeStateWithTT cached TT front");
+          "SearchBridgeStateWithTTExact cached TT front");
 #endif
+        if (exactComplete != NULL)
+          *exactComplete = true;
         return *cached;
       }
     }
@@ -751,6 +855,8 @@ namespace alpha_mu
     {
       NoteEmptyWorldCut();
       const ParetoFront zeroFront = MakeBridgeZeroFront(state);
+      if (exactComplete != NULL)
+        *exactComplete = true;
       if (tt != NULL)
       {
         if (ttStats != NULL)
@@ -768,6 +874,8 @@ namespace alpha_mu
         const int value = ExactBridgeDDSScoreForWorld(state, world, context);
         const ParetoFront singleFront = MakeSingleWorldFront(
           state.possibleWorlds.count, world, value);
+        if (exactComplete != NULL)
+          *exactComplete = true;
         if (tt != NULL)
         {
           if (ttStats != NULL)
@@ -781,6 +889,8 @@ namespace alpha_mu
     if (tricksRemaining <= 0)
     {
       NoteDDSLeafCut();
+      if (exactComplete != NULL)
+        *exactComplete = true;
       return MakeBridgeDDSLeafFront(state, context);
     }
 
@@ -789,10 +899,13 @@ namespace alpha_mu
     if (children.empty())
     {
       NoteNoMoveLeafCut();
+      if (exactComplete != NULL)
+        *exactComplete = true;
       return MakeBridgeDDSLeafFront(state, context);
     }
 
     ParetoFront front(state.possibleWorlds.count);
+    bool complete = true;
 
     if (SeatSide(state.playerToMove) == state.maxSide)
     {
@@ -800,12 +913,15 @@ namespace alpha_mu
       {
         const int nextDepth = tricksRemaining - BridgeDepthCost(state,
           children[i].state);
-        const SearchExecutionContext childContext =
-          WithBridgeSearchUsefulWorlds(context,
-            usefulWorlds.Intersection(children[i].state.possibleWorlds));
+        SearchExecutionContext childContext = WithBridgeSearchUsefulWorlds(
+          context,
+          usefulWorlds.Intersection(children[i].state.possibleWorlds));
+        childContext = WithBridgeSearchUpperMaxFront(childContext, &front);
+        bool childComplete = false;
         front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateWithTT(children[i].state, nextDepth, childContext,
-            tt, ttStats));
+          SearchBridgeStateWithTTExact(children[i].state, nextDepth,
+            childContext, tt, ttStats, &childComplete));
+        complete = complete && childComplete;
       }
     }
     else
@@ -819,8 +935,11 @@ namespace alpha_mu
         const SearchExecutionContext childContext =
           WithBridgeSearchUsefulWorlds(context,
             currentUseful.Intersection(children[i].state.possibleWorlds));
-        const ParetoFront childFront = SearchBridgeStateWithTT(
-          children[i].state, nextDepth, childContext, tt, ttStats);
+        bool childComplete = false;
+        const ParetoFront childFront = SearchBridgeStateWithTTExact(
+          children[i].state, nextDepth, childContext, tt, ttStats,
+          &childComplete);
+        complete = complete && childComplete;
         if (! initialized)
         {
           front = childFront;
@@ -830,25 +949,44 @@ namespace alpha_mu
           front = ParetoFront::MinProduct(front, childFront);
 
         currentUseful = currentUseful.Intersection(front.UsefulWorlds());
+        if (ShouldBridgeEarlyCut(state, currentUseful, front, context))
+        {
+          complete = false;
+          break;
+        }
       }
     }
 
-    if (tt != NULL)
+    if (tt != NULL && complete)
     {
       if (ttStats != NULL)
         ttStats->stores++;
 #ifndef NDEBUG
       DebugCheckFrontForBridgeState(front, state,
-        "SearchBridgeStateWithTT stored TT front");
+        "SearchBridgeStateWithTTExact stored TT front");
 #endif
       tt->Store(hash, usefulWorlds.bits, front);
     }
 
 #ifndef NDEBUG
     DebugCheckFrontForBridgeState(front, state,
-      "SearchBridgeStateWithTT result");
+      "SearchBridgeStateWithTTExact result");
 #endif
+    if (exactComplete != NULL)
+      *exactComplete = complete;
     return front;
+  }
+
+  ParetoFront SearchBridgeStateWithTT(
+    const BridgeState& state,
+    const int tricksRemaining,
+    const SearchExecutionContext& context,
+    BridgeTranspositionTable* tt,
+    BridgeTTStats* ttStats)
+  {
+    bool exactComplete = false;
+    return SearchBridgeStateWithTTExact(state, tricksRemaining, context, tt,
+      ttStats, &exactComplete);
   }
 
   BridgeRootReport AnalyzeBridgeRoot(

@@ -2396,6 +2396,118 @@ namespace alpha_mu
   }
 
 
+  static BridgeState MakeBridgeAncestorCutMinFixture()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_EAST;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.trickLeader = SEAT_NORTH;
+    state.leadSuit = SUIT_SPADES;
+    state.currentTrick.push_back(BridgeMove(SUIT_SPADES, 'A'));
+    state.currentTrickPlayers.push_back(SEAT_NORTH);
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+    state.worlds.push_back(ParsePBNWorld("N:... K... 2... 3..."));
+    state.worlds.push_back(ParsePBNWorld("N:... Q... 2... 3..."));
+    return state;
+  }
+
+
+  static BridgeState MakeBridgeAncestorCutRootFixture()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_NORTH;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.trickLeader = SEAT_NORTH;
+    state.leadSuit = -1;
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+    state.worlds.push_back(ParsePBNWorld("N:A.K.. K.2.. 2.3.. 3.4.."));
+    state.worlds.push_back(ParsePBNWorld("N:A.K.. Q.2.. 2.3.. 3.4.."));
+    return state;
+  }
+
+
+  static void TestBridgeAncestorEarlyCutAtRootMax()
+  {
+    const BridgeState state = MakeBridgeAncestorCutRootFixture();
+
+    SearchExecutionContext context;
+    context.bridgeSearch.enableAncestorCuts = true;
+
+    BridgeSearchStats stats;
+    SetActiveBridgeSearchStats(&stats);
+    const ParetoFront front = SearchBridgeState(state, 2, context);
+    SetActiveBridgeSearchStats(NULL);
+
+    OutcomeVector exact(2);
+    exact.valid = WorldMask(2, 0x3ULL);
+    exact.values[0] = 2;
+    exact.values[1] = 2;
+
+    Check(front.vectors.size() == 1,
+      "opt-in bridge ancestor cuts should still leave one exact root vector in the two-trick fixture");
+    Check(FrontContains(front, exact),
+      "opt-in bridge ancestor cuts should preserve the exact [2 2] root outcome when the first root move already dominates later optimistic completions");
+    Check(stats.optimisticCompletions >= 1,
+      "opt-in bridge ancestor cuts should record at least one optimistic completion in the recursive bridge fixture");
+    Check(stats.earlyAlphaCuts == 1,
+      "opt-in bridge ancestor cuts should trigger exactly one nearest-ancestor early cut in the recursive bridge fixture");
+  }
+
+
+  static void TestBridgeAncestorEarlyCutPreservesExactTTReuse()
+  {
+    const BridgeState state = MakeBridgeAncestorCutMinFixture();
+
+    ParetoFront dominating(2);
+    OutcomeVector dominatingVec(2);
+    dominatingVec.valid = WorldMask(2, 0x3ULL);
+    dominatingVec.values[0] = 1;
+    dominatingVec.values[1] = 1;
+    dominating.Insert(dominatingVec);
+
+    SearchExecutionContext cutContext;
+    cutContext.bridgeSearch.enableAncestorCuts = true;
+    cutContext.bridgeSearch.upperMaxFronts.push_back(&dominating);
+
+    BridgeSearchStats stats;
+    SetActiveBridgeSearchStats(&stats);
+    const ParetoFront cutFront = SearchBridgeState(state, 1, cutContext);
+    SetActiveBridgeSearchStats(NULL);
+
+    const ParetoFront expectedCutFront = MakeSingleWorldFront(2, 1, 1);
+    Check(cutFront.ToString() == expectedCutFront.ToString(),
+      "opt-in bridge ancestor cuts should stop after the first Min child once the optimistic completion is already dominated by the ancestor Max front");
+    Check(stats.optimisticCompletions >= 1,
+      "opt-in Min-node bridge cuts should record the optimistic completion used for ancestor-front comparison");
+    Check(stats.earlyAlphaCuts == 1,
+      "opt-in Min-node bridge cuts should trigger exactly one nearest-ancestor early cut in the one-trick fixture");
+
+    OutcomeVector exact(2);
+    exact.valid = WorldMask(2, 0x3ULL);
+    exact.values[0] = 1;
+    exact.values[1] = 1;
+    const ParetoFront directExactFront = SearchBridgeState(state, 1);
+    Check(FrontContains(directExactFront, exact),
+      "without the opt-in ancestor cut the same Min-node bridge fixture should evaluate to the exact [1 1] continuation");
+
+    InitZobrist();
+    BridgeTranspositionTable tt(1U << 8);
+    BridgeTTStats cutTTStats;
+    const ParetoFront cutTTFront = SearchBridgeStateWithTT(state, 1,
+      cutContext, &tt, &cutTTStats);
+    Check(cutTTFront.ToString() == expectedCutFront.ToString(),
+      "TT-backed opt-in bridge ancestor cuts should preserve the same partial front returned by the optimistic early cut");
+
+    BridgeTTStats exactTTStats;
+    const ParetoFront exactTTFront = SearchBridgeStateWithTT(state, 1,
+      SearchExecutionContext(), &tt, &exactTTStats);
+    Check(FrontContains(exactTTFront, exact),
+      "exact TT-backed bridge search should not reuse an inexact optimistic-cut front when the ancestor-cut context is absent");
+  }
+
+
   static void TestBridgeRootReportThreeWorldContinuation()
   {
     BridgeState state;
@@ -2943,6 +3055,8 @@ namespace alpha_mu
     const SearchExecutionContext context = MakeSearchExecutionContext(0, NULL,
       ALPHA_MU_PARALLEL_SERIAL, 1, 1);
 
+    Check(! context.bridgeSearch.enableAncestorCuts,
+      "explicit execution context should default Stage 1 ancestor-cut scaffolding to disabled so reporting paths stay exact until they opt in");
     Check(! context.bridgeSearch.hasUsefulWorlds,
       "explicit execution context should default Stage 1 useful-world scaffolding to disabled");
     Check(context.bridgeSearch.upperMaxFronts.empty(),
@@ -4002,6 +4116,8 @@ namespace alpha_mu
       {"deterministic world sampling OK", &TestDeterministicWorldSampling},
       {"bridge move generation OK", &TestBridgeMoveGeneration},
       {"bridge search control OK", &TestBridgeSearchControl},
+      {"bridge optimistic completion and early cut OK", &TestBridgeAncestorEarlyCutAtRootMax},
+      {"bridge optimistic-cut TT exactness OK", &TestBridgeAncestorEarlyCutPreservesExactTTReuse},
       {"bridge root reporting OK", &TestBridgeRootReportThreeWorldContinuation},
       {"empty-entry interior fronts OK", &TestEmptyEntryInteriorFronts},
       {"optimistic impossible worlds OK", &TestOptimisticImpossibleWorlds},

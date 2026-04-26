@@ -49,6 +49,8 @@ namespace alpha_mu
     unsigned long long frontDominatedRemoved;
     unsigned long long maxMergeCalls;
     unsigned long long minProductCalls;
+    unsigned long long optimisticCompletions;
+    unsigned long long earlyAlphaCuts;
     unsigned long long emptyWorldCuts;
     unsigned long long ttCuts;
     unsigned long long ddsLeafCuts;
@@ -62,6 +64,8 @@ namespace alpha_mu
       frontDominatedRemoved(0ULL),
       maxMergeCalls(0ULL),
       minProductCalls(0ULL),
+      optimisticCompletions(0ULL),
+      earlyAlphaCuts(0ULL),
       emptyWorldCuts(0ULL),
       ttCuts(0ULL),
       ddsLeafCuts(0ULL),
@@ -77,6 +81,8 @@ namespace alpha_mu
   void NoteFrontInsertAccepted(const unsigned removedCount);
   void NoteMaxMergeCall();
   void NoteMinProductCall();
+  void NoteOptimisticCompletion();
+  void NoteEarlyAlphaCut();
   void NoteEmptyWorldCut();
   void NoteTTCut();
   void NoteDDSLeafCut();
@@ -1617,6 +1623,7 @@ namespace alpha_mu
    */
   struct BridgeSearchControlContext
   {
+    bool enableAncestorCuts;
     bool hasUsefulWorlds;
     WorldMask usefulWorlds;
     vector<const ParetoFront *> upperMaxFronts;
@@ -1625,6 +1632,7 @@ namespace alpha_mu
     bool requireExactTTFronts;
 
     BridgeSearchControlContext() :
+      enableAncestorCuts(false),
       hasUsefulWorlds(false),
       usefulWorlds(),
       upperMaxFronts(),
@@ -1994,9 +2002,10 @@ namespace alpha_mu
   /**
    * @brief Search a bridge continuation using alpha-mu Max/Min front semantics.
    *
-   * This is the bridge-specific analogue of the toy search, but without the more
-   * aggressive paper optimizations; it focuses on validating front propagation
-   * and DDS leaf handoff over realistic card play.
+   * This is the bridge-specific analogue of the toy search. The current bridge
+   * path already applies useful-world maintenance and world cuts, and now also
+   * has opt-in optimistic completion plus nearest-ancestor early-cut support for
+   * recursive bridge search while preserving exact-only TT storage.
    */
   ParetoFront SearchBridgeStateInternal( const BridgeState& state, const int tricksRemaining, const SearchExecutionContext& context);
   /** @brief Compatibility wrapper using the default serial search execution context. */
