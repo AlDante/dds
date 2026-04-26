@@ -40,6 +40,49 @@ namespace alpha_mu
 {
   using namespace std;
 
+  /** @brief Structured counters for bridge-search/frontier instrumentation. */
+  struct BridgeSearchStats
+  {
+    unsigned long long frontInsertAttempts;
+    unsigned long long frontAcceptedInserts;
+    unsigned long long frontDominatedRejects;
+    unsigned long long frontDominatedRemoved;
+    unsigned long long maxMergeCalls;
+    unsigned long long minProductCalls;
+    unsigned long long emptyWorldCuts;
+    unsigned long long ttCuts;
+    unsigned long long ddsLeafCuts;
+    unsigned long long noMoveLeafCuts;
+    unsigned long long terminalFronts;
+
+    BridgeSearchStats() :
+      frontInsertAttempts(0ULL),
+      frontAcceptedInserts(0ULL),
+      frontDominatedRejects(0ULL),
+      frontDominatedRemoved(0ULL),
+      maxMergeCalls(0ULL),
+      minProductCalls(0ULL),
+      emptyWorldCuts(0ULL),
+      ttCuts(0ULL),
+      ddsLeafCuts(0ULL),
+      noMoveLeafCuts(0ULL),
+      terminalFronts(0ULL)
+    {
+    }
+  };
+
+  void SetActiveBridgeSearchStats(BridgeSearchStats* stats);
+  void NoteFrontInsertAttempt();
+  void NoteFrontInsertRejectedByDominance();
+  void NoteFrontInsertAccepted(const unsigned removedCount);
+  void NoteMaxMergeCall();
+  void NoteMinProductCall();
+  void NoteEmptyWorldCut();
+  void NoteTTCut();
+  void NoteDDSLeafCut();
+  void NoteNoMoveLeafCut();
+  void NoteTerminalFront();
+
   /**
    * @brief Bit-mask representation of the currently relevant possible worlds.
    *
@@ -334,21 +377,29 @@ namespace alpha_mu
     /** @brief Insert a vector and discard any newly dominated incumbents. */
     void Insert(const OutcomeVector& candidate)
     {
+      NoteFrontInsertAttempt();
       for (unsigned i = 0; i < vectors.size(); i++)
       {
         if (vectors[i].Dominates(candidate))
+        {
+          NoteFrontInsertRejectedByDominance();
           return;
+        }
       }
 
       vector<OutcomeVector> kept;
+      unsigned removed = 0;
       for (unsigned i = 0; i < vectors.size(); i++)
       {
         if (! candidate.Dominates(vectors[i]))
           kept.push_back(vectors[i]);
+        else
+          removed++;
       }
 
       kept.push_back(candidate);
       vectors.swap(kept);
+      NoteFrontInsertAccepted(removed);
     }
 
     /** @brief Return whether every vector in @p other is dominated here. */
@@ -391,6 +442,7 @@ namespace alpha_mu
       const ParetoFront& left,
       const ParetoFront& right)
     {
+      NoteMaxMergeCall();
       ParetoFront result(left.worldCount);
       for (unsigned i = 0; i < left.vectors.size(); i++)
         result.Insert(left.vectors[i]);
@@ -404,6 +456,7 @@ namespace alpha_mu
       const ParetoFront& left,
       const ParetoFront& right)
     {
+      NoteMinProductCall();
       ParetoFront result(left.worldCount);
       for (unsigned i = 0; i < left.vectors.size(); i++)
       {
@@ -1806,7 +1859,8 @@ namespace alpha_mu
       const dealPBN& fullDeal,
       const int declarerSeat,
       const vector<PlayHistoryEvent>& playedCards,
-      const BridgeInformationState& information);
+      const BridgeInformationState& information,
+      WorldGenerationStats* worldGenerationStats = NULL);
 
   /**
    * @brief Create a multi-world BridgeState from a partial-information scenario.
@@ -2049,6 +2103,8 @@ namespace alpha_mu
     double searchSeconds;
     double totalSeconds;
     HistoryDerivedConstructionStats constructorStats;
+    WorldGenerationStats worldGenerationStats;
+    BridgeSearchStats bridgeSearchStats;
     bool hasActualPlayedMove;
     int actualPlayedBy;
     BridgeMove actualPlayedMove;
@@ -2091,6 +2147,8 @@ namespace alpha_mu
       searchSeconds(0.0),
       totalSeconds(0.0),
       constructorStats(),
+      worldGenerationStats(),
+      bridgeSearchStats(),
       hasActualPlayedMove(false),
       actualPlayedBy(0),
       actualPlayedMove(),

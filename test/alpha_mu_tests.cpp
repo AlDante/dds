@@ -3559,6 +3559,14 @@ namespace alpha_mu
       "decision-point solve should report both alpha-mu and DDS detail for the actual next move when it remains legal");
     Check(result.searchNodes > 0 && result.ddsLeafCalls > 0,
       "decision-point solve should report non-zero search-node and DDS-leaf counts");
+    Check(result.bridgeSearchStats.frontInsertAttempts > 0 &&
+          result.bridgeSearchStats.frontAcceptedInserts > 0,
+      "decision-point solve should report frontier insert activity");
+    Check(result.bridgeSearchStats.maxMergeCalls > 0 ||
+          result.bridgeSearchStats.minProductCalls > 0,
+      "decision-point solve should report frontier merge or product activity");
+    Check(result.bridgeSearchStats.ddsLeafCuts > 0,
+      "decision-point solve should report DDS-leaf cut activity");
     Check(result.worldExplanation.worlds.size() == result.worldCount,
       "decision-point solve should attach a world explanation covering every surviving raw world in the compacted state");
     Check(result.worldExplanation.plausibilityRankedWorldIndices.size() ==

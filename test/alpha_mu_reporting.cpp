@@ -207,7 +207,21 @@ namespace alpha_mu
          << endl;
     cout << "  Search activity: nodes=" << result.searchNodes
          << ", DDS leaf calls=" << result.ddsLeafCalls << endl;
-    cout << "  Cut activity: none (current bridge runner uses full front search plus TT reuse only)" << endl;
+    cout << "  Frontier activity: insert-attempts="
+         << result.bridgeSearchStats.frontInsertAttempts
+         << ", accepted=" << result.bridgeSearchStats.frontAcceptedInserts
+         << ", rejected-dominated=" << result.bridgeSearchStats.frontDominatedRejects
+         << ", dominated-removed=" << result.bridgeSearchStats.frontDominatedRemoved
+         << ", max-merges=" << result.bridgeSearchStats.maxMergeCalls
+         << ", min-products=" << result.bridgeSearchStats.minProductCalls
+         << endl;
+    cout << "  Cut activity: empty-world="
+         << result.bridgeSearchStats.emptyWorldCuts
+         << ", TT=" << result.bridgeSearchStats.ttCuts
+         << ", DDS-leaf=" << result.bridgeSearchStats.ddsLeafCuts
+         << ", no-move=" << result.bridgeSearchStats.noMoveLeafCuts
+         << ", terminal-fronts=" << result.bridgeSearchStats.terminalFronts
+         << endl;
 
     if (! result.biddingConstraintTexts.empty())
     {

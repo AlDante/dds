@@ -15,8 +15,81 @@ namespace alpha_mu
 {
   using namespace std;
 
+  namespace
+  {
+    thread_local BridgeSearchStats * gActiveBridgeSearchStats = NULL;
+  }
+
   const char kAlphaMuMessagePrefix[] = "alpha_mu: ";
   const char kAlphaMuPlayHandFile[] = "hands/alpha_mu_play.txt";
+
+  void SetActiveBridgeSearchStats(BridgeSearchStats* stats)
+  {
+    gActiveBridgeSearchStats = stats;
+  }
+
+  void NoteFrontInsertAttempt()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->frontInsertAttempts++;
+  }
+
+  void NoteFrontInsertRejectedByDominance()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->frontDominatedRejects++;
+  }
+
+  void NoteFrontInsertAccepted(const unsigned removedCount)
+  {
+    if (gActiveBridgeSearchStats != NULL)
+    {
+      gActiveBridgeSearchStats->frontAcceptedInserts++;
+      gActiveBridgeSearchStats->frontDominatedRemoved += removedCount;
+    }
+  }
+
+  void NoteMaxMergeCall()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->maxMergeCalls++;
+  }
+
+  void NoteMinProductCall()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->minProductCalls++;
+  }
+
+  void NoteEmptyWorldCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->emptyWorldCuts++;
+  }
+
+  void NoteTTCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->ttCuts++;
+  }
+
+  void NoteDDSLeafCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->ddsLeafCuts++;
+  }
+
+  void NoteNoMoveLeafCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->noMoveLeafCuts++;
+  }
+
+  void NoteTerminalFront()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->terminalFronts++;
+  }
 
   // ========================================================================
   // Zobrist hashing and bridge transposition table implementation

@@ -44,6 +44,14 @@ It is meant to validate the core paper semantics before deeper optimization work
 - `test/alpha_mu_reporting.cpp` — benchmark, comparison, and solve-result formatting/reporting helpers
 - `test/alpha_mu_tests.cpp` — regression suite and grouped test runners
 
+The decision-point runner now also reports the first `Workstream 6`
+instrumentation slice:
+
+- constructor-local pruning counts,
+- frontier dominance-reduction activity,
+- TT probes / hits / stores,
+- and bridge-search cut / termination counters.
+
 ## What it checks
 
 The runner performs these checks:

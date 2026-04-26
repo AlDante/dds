@@ -324,6 +324,7 @@ namespace alpha_mu
 
   ParetoFront MakeBridgeTerminalFront(const BridgeState& state)
   {
+    NoteTerminalFront();
     ParetoFront front(state.possibleWorlds.count);
     OutcomeVector vec(state.possibleWorlds.count);
     vec.valid = state.possibleWorlds;
@@ -352,7 +353,10 @@ namespace alpha_mu
     }
 
     if (active.empty())
+    {
+      NoteDDSLeafCut();
       return MakeZeroFront(state.possibleWorlds.count);
+    }
 
     bool allFinished = state.currentTrick.empty();
     for (unsigned i = 0; i < active.size(); i++)
@@ -365,7 +369,10 @@ namespace alpha_mu
     }
 
     if (allFinished)
+    {
+      NoteDDSLeafCut();
       return MakeBridgeTerminalFront(state);
+    }
 
 #ifndef NDEBUG
     for (unsigned i = 0; i < active.size(); i++)
@@ -429,14 +436,23 @@ namespace alpha_mu
     MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
     if (state.possibleWorlds.Empty())
+    {
+      NoteEmptyWorldCut();
       return MakeZeroFront(state.possibleWorlds.count);
+    }
 
     if (tricksRemaining <= 0)
+    {
+      NoteDDSLeafCut();
       return MakeBridgeDDSLeafFront(state, context);
+    }
 
     const vector<BridgeChild> children = ExpandBridgeChildren(state);
     if (children.empty())
+    {
+      NoteNoMoveLeafCut();
       return MakeBridgeDDSLeafFront(state, context);
+    }
 
     if (SeatSide(state.playerToMove) == state.maxSide)
     {
@@ -506,10 +522,16 @@ namespace alpha_mu
     MaybeReportBenchmarkBoardProgress(state, tricksRemaining, context);
 
     if (state.possibleWorlds.Empty())
+    {
+      NoteEmptyWorldCut();
       return MakeZeroFront(state.possibleWorlds.count);
+    }
 
     if (tricksRemaining <= 0)
+    {
+      NoteDDSLeafCut();
       return MakeBridgeDDSLeafFront(state, context);
+    }
 
     unsigned long long hash = 0;
     if (tt != NULL)
@@ -523,13 +545,17 @@ namespace alpha_mu
       {
         if (ttStats != NULL)
           ttStats->hits++;
+        NoteTTCut();
         return *cached;
       }
     }
 
     const vector<BridgeChild> children = ExpandBridgeChildren(state);
     if (children.empty())
+    {
+      NoteNoMoveLeafCut();
       return MakeBridgeDDSLeafFront(state, context);
+    }
 
     ParetoFront front(state.possibleWorlds.count);
 
@@ -910,7 +936,8 @@ namespace alpha_mu
     const dealPBN& fullDeal,
     const int declarerSeat,
     const vector<PlayHistoryEvent>& playedCards,
-    const BridgeInformationState& information)
+    const BridgeInformationState& information,
+    WorldGenerationStats* worldGenerationStats)
   {
     const HistoryDerivedWorldSpec spec =
       BuildWorldSpecFromDeal(fullDeal, declarerSeat, playedCards);
@@ -921,6 +948,14 @@ namespace alpha_mu
 
     if (worlds.empty())
       return MakeBridgeStateFromDDSDeal(fullDeal);
+
+    if (worldGenerationStats != NULL)
+    {
+      *worldGenerationStats = WorldGenerationStats();
+      worldGenerationStats->candidateWorldCount = static_cast<unsigned>(worlds.size());
+      if (worlds.size() <= 64U)
+        GeneratePossibleWorlds(worlds, information, worldGenerationStats);
+    }
 
     bool voidSuits[4][4];
     memset(voidSuits, 0, sizeof(voidSuits));
@@ -954,7 +989,7 @@ namespace alpha_mu
     const unsigned worldLimit = min(64U,
       (information.sampleLimit == 0 ? 64U : information.sampleLimit));
 
-    if (worlds.size() > 64 || survivingIndices.size() > worldLimit)
+    if (worlds.size() > 64U || survivingIndices.size() > worldLimit)
     {
       const vector<unsigned> selected = SelectDeterministicWorldIndices(
         worlds, survivingIndices, worldLimit, information.samplingSeed);
@@ -963,6 +998,14 @@ namespace alpha_mu
       for (unsigned i = 0; i < selected.size(); i++)
         compacted.push_back(worlds[selected[i]]);
       worlds.swap(compacted);
+
+      if (worldGenerationStats != NULL)
+      {
+        WorldGenerationStats compactedStats;
+        GeneratePossibleWorlds(worlds, information, &compactedStats);
+        compactedStats.candidateWorldCount = static_cast<unsigned>(constructed.worlds.size());
+        *worldGenerationStats = compactedStats;
+      }
     }
 
     WorldMask possibleMask;

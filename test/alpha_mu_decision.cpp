@@ -258,6 +258,7 @@ namespace alpha_mu
     progress.nextReportSeconds = 1.0e30;
     SearchExecutionContext context;
     context.benchmarkProgress = &progress;
+    SetActiveBridgeSearchStats(&result.bridgeSearchStats);
 
     BridgeRootReport bestReport(state.possibleWorlds.count);
     int bestDepth = 0;
@@ -302,6 +303,7 @@ namespace alpha_mu
         state, maxSearchDepth, context, &tt, &ttStats);
       bestDepth = maxSearchDepth;
     }
+    SetActiveBridgeSearchStats(NULL);
 
     const chrono::steady_clock::time_point searchEnd =
       chrono::steady_clock::now();

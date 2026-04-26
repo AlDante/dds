@@ -6,7 +6,7 @@ This document turns the staged roadmap in `implementation-plan.md` and
 `alpha-mu-roadmap.md` into the **next concrete execution cycle** toward a
 complete alpha-mu engine for post-mortem declarer-play evaluation.
 
-## Status update (2026-04-24)
+## Status update (2026-04-25)
 
 Current repository state is ahead of the original sequencing in this plan:
 
@@ -15,13 +15,14 @@ Current repository state is ahead of the original sequencing in this plan:
 - the full `alpha_mu` suite is currently green,
 - practical real-board depth-2 continuation regressions are present for both the 40-card trick-boundary prefix and the 34-card partial-trick prefix on board 1 of `hands/alpha_mu_play.txt`,
 - richer root-report summaries are present,
-- and `Workstream 5` has already started in one important sense because the alpha-mu solver is no longer a single file: the CLI runner, shared core, and test suite are already split across `test/alpha_mu.cpp`, `test/alpha_mu_core.*`, and `test/alpha_mu_tests.*`.
+- `Workstream 5` is now functionally landed at the current planned split because the solver has dedicated CLI, core, front, worlds, bridge, decision, reporting, and test units,
+- and `Workstream 6` has started in the decision-point runner because the solve result now carries constructor-stage counts, frontier dominance-reduction counts, TT activity, and bridge-search cut/termination counters.
 
 So the practical next step is:
 
-1. treat `Workstream 5` as the active implementation workstream,
-2. continue extracting smaller durable modules beyond the current first file-level split,
-3. preserve the newly landed depth-2 continuation and root-report regressions while code moves.
+1. treat `Workstream 6` as the active implementation workstream,
+2. preserve the current modular ownership boundaries from `Workstream 5`,
+3. broaden instrumentation and reporting without regressing the practical depth-2 continuation bundle.
 
 The immediate aim is not to demonstrate paper semantics in isolation. It is to
 deliver the next vertical slice of a real decision-point evaluator that can take
@@ -206,7 +207,7 @@ inside one oversized core implementation unit under `test/`.
 
 ### Current status
 
-This workstream has already **started**:
+This workstream is now **functionally landed at the current planned scope**:
 
 - the CLI runner is isolated in `test/alpha_mu.cpp`,
 - the shared data structures live in `test/alpha_mu_core.h`,
@@ -216,12 +217,12 @@ This workstream has already **started**:
   focused units such as `test/alpha_mu_worlds.cpp`,
 - bridge-state and legality/search helpers can be extracted into focused units
   such as `test/alpha_mu_bridge.cpp`,
-- and the bridge search / TT core remains in `test/alpha_mu_core.cpp`,
-- and the regression bundles are isolated in
+- the bridge search / TT core remains in `test/alpha_mu_core.cpp`,
+- the regression bundles are isolated in
   `test/alpha_mu_tests.h` and `test/alpha_mu_tests.cpp`.
 
-The next `Workstream 5` step is therefore not the first split, but the next
-smaller extraction from `alpha_mu_core.cpp` into more durable units.
+The remaining `Workstream 5` task is therefore maintenance rather than a major
+unsplit subsystem extraction.
 
 ### Tasks
 
@@ -247,6 +248,17 @@ smaller extraction from `alpha_mu_core.cpp` into more durable units.
 ### Goal
 
 Collect the evidence needed for later performance work.
+
+### Current status
+
+This workstream is now **active** in the decision-point runner.
+
+Already present today:
+
+- constructor-local pruning counts are exposed in `AlphaMuSolveResult`,
+- frontier activity now records insert attempts, accepted inserts, dominance rejections, and dominated-vector removal counts,
+- TT probes / hits / stores are already exposed,
+- and bridge-search cut/termination counters now distinguish empty-world, TT-hit, DDS-leaf, no-move, and terminal-front returns.
 
 ### Tasks
 
