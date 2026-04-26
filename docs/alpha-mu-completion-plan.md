@@ -136,9 +136,9 @@ The immediate execution order inside those stages is:
 | Single-world cut | Yes | Yes | Implemented in bridge search | Bridge search now collapses one useful world to an exact DDS-backed single-world front |
 | Optimistic completion | Yes | Partial | Partial | Bridge search now has opt-in optimistic completion for ancestor-front comparison, but exact root-report integration is still pending |
 | Early cut | Yes | Partial | Partial | Bridge search now has opt-in nearest-ancestor early cut with exact-only TT storage, but the exact root-report path does not yet opt in |
-| Deep alpha cut | Yes | No | Toy only | Not yet in bridge-backed search control |
-| Cut-on-win | Yes | No | Toy only | Not yet in bridge-backed Max-node bridge search |
-| Root cut | Yes | No | Toy only | Bridge iterative deepening exists, but the optimization-paper root-cut rule is not yet ported |
+| Deep alpha cut | Yes | Partial | Partial | Bridge search now has opt-in deep alpha cuts against earlier ancestor Max fronts, but the exact root-report path does not yet opt in |
+| Cut-on-win | Yes | Yes | Implemented in bridge search | Bridge Max-node search now stops once a child front wins in every useful world |
+| Root cut | Yes | Partial | Partial | Bridge iterative deepening now applies a root-cut stop on stable root `mu`, but reporting remains intentionally conservative about deeper inexact root-child coverage |
 | Exact-front TT reuse | Yes | Partial | Partial | Bridge TT now keys the Stage 1 world-cut slice by useful-world mask and refuses to store optimistic-cut fronts, but later ancestor-front slices still need tighter reuse semantics |
 | DDS-backed leaf evaluation | N/A | Yes | Implemented in bridge search | Core real-engine leaf oracle |
 | Bridge root reporting | N/A | Yes | Implemented in bridge search | Practical reporting is already present |

@@ -218,14 +218,32 @@ namespace alpha_mu
          << ", dominated-removed=" << result.bridgeSearchStats.frontDominatedRemoved
          << ", max-merges=" << result.bridgeSearchStats.maxMergeCalls
          << ", min-products=" << result.bridgeSearchStats.minProductCalls
+         << ", optimistic-completions="
+         << result.bridgeSearchStats.optimisticCompletions
          << endl;
     cout << "  Cut activity: empty-world="
          << result.bridgeSearchStats.emptyWorldCuts
          << ", TT=" << result.bridgeSearchStats.ttCuts
+         << ", early-alpha=" << result.bridgeSearchStats.earlyAlphaCuts
+         << ", deep-alpha=" << result.bridgeSearchStats.deepAlphaCuts
+         << ", cut-on-win=" << result.bridgeSearchStats.cutOnWinCuts
+         << ", root=" << result.bridgeSearchStats.rootCuts
          << ", DDS-leaf=" << result.bridgeSearchStats.ddsLeafCuts
          << ", no-move=" << result.bridgeSearchStats.noMoveLeafCuts
          << ", terminal-fronts=" << result.bridgeSearchStats.terminalFronts
          << endl;
+
+    if (! result.worldExplanation.appliedFollowSuitConstraints.empty())
+    {
+      cout << "  Derived follow-suit constraints:" << endl;
+      for (unsigned i = 0; i < result.worldExplanation.appliedFollowSuitConstraints.size(); i++)
+      {
+        cout << "    - "
+             << ConstraintToString(
+                  result.worldExplanation.appliedFollowSuitConstraints[i])
+             << endl;
+      }
+    }
 
     if (! result.biddingConstraintTexts.empty())
     {
@@ -312,8 +330,26 @@ namespace alpha_mu
         const WorldExplanation& world = result.worldExplanation.worlds[worldIndex];
         cout << "    [" << worldIndex << "] score="
              << world.plausibilityScore << "/" << world.plausibilityMaxScore
-             << " " << world.serializedWorld << endl;
+             << " " << world.serializedWorld;
+        if (! world.satisfiedPlausibilityHints.empty())
+          cout << " | matched=" << world.satisfiedPlausibilityHints[0];
+        cout << endl;
       }
+    }
+
+    unsigned rejectedLines = 0;
+    for (unsigned i = 0; i < result.worldExplanation.worlds.size() && rejectedLines < 3; i++)
+    {
+      if (result.worldExplanation.worlds[i].accepted)
+        continue;
+
+      if (rejectedLines == 0)
+        cout << "  Sample rejected worlds:" << endl;
+
+      cout << "    [" << result.worldExplanation.worlds[i].worldIndex << "] "
+           << result.worldExplanation.worlds[i].rejectionStage << ": "
+           << result.worldExplanation.worlds[i].rejectionReason << endl;
+      rejectedLines++;
     }
 
     cout << setprecision(3);

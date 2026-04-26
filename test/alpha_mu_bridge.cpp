@@ -243,7 +243,14 @@ namespace alpha_mu
     return optimistic;
   }
 
-  static bool ShouldBridgeEarlyCut(
+  enum BridgeAlphaCutType
+  {
+    BRIDGE_ALPHA_CUT_NONE = 0,
+    BRIDGE_ALPHA_CUT_EARLY = 1,
+    BRIDGE_ALPHA_CUT_DEEP = 2
+  };
+
+  static BridgeAlphaCutType BridgeAlphaCutTypeForFront(
     const BridgeState& state,
     const WorldMask& usefulWorlds,
     const ParetoFront& front,
@@ -252,7 +259,7 @@ namespace alpha_mu
     if (! context.bridgeSearch.enableAncestorCuts ||
         context.bridgeSearch.upperMaxFronts.empty())
     {
-      return false;
+      return BRIDGE_ALPHA_CUT_NONE;
     }
 
     const ParetoFront optimisticFront = front.CompleteOptimistically(
@@ -264,7 +271,34 @@ namespace alpha_mu
     if (context.bridgeSearch.upperMaxFronts.back()->DominatesFront(
           optimisticFront))
     {
+      return BRIDGE_ALPHA_CUT_EARLY;
+    }
+
+    for (unsigned i = 0; i + 1U < context.bridgeSearch.upperMaxFronts.size(); i++)
+    {
+      if (context.bridgeSearch.upperMaxFronts[i]->DominatesFront(optimisticFront))
+        return BRIDGE_ALPHA_CUT_DEEP;
+    }
+
+    return BRIDGE_ALPHA_CUT_NONE;
+  }
+
+  static bool ShouldBridgeAlphaCut(
+    const BridgeState& state,
+    const WorldMask& usefulWorlds,
+    const ParetoFront& front,
+    const SearchExecutionContext& context)
+  {
+    const BridgeAlphaCutType cutType = BridgeAlphaCutTypeForFront(state,
+      usefulWorlds, front, context);
+    if (cutType == BRIDGE_ALPHA_CUT_EARLY)
+    {
       NoteEarlyAlphaCut();
+      return true;
+    }
+    else if (cutType == BRIDGE_ALPHA_CUT_DEEP)
+    {
+      NoteDeepAlphaCut();
       return true;
     }
 
@@ -718,10 +752,17 @@ namespace alpha_mu
           usefulWorlds.Intersection(children[i].state.possibleWorlds));
         childContext = WithBridgeSearchUpperMaxFront(childContext, &front);
         bool childComplete = false;
-        front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateInternalExact(children[i].state, nextDepth,
-            childContext, &childComplete));
+        const ParetoFront childFront = SearchBridgeStateInternalExact(
+          children[i].state, nextDepth, childContext, &childComplete);
+        front = ParetoFront::MaxMerge(front, childFront);
         complete = complete && childComplete;
+        if (context.bridgeSearch.enableAncestorCuts &&
+            childFront.WinsAll(usefulWorlds))
+        {
+          NoteCutOnWinCut();
+          complete = false;
+          break;
+        }
       }
 #ifndef NDEBUG
       DebugCheckFrontForBridgeState(front, state,
@@ -759,7 +800,7 @@ namespace alpha_mu
         front = ParetoFront::MinProduct(front, childFront);
 
       currentUseful = currentUseful.Intersection(front.UsefulWorlds());
-      if (ShouldBridgeEarlyCut(state, currentUseful, front, context))
+      if (ShouldBridgeAlphaCut(state, currentUseful, front, context))
       {
         complete = false;
         break;
@@ -918,10 +959,18 @@ namespace alpha_mu
           usefulWorlds.Intersection(children[i].state.possibleWorlds));
         childContext = WithBridgeSearchUpperMaxFront(childContext, &front);
         bool childComplete = false;
-        front = ParetoFront::MaxMerge(front,
-          SearchBridgeStateWithTTExact(children[i].state, nextDepth,
-            childContext, tt, ttStats, &childComplete));
+        const ParetoFront childFront = SearchBridgeStateWithTTExact(
+          children[i].state, nextDepth, childContext, tt, ttStats,
+          &childComplete);
+        front = ParetoFront::MaxMerge(front, childFront);
         complete = complete && childComplete;
+        if (context.bridgeSearch.enableAncestorCuts &&
+            childFront.WinsAll(usefulWorlds))
+        {
+          NoteCutOnWinCut();
+          complete = false;
+          break;
+        }
       }
     }
     else
@@ -949,7 +998,7 @@ namespace alpha_mu
           front = ParetoFront::MinProduct(front, childFront);
 
         currentUseful = currentUseful.Intersection(front.UsefulWorlds());
-        if (ShouldBridgeEarlyCut(state, currentUseful, front, context))
+        if (ShouldBridgeAlphaCut(state, currentUseful, front, context))
         {
           complete = false;
           break;
@@ -1087,6 +1136,9 @@ namespace alpha_mu
       }
     }
 
+    const double previousRootMu = (previousReport == NULL ? -1.0 :
+      previousReport->rootFront.Mu());
+
     for (unsigned i = 0; i < children.size(); i++)
     {
       BridgeRootChildReport childReport(state.possibleWorlds.count);
@@ -1118,6 +1170,12 @@ namespace alpha_mu
       report.children.push_back(childReport);
       report.rootFront = ParetoFront::MaxMerge(report.rootFront,
         childReport.front);
+      if (context.bridgeSearch.enableAncestorCuts && previousRootMu >= 0.0 &&
+          fabs(report.rootFront.Mu() - previousRootMu) < 1e-9)
+      {
+        NoteRootCut();
+        break;
+      }
     }
 
     report.validWorlds = report.rootFront.ValidWorlds();
@@ -1355,10 +1413,9 @@ namespace alpha_mu
     {
       *worldGenerationStats = WorldGenerationStats();
       worldGenerationStats->candidateWorldCount = static_cast<unsigned>(worlds.size());
-      if (worlds.size() <= 64U)
-        GeneratePossibleWorlds(worlds, information, worldGenerationStats);
     }
 
+    vector<unsigned> survivingIndices;
     bool voidSuits[4][4];
     memset(voidSuits, 0, sizeof(voidSuits));
     for (unsigned i = 0; i < playedCards.size(); i++)
@@ -1368,7 +1425,6 @@ namespace alpha_mu
         voidSuits[ev.player][ev.leadSuit] = true;
     }
 
-    vector<unsigned> survivingIndices;
     for (unsigned w = 0; w < worlds.size(); w++)
     {
       bool valid = true;

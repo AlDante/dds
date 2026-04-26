@@ -2428,27 +2428,45 @@ namespace alpha_mu
   }
 
 
+  static BridgeState MakeBridgeGuaranteedWinRootFixture()
+  {
+    BridgeState state;
+    state.playerToMove = SEAT_NORTH;
+    state.maxSide = 0;
+    state.trumpSuit = -1;
+    state.trickLeader = SEAT_NORTH;
+    state.leadSuit = -1;
+    state.possibleWorlds = WorldMask(2, 0x3ULL);
+    state.worlds.push_back(ParsePBNWorld("N:A...2 K...3 Q...4 J...5"));
+    state.worlds.push_back(ParsePBNWorld("N:A...2 Q...3 K...4 J...5"));
+    return state;
+  }
+
+
   static void TestBridgeAncestorEarlyCutAtRootMax()
   {
-    const BridgeState state = MakeBridgeAncestorCutRootFixture();
+    const BridgeState state = MakeBridgeAncestorCutMinFixture();
+
+    ParetoFront dominating(2);
+    OutcomeVector dominatingVec(2);
+    dominatingVec.valid = WorldMask(2, 0x3ULL);
+    dominatingVec.values[0] = 1;
+    dominatingVec.values[1] = 1;
+    dominating.Insert(dominatingVec);
 
     SearchExecutionContext context;
     context.bridgeSearch.enableAncestorCuts = true;
+    context.bridgeSearch.upperMaxFronts.push_back(&dominating);
 
     BridgeSearchStats stats;
     SetActiveBridgeSearchStats(&stats);
-    const ParetoFront front = SearchBridgeState(state, 2, context);
+    const ParetoFront front = SearchBridgeState(state, 1, context);
     SetActiveBridgeSearchStats(NULL);
 
-    OutcomeVector exact(2);
-    exact.valid = WorldMask(2, 0x3ULL);
-    exact.values[0] = 2;
-    exact.values[1] = 2;
+    const ParetoFront expectedCutFront = MakeSingleWorldFront(2, 1, 1);
 
-    Check(front.vectors.size() == 1,
-      "opt-in bridge ancestor cuts should still leave one exact root vector in the two-trick fixture");
-    Check(FrontContains(front, exact),
-      "opt-in bridge ancestor cuts should preserve the exact [2 2] root outcome when the first root move already dominates later optimistic completions");
+    Check(front.ToString() == expectedCutFront.ToString(),
+      "opt-in bridge ancestor cuts should stop after the first Min child once the optimistic completion is already dominated by the nearest ancestor Max front");
     Check(stats.optimisticCompletions >= 1,
       "opt-in bridge ancestor cuts should record at least one optimistic completion in the recursive bridge fixture");
     Check(stats.earlyAlphaCuts == 1,
@@ -2505,6 +2523,98 @@ namespace alpha_mu
       SearchExecutionContext(), &tt, &exactTTStats);
     Check(FrontContains(exactTTFront, exact),
       "exact TT-backed bridge search should not reuse an inexact optimistic-cut front when the ancestor-cut context is absent");
+  }
+
+
+  static void TestBridgeDeepAlphaCut()
+  {
+    const BridgeState state = MakeBridgeAncestorCutMinFixture();
+
+    ParetoFront deepDominating(2);
+    OutcomeVector deepDominatingVec(2);
+    deepDominatingVec.valid = WorldMask(2, 0x3ULL);
+    deepDominatingVec.values[0] = 1;
+    deepDominatingVec.values[1] = 1;
+    deepDominating.Insert(deepDominatingVec);
+
+    ParetoFront nearestNonDominating(2);
+
+    SearchExecutionContext context;
+    context.bridgeSearch.enableAncestorCuts = true;
+    context.bridgeSearch.upperMaxFronts.push_back(&deepDominating);
+    context.bridgeSearch.upperMaxFronts.push_back(&nearestNonDominating);
+
+    BridgeSearchStats stats;
+    SetActiveBridgeSearchStats(&stats);
+    const ParetoFront front = SearchBridgeState(state, 1, context);
+    SetActiveBridgeSearchStats(NULL);
+
+    const ParetoFront expectedCutFront = MakeSingleWorldFront(2, 1, 1);
+    Check(front.ToString() == expectedCutFront.ToString(),
+      "bridge deep alpha cut should stop when an earlier ancestor Max front dominates the optimistic Min front even if the nearest ancestor does not");
+    Check(stats.earlyAlphaCuts == 0,
+      "bridge deep alpha cut regression should not report the cut as a nearest-ancestor early cut");
+    Check(stats.deepAlphaCuts == 1,
+      "bridge deep alpha cut regression should trigger exactly one deep alpha cut");
+  }
+
+
+  static void TestBridgeCutOnWin()
+  {
+    const BridgeState state = MakeBridgeGuaranteedWinRootFixture();
+
+    SearchExecutionContext context;
+    context.bridgeSearch.enableAncestorCuts = true;
+
+    BridgeSearchStats stats;
+    SetActiveBridgeSearchStats(&stats);
+    const ParetoFront front = SearchBridgeState(state, 2, context);
+    SetActiveBridgeSearchStats(NULL);
+
+    OutcomeVector exact(2);
+    exact.valid = WorldMask(2, 0x3ULL);
+    exact.values[0] = 1;
+    exact.values[1] = 1;
+
+    Check(front.vectors.size() == 1 && FrontContains(front, exact),
+      "bridge cut-on-win should preserve the exact winning root front when the first Max child already wins in every useful world");
+    Check(stats.cutOnWinCuts == 1,
+      "bridge cut-on-win regression should trigger exactly one cut-on-win at the Max node");
+  }
+
+
+  static void TestBridgeRootCut()
+  {
+    const BridgeState state = MakeBridgeGuaranteedWinRootFixture();
+    SearchExecutionContext context;
+    context.bridgeSearch.enableAncestorCuts = true;
+
+    InitZobrist();
+    BridgeTranspositionTable tt(1U << 8);
+    BridgeTTStats firstStats;
+    const BridgeRootReport first = AnalyzeBridgeRootWithTT(state, 1,
+      context, &tt, &firstStats, NULL);
+
+    BridgeSearchStats stats;
+    SetActiveBridgeSearchStats(&stats);
+    BridgeTTStats secondStats;
+    const BridgeRootReport second = AnalyzeBridgeRootWithTT(state, 2,
+      context, &tt, &secondStats, &first);
+    SetActiveBridgeSearchStats(NULL);
+
+    OutcomeVector exact(2);
+    exact.valid = WorldMask(2, 0x3ULL);
+    exact.values[0] = 1;
+    exact.values[1] = 1;
+
+    Check(first.rootFront.Mu() == second.rootFront.Mu(),
+      "bridge root-cut regression should use a fixture whose root mu stabilizes across iterative deepening depths");
+    Check(second.children.size() == 1,
+      "bridge root cut should stop the deeper root analysis after the first dominating child when the root mu has already stabilized");
+    Check(FrontContains(second.rootFront, exact),
+      "bridge root cut should preserve the dominating exact root vector accumulated before cutting the remaining root children");
+    Check(stats.rootCuts == 1,
+      "bridge root-cut regression should trigger exactly one root cut in the deeper iteration");
   }
 
 
@@ -3714,6 +3824,8 @@ namespace alpha_mu
     Check(result.worldExplanation.plausibilityRankedWorldIndices.size() ==
             result.survivingWorldCount,
       "decision-point solve should rank every surviving world for reporting");
+    Check(result.worldExplanation.appliedFollowSuitConstraints.size() > 0,
+      "decision-point solve should preserve the derived follow-suit implications used by the staged world pipeline");
   }
 
   static void TestExplicitDecisionPointRequestAPI()

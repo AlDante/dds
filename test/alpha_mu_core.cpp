@@ -73,6 +73,24 @@ namespace alpha_mu
       gActiveBridgeSearchStats->earlyAlphaCuts++;
   }
 
+  void NoteDeepAlphaCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->deepAlphaCuts++;
+  }
+
+  void NoteCutOnWinCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->cutOnWinCuts++;
+  }
+
+  void NoteRootCut()
+  {
+    if (gActiveBridgeSearchStats != NULL)
+      gActiveBridgeSearchStats->rootCuts++;
+  }
+
   void NoteEmptyWorldCut()
   {
     if (gActiveBridgeSearchStats != NULL)

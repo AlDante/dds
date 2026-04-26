@@ -99,26 +99,20 @@ namespace alpha_mu
       const BridgeState& state,
       const BridgeInformationState& information)
     {
+      result.worldExplanation = ExplainPossibleWorldGeneration(state.worlds,
+        information);
       result.worldExplanation.finalWorldMask = state.possibleWorlds;
       result.worldExplanation.plausibilityRankedWorldIndices =
         RankWorldsByPlausibility(state.worlds, state.possibleWorlds, information);
 
-      for (unsigned i = 0; i < state.worlds.size(); i++)
+      for (unsigned i = 0; i < result.worldExplanation.worlds.size(); i++)
       {
-        WorldExplanation world;
-        world.worldIndex = i;
-        world.serializedWorld = SerializePBNWorld(state.worlds[i]);
+        WorldExplanation& world = result.worldExplanation.worlds[i];
         world.accepted = state.possibleWorlds.Has(i);
-        for (unsigned h = 0; h < information.plausibilityHints.size(); h++)
-          world.plausibilityMaxScore += information.plausibilityHints[h].weight;
-        world.plausibilityScore = EvaluateWorldPlausibility(state.worlds[i],
-          information, &world.satisfiedPlausibilityHints,
-          &world.unsatisfiedPlausibilityHints);
         AddWorldExplanationStep(world, "decision_world_set", world.accepted,
           (world.accepted ?
             "survived into the current compacted decision-point world set" :
             "not active in the current compacted decision-point world set"));
-        result.worldExplanation.worlds.push_back(world);
       }
     }
   }
@@ -202,7 +196,8 @@ namespace alpha_mu
     result.constructorStats = constructorExplanation.stats;
 
     const BridgeState state = MakeBridgeStateFromInformationState(
-      request.deal, request.declarerSeat, history, information);
+      request.deal, request.declarerSeat, history, information,
+      &result.worldGenerationStats);
     PopulateDecisionWorldExplanation(result, state, information);
     result.playerToMove = state.playerToMove;
     result.decisionOnDeclarerSide =
@@ -358,34 +353,31 @@ namespace alpha_mu
       }
     }
 
-    if (result.survivingWorldCount > 0)
+    const BridgeState actualState = MakeSingleWorldDecisionState(request.deal,
+      history);
+    const vector<BridgeChild> actualChildren = ExpandBridgeChildren(actualState);
+    for (unsigned i = 0; i < actualChildren.size(); i++)
     {
-      const BridgeState actualState = MakeSingleWorldDecisionState(request.deal,
-        history);
-      const vector<BridgeChild> actualChildren = ExpandBridgeChildren(actualState);
-      for (unsigned i = 0; i < actualChildren.size(); i++)
+      const int score = ExactBridgeDDSScoreForWorld(actualChildren[i].state, 0,
+        context);
+      if (! result.hasDDSBestMove || score > result.ddsBestScore ||
+          (score == result.ddsBestScore &&
+           BridgeMoveLess(actualChildren[i].move, result.ddsBestMove)))
       {
-        const int score = ExactBridgeDDSScoreForWorld(actualChildren[i].state, 0,
-          context);
-        if (! result.hasDDSBestMove || score > result.ddsBestScore ||
-            (score == result.ddsBestScore &&
-             BridgeMoveLess(actualChildren[i].move, result.ddsBestMove)))
-        {
-          result.hasDDSBestMove = true;
-          result.ddsBestMove = actualChildren[i].move;
-          result.ddsBestScore = score;
-        }
-        if (result.valid && actualChildren[i].move == result.chosenMove)
-        {
-          result.hasChosenMoveDDSScore = true;
-          result.chosenMoveDDSScore = score;
-        }
-        if (result.hasActualPlayedMove &&
-            actualChildren[i].move == result.actualPlayedMove)
-        {
-          result.hasActualMoveDDSScore = true;
-          result.actualMoveDDSScore = score;
-        }
+        result.hasDDSBestMove = true;
+        result.ddsBestMove = actualChildren[i].move;
+        result.ddsBestScore = score;
+      }
+      if (result.valid && actualChildren[i].move == result.chosenMove)
+      {
+        result.hasChosenMoveDDSScore = true;
+        result.chosenMoveDDSScore = score;
+      }
+      if (result.hasActualPlayedMove &&
+          actualChildren[i].move == result.actualPlayedMove)
+      {
+        result.hasActualMoveDDSScore = true;
+        result.actualMoveDDSScore = score;
       }
     }
 

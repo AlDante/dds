@@ -51,6 +51,9 @@ namespace alpha_mu
     unsigned long long minProductCalls;
     unsigned long long optimisticCompletions;
     unsigned long long earlyAlphaCuts;
+    unsigned long long deepAlphaCuts;
+    unsigned long long cutOnWinCuts;
+    unsigned long long rootCuts;
     unsigned long long emptyWorldCuts;
     unsigned long long ttCuts;
     unsigned long long ddsLeafCuts;
@@ -66,6 +69,9 @@ namespace alpha_mu
       minProductCalls(0ULL),
       optimisticCompletions(0ULL),
       earlyAlphaCuts(0ULL),
+      deepAlphaCuts(0ULL),
+      cutOnWinCuts(0ULL),
+      rootCuts(0ULL),
       emptyWorldCuts(0ULL),
       ttCuts(0ULL),
       ddsLeafCuts(0ULL),
@@ -83,6 +89,9 @@ namespace alpha_mu
   void NoteMinProductCall();
   void NoteOptimisticCompletion();
   void NoteEarlyAlphaCut();
+  void NoteDeepAlphaCut();
+  void NoteCutOnWinCut();
+  void NoteRootCut();
   void NoteEmptyWorldCut();
   void NoteTTCut();
   void NoteDDSLeafCut();
