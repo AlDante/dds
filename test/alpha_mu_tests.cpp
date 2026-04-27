@@ -4040,6 +4040,34 @@ namespace alpha_mu
       "end-to-end solve should report at least one candidate move");
   }
 
+  static AlphaMuDecisionPointRequest MakeBoard2DecisionRequest(
+    const int prefixCards,
+    const int depth,
+    const unsigned maxWorlds,
+    const unsigned samplingSeed)
+  {
+    AlphaMuDecisionPointRequest request;
+    request.declarerSeat = SEAT_NORTH;
+    request.contractLevel = 3;
+    request.deal.trump = 4;
+    request.deal.first = SEAT_EAST;
+    strcpy(request.deal.remainCards,
+      "E:QJT5432.T.6.QJ82 .J97543.K7532.94 87.A62.QJT4.AT75 AK96.KQ8.A98.K63");
+    request.depth = depth;
+    request.maxWorlds = maxWorlds;
+    request.prefixCards = prefixCards;
+    request.samplingSeed = samplingSeed;
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 52;
+    strcpy(play.cards,
+      "SQD2S8SAHKHTH3H2HQS2H4H6H8D6HJHAS7SKS4C4D8C2DKD4H9C5S6S3H7C7C3S5H5CTD9STD3DQDAC8S9SJC9DTCQD5CAC6DJCKCJD7");
+    request.playHistory = ParsePBNPlayHistory(play, request.deal.first,
+      (request.deal.trump == 4 ? -1 : request.deal.trump));
+    return request;
+  }
+
   static void TestDecisionPointComparisonReporting()
   {
     dealPBN deal;
@@ -4098,6 +4126,101 @@ namespace alpha_mu
       "decision-point solve should report the raw candidate-world count from the shared Stage 2 pipeline");
     Check(result.worldExplanation.finalWorldIndices == result.activeWorldIndices,
       "decision-point solve should keep the explanation final world ids aligned with the compacted search-world ids");
+  }
+
+  static void TestRealBoardBiddingConstraintChangesRecommendation()
+  {
+    const AlphaMuDecisionPointRequest baselineRequest =
+      MakeBoard2DecisionRequest(36, 1, 64U, 7U);
+    const AlphaMuSolveResult baseline =
+      SolveAlphaMuDecisionPoint(baselineRequest);
+
+    AlphaMuDecisionPointRequest informedRequest(baselineRequest);
+    informedRequest.informationOverrides.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_DIAMONDS, 1));
+    informedRequest.informationOverrides.biddingConstraints.push_back(
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_DIAMONDS, 1));
+
+    const AlphaMuSolveResult informed =
+      SolveAlphaMuDecisionPoint(informedRequest);
+    const AlphaMuSolveResult informedRepeat =
+      SolveAlphaMuDecisionPoint(informedRequest);
+
+    Check(baseline.valid && informed.valid && informedRepeat.valid,
+      "real-board bidding-profile regression should produce valid results both before and after adding the richer defender-length information");
+    Check(baseline.chosenMove == BridgeMove(SUIT_DIAMONDS, '3'),
+      "real-board bidding-profile regression should start from the unconstrained board-2 depth-1 prefix-36 baseline that chooses a diamond continuation");
+    Check(informed.chosenMove == BridgeMove(SUIT_CLUBS, '9'),
+      "real-board bidding-profile regression should switch to the club continuation once East is constrained to exactly one remaining diamond");
+    Check(informedRepeat.chosenMove == informed.chosenMove &&
+          informedRepeat.activeWorldIndices == informed.activeWorldIndices,
+      "real-board bidding-profile regression should remain deterministic once the richer bidding-derived information is applied");
+    Check(baseline.worldGenerationStats.sampledOutWorlds == 0 &&
+          informed.worldGenerationStats.sampledOutWorlds == 0,
+      "real-board bidding-profile regression should attribute the recommendation change to richer information rather than to deterministic sampling capping");
+    Check(baseline.worldCount == baseline.survivingWorldCount &&
+          informed.worldCount == informed.survivingWorldCount,
+      "real-board bidding-profile regression should keep the full surviving world pool active on both sides of the comparison");
+    Check(baseline.worldGenerationStats.afterBiddingCount == 35 &&
+          informed.worldGenerationStats.afterBiddingCount == 30,
+      "real-board bidding-profile regression should narrow the board-2 prefix-36 world pool at the bidding stage from 35 worlds to 30 worlds");
+    Check(informed.worldCount < baseline.worldCount,
+      "real-board bidding-profile regression should make the world pool materially smaller once the richer defender-diamond profile is applied");
+    Check(informed.hasDDSBestMove && informed.chosenMove == informed.ddsBestMove,
+      "real-board bidding-profile regression should move the alpha-mu recommendation onto the DDS-best club continuation after the richer bidding-derived narrowing");
+    Check(informed.biddingConstraintTexts.size() == 2,
+      "real-board bidding-profile regression should surface the explicit richer bidding constraints in analyst-facing reporting text");
+
+    Check(baseline.constructorStats.afterConstructorLengthCount == 35 &&
+          informed.constructorStats.afterConstructorLengthCount == 30,
+      "real-board bidding-profile regression should trace the recommendation change to earlier constructor-local bidding-length pruning, not only to later search noise");
+  }
+
+  static void TestWeightedDecisionPolicyChangesRealBoardRecommendation()
+  {
+    AlphaMuDecisionPointRequest muRequest =
+      MakeBoard2DecisionRequest(36, 1, 64U, 7U);
+    muRequest.informationOverrides.plausibilityHints.push_back(
+      WorldPlausibilityHint::Prefer(
+        WorldConstraint::MinLength(SEAT_EAST, SUIT_DIAMONDS, 1),
+        7,
+        "East likely kept the last diamond"));
+
+    AlphaMuDecisionPointRequest weightedRequest(muRequest);
+    weightedRequest.decisionPolicy = ALPHA_MU_DECISION_POLICY_WEIGHTED;
+
+    const AlphaMuSolveResult muResult = SolveAlphaMuDecisionPoint(muRequest);
+    const AlphaMuSolveResult weightedResult =
+      SolveAlphaMuDecisionPoint(weightedRequest);
+    const AlphaMuSolveResult weightedRepeat =
+      SolveAlphaMuDecisionPoint(weightedRequest);
+
+    Check(muResult.valid && weightedResult.valid && weightedRepeat.valid,
+      "real-board weighted-policy regression should produce valid results for both plain-mu and weighted choice on the board-2 prefix-36 fixture");
+    Check(muResult.worldCount == weightedResult.worldCount &&
+          muResult.activeWorldIndices == weightedResult.activeWorldIndices,
+      "real-board weighted-policy regression should keep world membership unchanged when only soft plausibility hints are added");
+    Check(muResult.chosenMove == BridgeMove(SUIT_DIAMONDS, '3'),
+      "real-board weighted-policy regression should preserve the plain-mu diamond choice when plausibility remains soft and the requested decision policy is still mu");
+    Check(weightedResult.chosenMove == BridgeMove(SUIT_CLUBS, '9'),
+      "real-board weighted-policy regression should switch to the club continuation when the explicit weighted decision policy follows the plausibility-ranked diamond-one subset");
+    Check(weightedResult.appliedDecisionPolicy == ALPHA_MU_DECISION_POLICY_WEIGHTED,
+      "real-board weighted-policy regression should keep the weighted policy active when some surviving worlds receive positive plausibility weight");
+    Check(weightedRepeat.chosenMove == weightedResult.chosenMove &&
+          weightedRepeat.chosenMoveWeightedScore == weightedResult.chosenMoveWeightedScore,
+      "real-board weighted-policy regression should remain deterministic on repeated runs");
+    Check(weightedResult.chosenMoveWeightedScore > muResult.chosenMoveWeightedScore,
+      "real-board weighted-policy regression should report that the chosen weighted club continuation scores better on the plausibility-weighted world distribution than the plain-mu diamond baseline");
+    Check(! weightedResult.worldExplanation.plausibilityRankedWorldIndices.empty(),
+      "real-board weighted-policy regression should rank the surviving worlds by plausibility before weighted root choice is applied");
+
+    const WorldExplanation& topWorld = weightedResult.worldExplanation.worlds[
+      weightedResult.worldExplanation.plausibilityRankedWorldIndices[0]];
+    Check(topWorld.plausibilityScore == 7 &&
+          ! topWorld.satisfiedPlausibilityHints.empty() &&
+          topWorld.satisfiedPlausibilityHints[0] ==
+            "East likely kept the last diamond",
+      "real-board weighted-policy regression should keep the explanation trace aligned with the plausibility hint that drives the weighted decision change");
   }
 
   static void TestExplicitDecisionPointRequestAPI()
@@ -4884,7 +5007,7 @@ namespace alpha_mu
       {"follow-suit implications and world explanations OK", &TestFollowSuitImplicationsAndWorldExplanation},
       {"world plausibility reporting OK", &TestWorldPlausibilityReporting},
       {"active-world plausibility weights OK", &TestActiveWorldPlausibilityWeightsRespectCompactedOrdering},
-      {"weighted decision selection OK", &TestWeightedDecisionPolicySelectsRootChildExplicitly},
+       {"weighted decision selection OK", &TestWeightedDecisionPolicySelectsRootChildExplicitly},
       {"history-derived candidate world construction OK", &TestHistoryDerivedCandidateWorldConstruction},
       {"history-derived known-card construction OK", &TestHistoryDerivedConstructionUsesKnownCardLocation},
       {"history-derived known-card exclusion construction OK", &TestHistoryDerivedConstructionUsesKnownCardExclusion},
@@ -4930,6 +5053,8 @@ namespace alpha_mu
        {"follow-suit narrowing in partial information OK", &TestFollowSuitNarrowingInPartialInformation},
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
        {"decision-point comparison reporting OK", &TestDecisionPointComparisonReporting},
+       {"real-board bidding-profile recommendation change OK", &TestRealBoardBiddingConstraintChangesRecommendation},
+       {"real-board weighted recommendation change OK", &TestWeightedDecisionPolicyChangesRealBoardRecommendation},
        {"explicit decision-point request API OK", &TestExplicitDecisionPointRequestAPI},
        {"decision-point world pipeline consistency OK", &TestDecisionPointWorldPipelineConsistency},
        {"decision-point world pipeline reporting OK", &TestDecisionPointReportingEmitsWorldPipelineMetrics},

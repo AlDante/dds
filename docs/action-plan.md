@@ -156,6 +156,17 @@ The first narrow `Stage 3.5` slice is now in place:
 - and regression coverage now locks those richer explanation paths to the actual
   structured world-explanation data.
 
+### Current Stage 3 closeout status
+
+The first real-board recommendation-change evidence slice is now in place:
+
+- board 2 of `hands/alpha_mu_play.txt` at the 36-card prefix now has a
+  regression where richer defender-diamond information changes the chosen move,
+- that case keeps sampling out of the comparison by staying below the world cap
+  before and after the richer information is applied,
+- and the change is traced to earlier constructor-local plus staged bidding
+  narrowing rather than to accidental seed-dependent world selection.
+
 ## Workstream 3 — decision-point post-mortem runner
 
 ### Goal
@@ -249,6 +260,15 @@ The first weighted-policy slice is now present:
 - reporting now tells the analyst which policy was actually applied,
 - and regression coverage now checks compacted-world plausibility weighting,
   deterministic weighted child choice, and zero-signal fallback to plain `mu`.
+
+Also now present as the first real-board weighted comparison slice:
+
+- the CLI decision runner accepts explicit decision-policy and plausibility
+  options,
+- a real-board board-2 prefix-36 regression now shows the weighted policy
+  changing the chosen move while leaving world membership unchanged,
+- and the explanation trace remains aligned with the plausibility hint that
+  drives that weighted recommendation change.
 
 ## Workstream 5 — extract durable modules while growing features
 

@@ -422,6 +422,16 @@ Also now present as the first narrow `S3.5` slice:
   aligned with the structured explanation data rather than inventing new
   semantics in reporting.
 
+Also now present as the remaining Stage 3 closeout evidence slice:
+
+- the regression suite includes a real-board decision on board 2 of
+  `hands/alpha_mu_play.txt` at a 36-card prefix where richer defender-diamond
+  information changes the recommended move,
+- that case keeps sampling out of the explanation by staying below the world cap
+  on both sides of the comparison,
+- and it traces the change to constructor-local plus staged bidding narrowing
+  rather than to accidental sampling noise.
+
 ### Goal
 
 Move from curated partial-information examples toward realistic declarer
@@ -475,6 +485,16 @@ policy:
 - and the decision-point API now supports an explicit experimental root-only
   weighted choice policy that falls back to plain `mu` when plausibility carries
   no surviving-world signal.
+
+Also now present as the `S4.4` comparison slice:
+
+- the CLI decision runner now accepts explicit decision-policy and plausibility
+  options,
+- the regression suite includes a real-board board-2 prefix-36 case where a soft
+  plausibility hint leaves world membership unchanged but the explicit weighted
+  policy changes the chosen move,
+- and that change is locked to the explanation trace rather than being an
+  unreported heuristic side effect.
 
 ### Goal
 

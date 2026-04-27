@@ -146,6 +146,17 @@ namespace
 	  "trump tokens should be S, H, D, C, or NT");
 	return SuitFromPlayChar(upper[0]);
   }
+  AlphaMuDecisionPolicy ParseDecisionPolicyToken(const string& text)
+  {
+	const string upper = Uppercase(text);
+	if (upper == "MU")
+	  return ALPHA_MU_DECISION_POLICY_MU;
+	if (upper == "WEIGHTED")
+	  return ALPHA_MU_DECISION_POLICY_WEIGHTED;
+	Check(false,
+	  "decision policy should be one of mu or weighted");
+	return ALPHA_MU_DECISION_POLICY_MU;
+  }
   int ParseHandTypeToken(const string& text)
   {
 	const string upper = Uppercase(text);
@@ -254,6 +265,19 @@ namespace
 	Check(false,
 	  string("unknown constraint token kind ") + parts[0]);
 	return WorldConstraint();
+  }
+  WorldPlausibilityHint ParsePlausibilityHintToken(const string& text)
+  {
+	const vector<string> parts = SplitString(text, '|', true);
+	Check(parts.size() >= 2 && parts.size() <= 3,
+	  "plausibility hints should look like weight|constraint or weight|constraint|label");
+	int weight = 0;
+	Check(TryParseIntArgument(parts[0].c_str(), weight) && weight >= 0,
+	  "plausibility hint weight should be a non-negative integer");
+	const WorldConstraint constraint = ParseConstraintToken(parts[1]);
+	const string label = (parts.size() == 3 && ! parts[2].empty() ?
+	  parts[2] : ConstraintToString(constraint));
+	return WorldPlausibilityHint::Prefer(constraint, weight, label);
   }
 }
 
@@ -461,9 +485,14 @@ int main(int argc, char ** argv)
 			"decision seed should be a non-negative integer");
 		  request.samplingSeed = static_cast<unsigned>(parsed);
 		}
+		else if (flag == "--decision-policy")
+		  request.decisionPolicy = ParseDecisionPolicyToken(value);
 		else if (flag == "--constraint")
 		  request.informationOverrides.biddingConstraints.push_back(
 			ParseConstraintToken(value));
+		else if (flag == "--plausibility")
+		  request.informationOverrides.plausibilityHints.push_back(
+			ParsePlausibilityHintToken(value));
 		else
 		  Check(false,
 			string("decision mode does not recognize option ") + flag);
