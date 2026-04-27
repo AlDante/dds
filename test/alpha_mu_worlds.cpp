@@ -1115,6 +1115,14 @@ namespace alpha_mu
     return RankWorldIndicesByPlausibility(worlds, ranked, information);
   }
 
+  /**
+   * Apply the shared staged decision-world pipeline.
+   *
+   * This is the single ordered filter path now shared by explanation,
+   * reporting, and compacted bridge-state assembly. It intentionally preserves
+   * raw candidate-world indices in `activeWorldIndices` so later reporting can
+   * talk about the same worlds that survive into search.
+   */
   DecisionWorldPipelineResult BuildDecisionWorldPipeline(
     const vector<ParsedWorld>& candidateWorlds,
     const BridgeInformationState& information)
@@ -1363,6 +1371,14 @@ namespace alpha_mu
   }
 
 
+  /**
+   * Build the default play-derived information state for one decision point.
+   *
+   * Visible remaining cards become hard known-card constraints, completed tricks
+   * are separated from the currently open trick for staged legality replay, and
+   * deterministic sampling / deduplication defaults are initialized here before
+   * any external override facts are appended.
+   */
   BridgeInformationState BuildInformationStateFromPlay(
     const dealPBN& fullDeal,
     const int declarerSeat,
@@ -1418,6 +1434,15 @@ namespace alpha_mu
     return info;
   }
 
+  /**
+   * Merge externally supplied decision-point facts onto the play-derived base
+   * information state.
+   *
+   * Current semantics intentionally append hard constraints and plausibility
+   * hints while leaving replay histories authoritative from the play-derived
+   * state. Sampling controls are taken from the explicit decision request so the
+   * final world set remains reproducible for the requested budget and seed.
+   */
   BridgeInformationState ApplyInformationOverrides(
     const BridgeInformationState& base,
     const BridgeInformationState& overrides,

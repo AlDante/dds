@@ -20,13 +20,13 @@ Current repository state is ahead of the original sequencing in this plan:
 - practical real-board depth-2 continuation regressions are present for both the 40-card trick-boundary prefix and the 34-card partial-trick prefix on board 1 of `hands/alpha_mu_play.txt`,
 - richer root-report summaries are present,
 - `Workstream 5` is now functionally landed at the current planned split because the solver has dedicated CLI, core, front, worlds, bridge, decision, reporting, and test units,
-- and `Workstream 6` has advanced in the decision-point runner because the solve result now carries constructor-stage counts, truthful staged world-pipeline counts, active raw-world identities, frontier dominance-reduction counts, TT activity, and bridge-search cut/termination counters.
+- and `Workstream 6` has advanced in the decision-point runner because the solve result now carries constructor-stage counts, truthful staged world-pipeline counts, active raw-world identities, frontier dominance-reduction counts, TT activity, bridge-search cut/termination counters, and machine-readable timing splits.
 
 So the practical next step is:
 
-1. treat `Workstream 6` as the active implementation workstream,
+1. treat `Workstream 2` as the active implementation workstream,
 2. preserve the current modular ownership boundaries from `Workstream 5`,
-3. broaden instrumentation and reporting without regressing the practical depth-2 continuation bundle.
+3. keep the newly broadened `Workstream 6` reporting surface stable while formalizing the information-state contract.
 
 The immediate aim is not to demonstrate paper semantics in isolation. It is to
 deliver the next vertical slice of a real decision-point evaluator that can take

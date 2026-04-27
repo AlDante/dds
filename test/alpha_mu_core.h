@@ -1036,7 +1036,15 @@ namespace alpha_mu
   };
 
 
-  /** @brief Stage-by-stage counts for staged possible-world filtering. */
+  /**
+   * @brief Stage-by-stage counts for the shared staged world-filter pipeline.
+   *
+   * These counts are reported both to the decision runner and to explanation /
+   * machine-readable reporting. They therefore describe the actual ordered
+   * pipeline applied after constructor-local pruning:
+   * known cards, bidding, follow suit, completed-trick replay, current-trick
+   * replay, and deterministic downselection after optional deduplication.
+   */
   struct WorldGenerationStats
   {
     unsigned candidateWorldCount;
@@ -1278,9 +1286,24 @@ namespace alpha_mu
   /**
    * @brief Partial-information package used to generate or explain worlds.
    *
-   * The solver separates known cards, bidding facts, follow-suit facts, play
-   * history, and deterministic sampling controls so each stage can be tested and
-   * explained independently.
+   * The solver separates known cards, bidding facts, follow-suit facts,
+   * completed-trick replay, current-trick replay, soft plausibility hints, and
+   * deterministic sampling controls so each stage can be tested and explained
+   * independently.
+   *
+   * Contract summary:
+   * - `knownCardConstraints`, `biddingConstraints`, and
+   *   `followSuitConstraints` are hard filters,
+   * - `plausibilityHints` are reporting-only ranking inputs,
+   * - `playHistory` contains the completed-trick prefix to replay as a hard
+   *   legality filter,
+   * - `currentTrickHistory` contains the currently open trick prefix to replay
+   *   after the completed-trick history,
+   * - `deriveFollowSuitConstraints` controls whether deterministic legality
+   *   implications are derived from the recorded play,
+   * - `deduplicateEquivalentWorlds` applies only after legality replay,
+   * - and `sampleLimit` / `samplingSeed` control deterministic downselection of
+   *   an oversized surviving pool before the final 64-world search compaction.
    */
   struct BridgeInformationState
   {
@@ -1455,7 +1478,15 @@ namespace alpha_mu
   };
 
 
-  /** @brief Unified staged world-pipeline result used by decision-point assembly. */
+  /**
+   * @brief Unified staged world-pipeline result used by decision-point assembly.
+   *
+   * This is the shared handoff between world construction, staged filtering,
+   * explanation generation, reporting, and compacted bridge-state assembly. The
+   * `activeWorldIndices` field intentionally preserves raw candidate-world ids
+   * so the final search state, explanation trace, and machine-readable report
+   * all describe the same surviving worlds.
+   */
   struct DecisionWorldPipelineResult
   {
     vector<ParsedWorld> candidateWorlds;
@@ -1915,6 +1946,9 @@ namespace alpha_mu
    *
    * Known-card constraints are generated for all cards in the visible hands that
    * have not yet been played. Follow-suit derivation is enabled.
+   * Completed prior tricks are placed in `playHistory`; the currently open trick
+   * prefix, if any, is placed in `currentTrickHistory` so the staged pipeline can
+   * replay them separately in a deterministic order.
    * `maxWorlds` is stored as the deterministic sampling budget used later when
    * the constructor or search front-end must shrink an oversized candidate pool
    * to fit the 64-world `WorldMask` representation.
@@ -1925,13 +1959,28 @@ namespace alpha_mu
       const vector<PlayHistoryEvent>& playedCards,
       const unsigned maxWorlds,
       const unsigned samplingSeed = 42U);
-  /** @brief Merge explicit decision-point overrides into a play-derived information state. */
+  /**
+   * @brief Merge explicit decision-point overrides into a play-derived information state.
+   *
+   * The current semantics are intentionally simple: hard constraints and soft
+   * plausibility hints are appended, sampling controls are overwritten from the
+   * explicit decision request, and the replay histories remain those produced by
+   * `BuildInformationStateFromPlay()`.
+   */
   BridgeInformationState ApplyInformationOverrides(
       const BridgeInformationState& base,
       const BridgeInformationState& overrides,
       const unsigned maxWorlds,
       const unsigned samplingSeed);
-  /** @brief Build a compacted bridge search state from an already prepared information state. */
+  /**
+   * @brief Build a compacted bridge search state from an already prepared information state.
+   *
+   * This runs history-derived constructor pruning, then the shared staged world
+   * pipeline, then compacts the accepted worlds into the 64-world bridge search
+   * representation. When requested, it also returns the exact staged pipeline
+   * result used for explanation and reporting so the search state and reports
+   * stay aligned.
+   */
   BridgeState MakeBridgeStateFromInformationState(
       const dealPBN& fullDeal,
       const int declarerSeat,
@@ -2078,6 +2127,13 @@ namespace alpha_mu
   /** @brief Produce an explanation trace for every stage of possible-world filtering. */
   WorldGenerationExplanation ExplainPossibleWorldGeneration( const vector<ParsedWorld>& worlds, const BridgeInformationState& information);
   /** @brief Run the full staged world pipeline and preserve raw-to-active world indexing. */
+  /**
+   * @brief Apply the shared ordered world-filter pipeline to raw candidate worlds.
+   *
+   * The current order is: known cards, bidding, follow suit, completed-trick
+   * replay, current-trick replay, optional deduplication, and deterministic
+   * downselection.
+   */
   DecisionWorldPipelineResult BuildDecisionWorldPipeline( const vector<ParsedWorld>& candidateWorlds, const BridgeInformationState& information);
   /** @brief Sum the weights of all matching plausibility hints for one world. */
   int EvaluateWorldPlausibility( const ParsedWorld& world, const BridgeInformationState& information, vector<string>* satisfiedLabels, vector<string>* unsatisfiedLabels);

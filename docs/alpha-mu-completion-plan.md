@@ -377,6 +377,20 @@ This stage is done when:
 
 ## Stage 3 — realistic information-state construction
 
+### Status update (2026-04-27)
+
+The first `S3.1` slice is now in place at the contract/documentation level:
+
+- the repository documentation now describes the lifecycle of
+  `BridgeInformationState` from play-derived base state through override
+  application, constructor pruning, staged filtering, and compacted
+  bridge-search handoff,
+- code comments now document the same field ownership and stage ordering at the
+  API and implementation boundaries,
+- and the current hard/soft boundary is explicitly recorded: plausibility is
+  still reporting-only, while staged filtering and replay remain hard world-set
+  semantics.
+
 ### Goal
 
 Move from curated partial-information examples toward realistic declarer

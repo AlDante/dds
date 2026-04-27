@@ -30,6 +30,139 @@ The current information-state package contains these fields:
 - `sampleLimit`
 - `samplingSeed`
 
+## Lifecycle through the current solver
+
+The current decision-point path consumes `BridgeInformationState` in five
+distinct phases:
+
+1. **Play-derived base state construction**
+   - `BuildInformationStateFromPlay()` creates the default visible-card facts,
+     play-history replay facts, current-trick replay facts, and deterministic
+     sampling controls for one decision point.
+
+2. **Explicit override application**
+   - `ApplyInformationOverrides()` appends externally supplied hard constraints
+     and plausibility hints onto that play-derived base state.
+   - This is the boundary where auction analysis or other external inference may
+     add deterministic facts without the alpha-mu solver needing to interpret an
+     auction object itself.
+
+3. **Constructor-local pruning**
+   - `ConstructCandidateWorldsFromHistory()` uses only the subset of facts that
+     are safe before the full staged pipeline, so it can reduce the candidate
+     pool without changing the meaning of later filtering.
+
+4. **Shared staged world pipeline**
+   - `BuildDecisionWorldPipeline()` applies the same ordered filtering stages
+     used by decision reporting and by compacted bridge-state assembly:
+     known-card checks, bidding checks, follow-suit checks, complete-history
+     legality replay, current-trick legality replay, optional deduplication, and
+     deterministic downselection.
+
+5. **Compacted search-state assembly**
+   - `MakeBridgeStateFromInformationState()` takes only the worlds accepted by
+     that pipeline, compacts them into the 64-world search representation, and
+     passes them into bridge search.
+
+This means the information-state contract is no longer only about candidate
+generation. It also defines the exact facts that the decision runner reports,
+the exact world identities that survive into search, and the exact stage counts
+now emitted in `ALPHA_MU_DECISION`.
+
+## Field-by-field contract
+
+### `knownCardConstraints`
+
+- hard constraints,
+- safe for constructor-local pruning when they refer to hidden-seat feasibility,
+- always applied again in the shared staged filter,
+- and expected to reflect cards that are already visible or otherwise known with
+  certainty.
+
+### `biddingConstraints`
+
+- hard constraints,
+- appended by explicit override application,
+- partially usable during constructor-local pruning when they imply hidden-seat
+  feasibility,
+- and always applied again in the staged filter as the authoritative hard
+  auction-side boundary.
+
+### `followSuitConstraints`
+
+- hard constraints,
+- may be supplied explicitly by callers,
+- may also be augmented from deterministic legality-derived follow-suit
+  inference when `deriveFollowSuitConstraints` is enabled,
+- and are applied in the shared staged filter before full history replay.
+
+### `plausibilityHints`
+
+- soft inputs only,
+- appended by override application,
+- never used to reject worlds,
+- never used to alter sampling membership,
+- never used in TT semantics or alpha-mu front backup,
+- and currently only used to explain and rank already-surviving worlds.
+
+### `playHistory`
+
+- hard legality replay for fully completed prior tricks,
+- consumed after known-card / bidding / follow-suit filtering,
+- and intended to represent only the already completed portion of the decision
+  point history, not the currently open trick.
+
+### `currentTrickHistory`
+
+- hard legality replay for the currently open partial trick,
+- consumed after completed-trick replay,
+- and intended to preserve the exact decision-point handoff into bridge search.
+
+### `deriveFollowSuitConstraints`
+
+- controls whether deterministic legality-derived follow-suit implications are
+  added from the recorded play,
+- defaults to `true` in play-derived information states,
+- and is turned off in the final compaction handoff once those explicit derived
+  constraints have already been materialized.
+
+### `deduplicateEquivalentWorlds`
+
+- controls whether equivalent surviving worlds are collapsed after legality
+  replay,
+- must not change legality semantics,
+- and exists to reduce redundant search work before deterministic sampling.
+
+### `sampleLimit`
+
+- is the deterministic downselection budget for the staged world pipeline,
+- applies only after hard filtering and optional deduplication,
+- and is distinct from the final 64-world hard cap required by `WorldMask`.
+
+### `samplingSeed`
+
+- determines the stable rotation used by deterministic downselection,
+- must make repeated runs reproducible,
+- and is therefore part of the information-state contract rather than only a
+  reporting detail.
+
+## Override semantics
+
+`ApplyInformationOverrides()` currently has deliberately simple semantics:
+
+- append `knownCardConstraints`,
+- append `biddingConstraints`,
+- append `followSuitConstraints`,
+- append `plausibilityHints`,
+- overwrite `deriveFollowSuitConstraints`,
+- overwrite `deduplicateEquivalentWorlds`,
+- overwrite `sampleLimit` from the explicit decision-point world budget,
+- overwrite `samplingSeed` from the explicit decision-point seed,
+- and **do not merge or replace** `playHistory` / `currentTrickHistory`.
+
+This keeps the play-derived replay facts authoritative while still allowing
+external components to add auction-side or analyst-supplied facts.
+
 ## Hard constraints
 
 These inputs are currently treated as **hard**: a world that violates them is
@@ -121,6 +254,29 @@ Current constructor-local pruning may use:
 This pruning is still required to preserve deterministic behavior and must not
 change the meaning of the later full filtering stages.
 
+## Ordered staged filtering contract
+
+After constructor-local pruning, the shared staged world pipeline applies the
+remaining checks in this order:
+
+1. known-card constraints,
+2. bidding constraints,
+3. explicit plus derived follow-suit constraints,
+4. completed-trick legality replay,
+5. current-trick legality replay,
+6. optional deduplication,
+7. deterministic downselection.
+
+That ordering matters for both the user-facing explanation trace and the staged
+metrics recorded in `WorldGenerationStats` and `ALPHA_MU_DECISION`.
+
+In particular:
+
+- deduplication happens only after legality filtering,
+- deterministic sampling happens only after deduplication,
+- and the final search state must still be compacted to at most 64 worlds even
+  if the earlier sample budget is larger.
+
 ## Soft plausibility hints
 
 `plausibilityHints` are the first explicit **soft** layer.
@@ -191,6 +347,14 @@ Not yet modeled here as first-class inputs:
 - negative-inference strength from choice among equivalent plays,
 - probability calibration from frequency data,
 - direct use of plausibility in alpha-mu backup or move selection.
+
+Also not yet first-class in the contract:
+
+- explicit negative-inference semantics for card-choice alternatives that were
+  available but not chosen,
+- richer ownership implications from repeated later-play patterns,
+- larger ambiguous defender pools beyond the currently regression-backed cases,
+- and weighted use of plausibility in move choice.
 
 ## Next intended use
 

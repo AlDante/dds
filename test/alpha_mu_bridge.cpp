@@ -1394,6 +1394,15 @@ namespace alpha_mu
     return selected;
   }
 
+  /**
+   * Turn an information state into the compacted bridge-search state.
+   *
+   * Constructor-local pruning happens first, then the shared staged pipeline is
+   * run over the raw candidate worlds, and only the accepted worlds are carried
+   * into the compacted `BridgeState`. The optional pipeline output lets the
+   * decision runner report the exact same surviving worlds and stage counts that
+   * were handed to search.
+   */
   BridgeState MakeBridgeStateFromInformationState(
     const dealPBN& fullDeal,
     const int declarerSeat,
