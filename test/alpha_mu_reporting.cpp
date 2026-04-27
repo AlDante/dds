@@ -42,6 +42,29 @@ namespace alpha_mu
       }
       return oss.str();
     }
+
+    unsigned CountChildFrontVectors(const BridgeRootReport& report)
+    {
+      unsigned total = 0;
+      for (unsigned i = 0; i < report.children.size(); i++)
+      {
+        total += static_cast<unsigned>(report.children[i].front.vectors.size());
+      }
+      return total;
+    }
+
+    unsigned MaxChildFrontVectors(const BridgeRootReport& report)
+    {
+      unsigned best = 0;
+      for (unsigned i = 0; i < report.children.size(); i++)
+      {
+        const unsigned childVectors = static_cast<unsigned>(
+          report.children[i].front.vectors.size());
+        if (childVectors > best)
+          best = childVectors;
+      }
+      return best;
+    }
   }
 
   void ReportBenchmarkMethodSummary(
@@ -163,6 +186,11 @@ namespace alpha_mu
 
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result)
   {
+    const unsigned childFrontVectorTotal =
+      CountChildFrontVectors(result.rootReport);
+    const unsigned childFrontVectorMax =
+      MaxChildFrontVectors(result.rootReport);
+
     cout.setf(ios::fixed);
     cout << setprecision(3);
 
@@ -230,6 +258,16 @@ namespace alpha_mu
          << endl;
     cout << "  Active raw world ids: "
          << JoinUnsigned(result.activeWorldIndices) << endl;
+    cout << "  Front summary: root_vectors="
+         << result.rootFront.vectors.size()
+         << ", root_valid_worlds="
+         << result.rootReport.validWorlds.PopCount()
+         << ", root_useful_worlds="
+         << result.rootReport.usefulWorlds.PopCount()
+         << ", child_count=" << result.rootReport.children.size()
+         << ", child_vectors_total=" << childFrontVectorTotal
+         << ", child_vectors_max=" << childFrontVectorMax
+         << endl;
     cout << "  TT: " << result.ttStores << " stores, "
          << result.ttHits << " hits / " << result.ttProbes << " probes"
          << endl;
@@ -382,6 +420,12 @@ namespace alpha_mu
     cout << "ALPHA_MU_DECISION"
          << " raw_worlds=" << result.worldCount
          << " surviving_worlds=" << result.survivingWorldCount
+         << " root_vectors=" << result.rootFront.vectors.size()
+         << " root_valid_worlds=" << result.rootReport.validWorlds.PopCount()
+         << " root_useful_worlds=" << result.rootReport.usefulWorlds.PopCount()
+         << " child_count=" << result.rootReport.children.size()
+         << " child_vectors_total=" << childFrontVectorTotal
+         << " child_vectors_max=" << childFrontVectorMax
          << " after_known_cards=" << result.worldGenerationStats.afterKnownCardCount
          << " after_bidding=" << result.worldGenerationStats.afterBiddingCount
          << " after_follow_suit=" << result.worldGenerationStats.afterFollowSuitCount

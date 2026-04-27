@@ -3974,10 +3974,31 @@ namespace alpha_mu
       activeIds << result.activeWorldIndices[i];
     }
 
+    unsigned childFrontVectorTotal = 0;
+    unsigned childFrontVectorMax = 0;
+    for (unsigned i = 0; i < result.rootReport.children.size(); i++)
+    {
+      const unsigned childVectors = static_cast<unsigned>(
+        result.rootReport.children[i].front.vectors.size());
+      childFrontVectorTotal += childVectors;
+      if (childVectors > childFrontVectorMax)
+        childFrontVectorMax = childVectors;
+    }
+
     ostringstream expectedDecisionLine;
     expectedDecisionLine << "ALPHA_MU_DECISION raw_worlds="
                          << result.worldCount
                          << " surviving_worlds=" << result.survivingWorldCount
+                         << " root_vectors="
+                         << result.rootFront.vectors.size()
+                         << " root_valid_worlds="
+                         << result.rootReport.validWorlds.PopCount()
+                         << " root_useful_worlds="
+                         << result.rootReport.usefulWorlds.PopCount()
+                         << " child_count="
+                         << result.rootReport.children.size()
+                         << " child_vectors_total=" << childFrontVectorTotal
+                         << " child_vectors_max=" << childFrontVectorMax
                          << " after_known_cards="
                          << result.worldGenerationStats.afterKnownCardCount
                          << " after_bidding="
@@ -4019,6 +4040,20 @@ namespace alpha_mu
     expectedActiveIdsLine << "  Active raw world ids: "
                           << activeIds.str();
 
+    ostringstream expectedFrontSummaryLine;
+    expectedFrontSummaryLine << "  Front summary: root_vectors="
+                             << result.rootFront.vectors.size()
+                             << ", root_valid_worlds="
+                             << result.rootReport.validWorlds.PopCount()
+                             << ", root_useful_worlds="
+                             << result.rootReport.usefulWorlds.PopCount()
+                             << ", child_count="
+                             << result.rootReport.children.size()
+                             << ", child_vectors_total="
+                             << childFrontVectorTotal
+                             << ", child_vectors_max="
+                             << childFrontVectorMax;
+
     ostringstream capture;
     streambuf * const original = cout.rdbuf(capture.rdbuf());
     ReportAlphaMuSolveResult(result);
@@ -4031,6 +4066,8 @@ namespace alpha_mu
       "decision-point reporting regression should emit the human-readable world-pipeline summary");
     Check(output.find(expectedActiveIdsLine.str()) != string::npos,
       "decision-point reporting regression should emit the active raw-world identities");
+    Check(output.find(expectedFrontSummaryLine.str()) != string::npos,
+      "decision-point reporting regression should emit the Stage 6.2 front-summary aggregates");
   }
 
   static void TestPracticalMultiWorldContinuationDepth2Stable()
