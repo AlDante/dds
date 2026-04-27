@@ -1632,6 +1632,100 @@ namespace alpha_mu
   }
 
 
+  static void TestHistoryDerivedConstructionUsesCombinedBiddingProfile()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld(
+      "N:A3.AKT7.AKT7.A32 QJ98.QJ98.QJ9.QJ K2.65432.65432.K T7654..8.T987654");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    const auto addHasCards =
+      [&](const int seat, const int suit, const string& ranks)
+      {
+        for (unsigned i = 0; i < ranks.size(); i++)
+        {
+          unconstrainedInfo.biddingConstraints.push_back(
+            WorldConstraint::HasCard(seat, suit, ranks[i]));
+        }
+      };
+
+    addHasCards(SEAT_EAST, SUIT_SPADES, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_HEARTS, "QJ98");
+    addHasCards(SEAT_EAST, SUIT_DIAMONDS, "QJ9");
+    addHasCards(SEAT_EAST, SUIT_CLUBS, "Q");
+    addHasCards(SEAT_WEST, SUIT_SPADES, "7654");
+    addHasCards(SEAT_WEST, SUIT_DIAMONDS, "8");
+    addHasCards(SEAT_WEST, SUIT_CLUBS, "T987654");
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without the combined bidding profile the full hidden-hand fixture should keep the two legal ambiguous spade-versus-club worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_CLUBS, 2));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_CLUBS, 2));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MinHCP(SEAT_EAST, 12));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::MaxHCP(SEAT_EAST, 12));
+    constrainedInfo.biddingConstraints.push_back(
+      WorldConstraint::Balanced(SEAT_EAST));
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local combined bidding-profile pruning should keep only the full-hand world matching East's club length, exact HCP, and balanced-shape profile");
+    Check(WorldSuitLength(constrained.worlds[0], SEAT_EAST, SUIT_CLUBS) == 2,
+      "the world surviving constructor-local combined bidding-profile pruning should give East exactly two clubs");
+    Check(WorldHighCardPoints(constrained.worlds[0], SEAT_EAST) == 12,
+      "the world surviving constructor-local combined bidding-profile pruning should give East exactly twelve HCP");
+    Check(WorldHasBalancedShape(constrained.worlds[0], SEAT_EAST),
+      "the world surviving constructor-local combined bidding-profile pruning should keep East balanced");
+    Check(WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_CLUBS, 'J'),
+      "constructor-local combined bidding-profile pruning should keep the world where East receives the ambiguous club rather than the ambiguous spade");
+
+    WorldGenerationStats stats;
+    const WorldMask mask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &stats);
+    Check(mask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local combined bidding-profile pruning should also survive the later staged filters");
+    Check(stats.afterBiddingCount == 1,
+      "later bidding-stage filtering should see only the constructor-pruned combined bidding-profile survivor");
+
+    const HistoryDerivedConstructionExplanation explanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    Check(explanation.stats.afterConstructorLengthCount == 1 &&
+          explanation.stats.afterConstructorHCPCount == 1 &&
+          explanation.stats.afterConstructorBalancedCount == 1,
+      "constructor-local combined bidding-profile explanation should narrow at the length stage and preserve the lone survivor through the later HCP and balanced stages");
+    Check(explanation.stats.afterConstructorConstraintCount == 1 &&
+          explanation.stats.finalWorldCount == 1,
+      "constructor-local combined bidding-profile explanation should report a single final survivor");
+    Check(explanation.worlds.size() >= 2,
+      "constructor-local combined bidding-profile explanation should still describe both the accepted full-hand world and at least one rejected alternative");
+
+    unsigned acceptedWorlds = 0;
+    unsigned rejectedAtConstructorLength = 0;
+    for (unsigned i = 0; i < explanation.worlds.size(); i++)
+    {
+      if (explanation.worlds[i].accepted)
+        acceptedWorlds++;
+      else if (explanation.worlds[i].rejectionStage == "constructor_length" &&
+               explanation.worlds[i].rejectionReason.find("at least 2 cards in clubs") != string::npos)
+      {
+        rejectedAtConstructorLength++;
+      }
+    }
+    Check(acceptedWorlds == 1 && rejectedAtConstructorLength >= 1,
+      "constructor-local combined bidding-profile explanation should show one accepted full-hand world and at least one constructor_length rejection at East's club-length requirement");
+  }
+
+
   static void TestHistoryDerivedConstructionUsesBiddingHandType()
   {
     HistoryDerivedWorldSpec spec;
@@ -4476,6 +4570,7 @@ namespace alpha_mu
       {"history-derived bidding MinHCP construction OK", &TestHistoryDerivedConstructionUsesBiddingMinHCP},
       {"history-derived bidding MaxHCP construction OK", &TestHistoryDerivedConstructionUsesBiddingMaxHCP},
       {"history-derived bidding balanced construction OK", &TestHistoryDerivedConstructionUsesBiddingBalancedShape},
+      {"history-derived combined bidding profile construction OK", &TestHistoryDerivedConstructionUsesCombinedBiddingProfile},
       {"history-derived bidding hand-type construction OK", &TestHistoryDerivedConstructionUsesBiddingHandType},
       {"history-derived balanced deferral on incomplete hands OK", &TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands},
       {"history-derived hand-type deferral on incomplete hands OK", &TestHistoryDerivedConstructionHandTypeDefersOnIncompleteHands},

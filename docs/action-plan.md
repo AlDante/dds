@@ -120,6 +120,19 @@ the table.
 - and at least one board where richer bidding/play information narrows the
   world set in a way that changes the reported recommendation.
 
+### Current Stage 3.2 status
+
+The first narrow `Stage 3.2` slice is now in place:
+
+- the regression suite includes a combined full-hand bidding-profile case that
+  uses the existing scoped auction-side model without introducing new auction
+  interpretation,
+- that case now verifies constructor-local pruning, later staged bidding
+  filtering, and explanation-stage accounting under a combined exact club
+  length, exact HCP, and balanced-shape profile,
+- and this keeps the current external-auction boundary tight while broadening
+  regression coverage for realistic bidding-derived world narrowing.
+
 ## Workstream 3 — decision-point post-mortem runner
 
 ### Goal

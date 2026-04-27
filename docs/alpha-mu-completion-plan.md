@@ -391,6 +391,17 @@ The first `S3.1` slice is now in place at the contract/documentation level:
   still reporting-only, while staged filtering and replay remain hard world-set
   semantics.
 
+Also now present as the first narrow `S3.2` slice:
+
+- the regression suite includes a combined full-hand bidding-profile case using
+  exact club length, exact HCP, and balanced-shape constraints on the same
+  history-derived fixture,
+- that case verifies constructor-local pruning, later staged bidding filtering,
+  and explanation accounting stay aligned under a richer scoped auction-side
+  profile,
+- and it broadens bidding-derived regression coverage without introducing any
+  new auction interpretation semantics.
+
 ### Goal
 
 Move from curated partial-information examples toward realistic declarer
