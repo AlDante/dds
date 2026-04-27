@@ -1217,9 +1217,19 @@ namespace alpha_mu
     futureTricks fut;
     memset(&fut, 0, sizeof(fut));
 
+    if (context.benchmarkProgress != NULL)
+      context.benchmarkProgress->ddsLeafCalls++;
+
     const dealPBN deal = MakeDDSDealPBN(state, state.worlds[worldIndex]);
+    const chrono::steady_clock::time_point ddsStart =
+      chrono::steady_clock::now();
     const int ret = SolveBoardPBN(deal, -1, 1, 1, &fut,
       context.ddsThreadId);
+    if (context.benchmarkProgress != NULL)
+    {
+      context.benchmarkProgress->ddsLeafSeconds += chrono::duration<double>(
+        chrono::steady_clock::now() - ddsStart).count();
+    }
     CheckDDS(ret, "SolveBoardPBN exact bridge DDS score");
 
     const int best = BestScore(fut);

@@ -114,6 +114,39 @@ def update_reported_benchmark_settings(
             status[status_name] = raw_value
 
 
+def parse_int_field(fields: dict[str, str], name: str) -> int | str | None:
+    raw_value = fields.get(name)
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except ValueError:
+        return raw_value
+
+
+def parse_float_field(fields: dict[str, str], name: str) -> float | str | None:
+    raw_value = fields.get(name)
+    if raw_value is None:
+        return None
+    try:
+        return float(raw_value)
+    except ValueError:
+        return raw_value
+
+
+def extract_alpha_mu_benchmark_metrics(fields: dict[str, str]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    for field_name in ("search_nodes", "dds_leaf_calls"):
+        value = parse_int_field(fields, field_name)
+        if value is not None:
+            metrics[field_name] = value
+    for field_name in ("dds_leaf_seconds", "bridge_search_seconds"):
+        value = parse_float_field(fields, field_name)
+        if value is not None:
+            metrics[field_name] = value
+    return metrics
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run alpha_mu benchmark modes with live checkpoint logging."
@@ -226,6 +259,7 @@ def main() -> int:
         "last_checkpoint_line": "",
         "last_progress_line": "",
         "benchmark_summary_line": "",
+        "benchmark_summary_metrics": {},
         "per_board_seconds": [],
         "completed_board_numbers": [],
         "per_board_timings": [],
@@ -300,6 +334,7 @@ def main() -> int:
                 key, value = token.split("=", 1)
                 fields[key] = value
             update_reported_benchmark_settings(status, fields)
+            board_metrics = extract_alpha_mu_benchmark_metrics(fields)
             board_value = fields.get("board_seconds")
             board_number_value = fields.get("board")
             if board_value is not None:
@@ -312,9 +347,12 @@ def main() -> int:
                     board_number = int(board_number_value)
                     board_seconds = float(board_value)
                     status["completed_board_numbers"].append(board_number)
-                    status["per_board_timings"].append(
-                        {"board": board_number, "seconds": board_seconds}
-                    )
+                    timing_entry: dict[str, Any] = {
+                        "board": board_number,
+                        "seconds": board_seconds,
+                    }
+                    timing_entry.update(board_metrics)
+                    status["per_board_timings"].append(timing_entry)
                     current_progress = status.get("current_board_progress")
                     if isinstance(current_progress, dict) and current_progress.get("board") == board_number:
                         status["current_board_progress"] = {}
@@ -329,6 +367,7 @@ def main() -> int:
                 fields[key] = value
             update_reported_benchmark_settings(status, fields)
             status["benchmark_summary_line"] = item.rstrip("\n")
+            status["benchmark_summary_metrics"] = extract_alpha_mu_benchmark_metrics(fields)
         write_status(status_path, status)
 
     returncode = proc.wait()

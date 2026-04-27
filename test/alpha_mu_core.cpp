@@ -350,12 +350,20 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
       double boardElapsedSeconds;
       double completionElapsedSeconds;
       unsigned mismatches;
+      unsigned long long searchNodes;
+      unsigned long long ddsLeafCalls;
+      double ddsLeafSeconds;
+      double bridgeSearchSeconds;
 
       AlphaMuBenchmarkBoardResult() :
         boardNumber(0),
         boardElapsedSeconds(0.0),
         completionElapsedSeconds(0.0),
-        mismatches(0)
+        mismatches(0),
+        searchNodes(0ULL),
+        ddsLeafCalls(0ULL),
+        ddsLeafSeconds(0.0),
+        bridgeSearchSeconds(0.0)
       {
       }
     };
@@ -414,27 +422,25 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
       const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[boardIndex]);
 
       BenchmarkBoardProgressContext progress;
-      if (enableProgress)
-      {
-        progress.method = "alpha_mu";
-        progress.handFile = resolvedHandFile;
-        progress.boardNumber = boardNumber;
-        progress.totalBoards = totalBoards;
-        progress.depth = options.depth;
-        progress.parallelMode = options.parallelMode;
-        progress.boardWorkers = options.boardWorkers;
-        progress.rootWorkers = options.rootWorkers;
-        progress.ddsThreadId = ddsThreadId;
-        progress.configuredBoardWorkers = configuredBoardWorkers;
-        progress.reportIntervalSeconds = BenchmarkProgressIntervalSeconds();
-        progress.totalStart = benchmarkStart;
-        progress.boardStart = boardStart;
-        progress.nextReportSeconds = progress.reportIntervalSeconds;
-      }
+      progress.method = "alpha_mu";
+      progress.handFile = resolvedHandFile;
+      progress.boardNumber = boardNumber;
+      progress.totalBoards = totalBoards;
+      progress.depth = options.depth;
+      progress.parallelMode = options.parallelMode;
+      progress.boardWorkers = options.boardWorkers;
+      progress.rootWorkers = options.rootWorkers;
+      progress.ddsThreadId = ddsThreadId;
+      progress.configuredBoardWorkers = configuredBoardWorkers;
+      progress.reportIntervalSeconds = (enableProgress ?
+        BenchmarkProgressIntervalSeconds() : 1.0e30);
+      progress.totalStart = benchmarkStart;
+      progress.boardStart = boardStart;
+      progress.nextReportSeconds = progress.reportIntervalSeconds;
 
       const SearchExecutionContext searchContext = MakeSearchExecutionContext(
         ddsThreadId,
-        (enableProgress && progress.reportIntervalSeconds > 0.0 ? &progress : NULL),
+        &progress,
         options.parallelMode,
         options.boardWorkers,
         options.rootWorkers);
@@ -452,6 +458,11 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
         chrono::steady_clock::now() - benchmarkStart).count();
       result.mismatches = static_cast<unsigned>(
         alphaScore != BestScore(data.futList[boardIndex]));
+      result.searchNodes = max(1ULL, progress.recursiveCalls);
+      result.ddsLeafCalls = progress.ddsLeafCalls;
+      result.ddsLeafSeconds = progress.ddsLeafSeconds;
+      result.bridgeSearchSeconds = max(0.0,
+        result.boardElapsedSeconds - result.ddsLeafSeconds);
       return result;
     }
   }
@@ -466,7 +477,11 @@ void ReportBenchmarkBoardTiming(
     const BenchmarkMethodSummary& summary,
     const unsigned boardNumber,
     const double boardElapsedSeconds,
-    const double totalElapsedSeconds);
+    const double totalElapsedSeconds,
+    const unsigned long long searchNodes,
+    const unsigned long long ddsLeafCalls,
+    const double ddsLeafSeconds,
+    const double bridgeSearchSeconds);
 BenchmarkMethodSummary BenchmarkDDSExactBoards(
     const string& handFile,
     const int maxBoards,
@@ -579,9 +594,15 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
           summary.configuredBoardWorkers,
           baseThreadId, start, true);
         summary.mismatches += result.mismatches;
+        summary.searchNodes += result.searchNodes;
+        summary.ddsLeafCalls += result.ddsLeafCalls;
+        summary.ddsLeafSeconds += result.ddsLeafSeconds;
+        summary.bridgeSearchSeconds += result.bridgeSearchSeconds;
         summary.perBoardSeconds.push_back(result.boardElapsedSeconds);
         ReportBenchmarkBoardTiming(summary, result.boardNumber,
-          result.boardElapsedSeconds, result.completionElapsedSeconds);
+          result.boardElapsedSeconds, result.completionElapsedSeconds,
+          result.searchNodes, result.ddsLeafCalls, result.ddsLeafSeconds,
+          result.bridgeSearchSeconds);
 
         if (checkpointSeconds > 0.0)
         {
@@ -641,11 +662,17 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
       for (unsigned i = 0; i < results.size(); i++)
       {
         summary.mismatches += results[i].mismatches;
+        summary.searchNodes += results[i].searchNodes;
+        summary.ddsLeafCalls += results[i].ddsLeafCalls;
+        summary.ddsLeafSeconds += results[i].ddsLeafSeconds;
+        summary.bridgeSearchSeconds += results[i].bridgeSearchSeconds;
         summary.perBoardSeconds.push_back(results[i].boardElapsedSeconds);
         reportedElapsedSeconds = max(reportedElapsedSeconds,
           results[i].completionElapsedSeconds);
         ReportBenchmarkBoardTiming(summary, results[i].boardNumber,
-          results[i].boardElapsedSeconds, reportedElapsedSeconds);
+          results[i].boardElapsedSeconds, reportedElapsedSeconds,
+          results[i].searchNodes, results[i].ddsLeafCalls,
+          results[i].ddsLeafSeconds, results[i].bridgeSearchSeconds);
 
         if (checkpointSeconds > 0.0)
         {

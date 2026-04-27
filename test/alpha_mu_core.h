@@ -1609,6 +1609,10 @@ namespace alpha_mu
     int configuredBoardWorkers;
     double elapsedSeconds;
     unsigned mismatches;
+    unsigned long long searchNodes;
+    unsigned long long ddsLeafCalls;
+    double ddsLeafSeconds;
+    double bridgeSearchSeconds;
     vector<double> perBoardSeconds;
 
     BenchmarkMethodSummary() :
@@ -1623,6 +1627,10 @@ namespace alpha_mu
       configuredBoardWorkers(1),
       elapsedSeconds(0.0),
       mismatches(0),
+      searchNodes(0ULL),
+      ddsLeafCalls(0ULL),
+      ddsLeafSeconds(0.0),
+      bridgeSearchSeconds(0.0),
       perBoardSeconds()
     {
     }
@@ -2210,7 +2218,7 @@ namespace alpha_mu
   double BenchmarkCheckpointIntervalSeconds();
   void ReportBenchmarkCheckpoint( const BenchmarkMethodSummary& summary, const unsigned completedBoards, const double elapsedSeconds);
   double BenchmarkProgressIntervalSeconds();
-  void ReportBenchmarkBoardTiming( const BenchmarkMethodSummary& summary, const unsigned boardNumber, const double boardElapsedSeconds, const double totalElapsedSeconds);
+  void ReportBenchmarkBoardTiming( const BenchmarkMethodSummary& summary, const unsigned boardNumber, const double boardElapsedSeconds, const double totalElapsedSeconds, const unsigned long long searchNodes = 0ULL, const unsigned long long ddsLeafCalls = 0ULL, const double ddsLeafSeconds = 0.0, const double bridgeSearchSeconds = 0.0);
   /** @brief Benchmark exact DDS solves over a chosen hand-file workload. */
   BenchmarkMethodSummary BenchmarkDDSExactBoards( const string& handFile, const int maxBoards, const string& skipSpec);
   /** @brief Benchmark one-world exact alpha-mu solves over a chosen hand-file workload. */

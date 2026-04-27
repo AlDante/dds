@@ -118,6 +118,19 @@ namespace alpha_mu
       return (denominator == 0ULL ? 0.0 :
         static_cast<double>(numerator) / static_cast<double>(denominator));
     }
+
+    void AppendAlphaMuBenchmarkMetrics(
+      ostream& os,
+      const unsigned long long searchNodes,
+      const unsigned long long ddsLeafCalls,
+      const double ddsLeafSeconds,
+      const double bridgeSearchSeconds)
+    {
+      os << " search_nodes=" << searchNodes
+         << " dds_leaf_calls=" << ddsLeafCalls
+         << " dds_leaf_seconds=" << ddsLeafSeconds
+         << " bridge_search_seconds=" << bridgeSearchSeconds;
+    }
   }
 
   void ReportBenchmarkMethodSummary(
@@ -144,7 +157,14 @@ namespace alpha_mu
              (summary.boardsTested == 0 ? 0.0 :
                summary.elapsedSeconds / static_cast<double>(summary.boardsTested)) :
              sumPerBoard / static_cast<double>(summary.perBoardSeconds.size()))
-         << " mismatches=" << summary.mismatches
+         << " mismatches=" << summary.mismatches;
+    if (summary.method == "alpha_mu")
+    {
+      AppendAlphaMuBenchmarkMetrics(cout, summary.searchNodes,
+        summary.ddsLeafCalls, summary.ddsLeafSeconds,
+        summary.bridgeSearchSeconds);
+    }
+    cout
          << "\n";
     Check(summary.mismatches == 0,
       "benchmark mode should preserve the exact golden FUT score on every tested board");
@@ -168,7 +188,14 @@ namespace alpha_mu
          << " dds_thread_id=" << summary.ddsThreadId
          << " configured_board_workers=" << summary.configuredBoardWorkers
          << " elapsed_seconds=" << elapsedSeconds
-         << " mismatches=" << summary.mismatches
+         << " mismatches=" << summary.mismatches;
+    if (summary.method == "alpha_mu")
+    {
+      AppendAlphaMuBenchmarkMetrics(cout, summary.searchNodes,
+        summary.ddsLeafCalls, summary.ddsLeafSeconds,
+        summary.bridgeSearchSeconds);
+    }
+    cout
          << endl;
   }
 
@@ -176,7 +203,11 @@ namespace alpha_mu
     const BenchmarkMethodSummary& summary,
     const unsigned boardNumber,
     const double boardElapsedSeconds,
-    const double totalElapsedSeconds)
+    const double totalElapsedSeconds,
+    const unsigned long long searchNodes,
+    const unsigned long long ddsLeafCalls,
+    const double ddsLeafSeconds,
+    const double bridgeSearchSeconds)
   {
     cout.setf(ios::fixed);
     cout << setprecision(6);
@@ -192,7 +223,13 @@ namespace alpha_mu
          << " configured_board_workers=" << summary.configuredBoardWorkers
          << " board_seconds=" << boardElapsedSeconds
          << " elapsed_seconds=" << totalElapsedSeconds
-         << " mismatches=" << summary.mismatches
+         << " mismatches=" << summary.mismatches;
+    if (summary.method == "alpha_mu")
+    {
+      AppendAlphaMuBenchmarkMetrics(cout, searchNodes, ddsLeafCalls,
+        ddsLeafSeconds, bridgeSearchSeconds);
+    }
+    cout
          << endl;
   }
 

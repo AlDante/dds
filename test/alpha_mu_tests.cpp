@@ -3491,6 +3491,58 @@ namespace alpha_mu
   }
 
 
+  static void TestBenchmarkReportingEmitsAlphaMuSearchMetrics()
+  {
+    BenchmarkMethodSummary summary;
+    summary.method = "alpha_mu";
+    summary.handFile = "../hands/list1.txt";
+    summary.boardsTested = 2;
+    summary.depth = 1;
+    summary.parallelMode = ALPHA_MU_PARALLEL_SERIAL;
+    summary.boardWorkers = 1;
+    summary.rootWorkers = 1;
+    summary.ddsThreadId = 0;
+    summary.configuredBoardWorkers = 1;
+    summary.elapsedSeconds = 3.0;
+    summary.searchNodes = 321ULL;
+    summary.ddsLeafCalls = 654ULL;
+    summary.ddsLeafSeconds = 1.250;
+    summary.bridgeSearchSeconds = 1.750;
+    summary.perBoardSeconds.push_back(1.0);
+    summary.perBoardSeconds.push_back(2.0);
+
+    ostringstream capture;
+    streambuf * const original = cout.rdbuf(capture.rdbuf());
+    ReportBenchmarkBoardTiming(summary, 1, 1.5, 1.5, 123ULL, 45ULL, 0.250, 1.250);
+    ReportBenchmarkCheckpoint(summary, 1, 1.5);
+    ReportBenchmarkMethodSummary(summary);
+    cout.rdbuf(original);
+
+    const string output = capture.str();
+    Check(output.find("search_nodes=123 dds_leaf_calls=45 dds_leaf_seconds=0.250000 bridge_search_seconds=1.250000") != string::npos,
+      "benchmark reporting regression should emit per-board alpha-mu search and DDS timing metrics in the machine-readable board log");
+    Check(output.find("search_nodes=321 dds_leaf_calls=654 dds_leaf_seconds=1.250000 bridge_search_seconds=1.750000") != string::npos,
+      "benchmark reporting regression should emit aggregate alpha-mu search and DDS timing metrics in the checkpoint and summary logs");
+  }
+
+
+  static void TestBenchmarkSummaryTracksAlphaMuSearchMetrics()
+  {
+    SetMaxThreads(0);
+
+    AlphaMuBenchmarkOptions options;
+    options.handFile = "../hands/list1.txt";
+    options.depth = 1;
+    options.maxBoards = 1;
+
+    const BenchmarkMethodSummary summary = BenchmarkAlphaMuExactBoards(options);
+    Check(summary.searchNodes > 0 && summary.ddsLeafCalls > 0,
+      "depth-1 alpha-mu benchmark summaries should record non-zero search-node and DDS-leaf counts");
+    Check(summary.ddsLeafSeconds >= 0.0 && summary.bridgeSearchSeconds >= 0.0,
+      "depth-1 alpha-mu benchmark summaries should record non-negative DDS and bridge-search timing splits");
+  }
+
+
   static void TestAlphaMuBenchmarkOptionsOverloadParity()
   {
     SetMaxThreads(0);
@@ -3514,12 +3566,18 @@ namespace alpha_mu
           legacy.rootWorkers == explicitSummary.rootWorkers &&
           legacy.ddsThreadId == explicitSummary.ddsThreadId &&
           legacy.configuredBoardWorkers == explicitSummary.configuredBoardWorkers &&
+          legacy.searchNodes == explicitSummary.searchNodes &&
+          legacy.ddsLeafCalls == explicitSummary.ddsLeafCalls &&
           legacy.mismatches == explicitSummary.mismatches,
-      "benchmark options overload should preserve the legacy benchmark summary fields and serial execution metadata");
+      "benchmark options overload should preserve the legacy benchmark summary fields, aggregate alpha-mu search counts, and serial execution metadata");
     Check(legacy.perBoardSeconds.size() == explicitSummary.perBoardSeconds.size(),
       "benchmark options overload should preserve the number of measured per-board timings");
     Check(legacy.mismatches == 0 && explicitSummary.mismatches == 0,
       "benchmark options overload should preserve exact alpha-mu benchmark scores");
+    Check(legacy.ddsLeafSeconds >= 0.0 && legacy.bridgeSearchSeconds >= 0.0 &&
+          explicitSummary.ddsLeafSeconds >= 0.0 &&
+          explicitSummary.bridgeSearchSeconds >= 0.0,
+      "benchmark options overload should populate the aggregate alpha-mu search and DDS timing metrics");
   }
 
 
@@ -3566,6 +3624,14 @@ namespace alpha_mu
     Check(serialSummary.perBoardSeconds.size() == 2 &&
           parallelSummary.perBoardSeconds.size() == 2,
       "board-parallel benchmark mode should still report one per-board timing per selected board");
+    Check(serialSummary.searchNodes == parallelSummary.searchNodes &&
+          serialSummary.ddsLeafCalls == parallelSummary.ddsLeafCalls,
+      "board-parallel benchmark mode should preserve aggregate alpha-mu node and DDS-leaf counts across execution modes");
+    Check(serialSummary.ddsLeafSeconds >= 0.0 &&
+          serialSummary.bridgeSearchSeconds >= 0.0 &&
+          parallelSummary.ddsLeafSeconds >= 0.0 &&
+          parallelSummary.bridgeSearchSeconds >= 0.0,
+      "board-parallel benchmark mode should report non-negative aggregate alpha-mu timing splits");
   }
 
 
@@ -5045,6 +5111,8 @@ namespace alpha_mu
        {"DDS leaf demo and leaf parallelization OK", &TestDDSLeafDemo},
        {"bridge search execution context parity OK", &TestBridgeSearchExplicitExecutionContext},
        {"benchmark option normalization OK", &TestAlphaMuBenchmarkOptionNormalization},
+       {"benchmark reporting metrics OK", &TestBenchmarkReportingEmitsAlphaMuSearchMetrics},
+       {"benchmark summary metrics OK", &TestBenchmarkSummaryTracksAlphaMuSearchMetrics},
        {"benchmark overload parity OK", &TestAlphaMuBenchmarkOptionsOverloadParity},
        {"board-parallel benchmark parity OK", &TestBoardParallelBenchmarkParity},
        {"repeated DDS reinitialization OK", &TestRepeatedDDSReinitializationKeepsThreadContext},

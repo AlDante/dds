@@ -333,6 +333,15 @@ Already present today:
 - the decision-point runner now splits search time into bridge-search time and DDS leaf time,
 - and bridge-search cut/termination counters now distinguish empty-world, TT-hit, DDS-leaf, no-move, and terminal-front returns.
 
+Also now present in the benchmark path:
+
+- machine-readable benchmark board and summary logs expose aggregate search-node
+  counts, DDS-leaf counts, DDS-leaf seconds, and bridge-search-only seconds,
+- the live `test/run_alpha_mu_benchmark.py` wrapper persists those metrics in its
+  status JSON for automation,
+- and regression coverage now locks both the reporting format and the populated
+  depth-1 metric path.
+
 ### Tasks
 
 Measure and report at least:

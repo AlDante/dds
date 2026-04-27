@@ -588,6 +588,15 @@ The current machine-readable decision log now also exposes:
 This keeps the recently added weighted root policy and front-churn metrics
 visible to scripts as well as to the human-readable report.
 
+Also now present in the benchmark surfaces:
+
+- machine-readable benchmark board and summary lines expose aggregate search-node
+  counts, DDS-leaf counts, DDS-leaf seconds, and bridge-search-only seconds,
+- the live benchmark runner persists those metrics into its status JSON for
+  post-processing,
+- and regression coverage now locks the reporting format plus the depth-1 metric
+  population path.
+
 ### Goal
 
 Make alpha-mu performance visible enough that optimization decisions are driven
