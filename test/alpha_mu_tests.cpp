@@ -4363,7 +4363,25 @@ namespace alpha_mu
                          << " sampled_out="
                          << result.worldGenerationStats.sampledOutWorlds
                          << " active_world_ids="
-                         << activeIds.str();
+                         << activeIds.str()
+                         << " front_insert_attempts="
+                         << result.bridgeSearchStats.frontInsertAttempts
+                         << " front_insert_accepts="
+                         << result.bridgeSearchStats.frontAcceptedInserts
+                         << " front_dominated_rejects="
+                         << result.bridgeSearchStats.frontDominatedRejects
+                         << " front_dominated_removed="
+                         << result.bridgeSearchStats.frontDominatedRemoved
+                         << " max_merge_calls="
+                         << result.bridgeSearchStats.maxMergeCalls
+                         << " min_product_calls="
+                         << result.bridgeSearchStats.minProductCalls
+                         << " optimistic_completions="
+                         << result.bridgeSearchStats.optimisticCompletions
+                         << " decision_policy="
+                         << AlphaMuDecisionPolicyName(result.appliedDecisionPolicy)
+                         << " chosen_weighted="
+                         << result.chosenMoveWeightedScore;
 
     ostringstream expectedHumanReadablePipeline;
     expectedHumanReadablePipeline << "  World pipeline: known="

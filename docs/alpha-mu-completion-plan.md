@@ -556,6 +556,18 @@ This stage is done when:
 
 ## Stage 6 — complete Workstream 6 instrumentation
 
+### Status update (2026-04-27)
+
+The current machine-readable decision log now also exposes:
+
+- front-insert attempt / accept / dominance counters,
+- merge/product / optimistic-completion counters,
+- and the explicit applied decision policy together with the chosen weighted
+  score.
+
+This keeps the recently added weighted root policy and front-churn metrics
+visible to scripts as well as to the human-readable report.
+
 ### Goal
 
 Make alpha-mu performance visible enough that optimization decisions are driven
