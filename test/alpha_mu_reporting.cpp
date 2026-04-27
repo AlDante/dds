@@ -43,6 +43,51 @@ namespace alpha_mu
       return oss.str();
     }
 
+    string FriendlyStageName(const string& stage)
+    {
+      if (stage == "known_cards")
+        return "known cards";
+      if (stage == "bidding")
+        return "bidding";
+      if (stage == "follow_suit")
+        return "follow suit";
+      if (stage == "play_history")
+        return "play history";
+      if (stage == "current_trick")
+        return "current trick";
+      if (stage == "deduplication")
+        return "deduplication";
+      if (stage == "sampling")
+        return "sampling";
+      if (stage == "decision_world_set")
+        return "decision world set";
+      if (stage == "constructor_length")
+        return "constructor length";
+      if (stage == "constructor_hcp")
+        return "constructor HCP";
+      if (stage == "constructor_balanced")
+        return "constructor shape";
+      return stage;
+    }
+
+    string PassedPathSummary(const WorldExplanation& world)
+    {
+      ostringstream oss;
+      bool first = true;
+      for (unsigned i = 0; i < world.steps.size(); i++)
+      {
+        if (! world.steps[i].passed)
+          break;
+        if (! first)
+          oss << " -> ";
+        oss << FriendlyStageName(world.steps[i].stage);
+        first = false;
+      }
+      if (first)
+        return "none";
+      return oss.str();
+    }
+
     unsigned CountChildFrontVectors(const BridgeRootReport& report)
     {
       unsigned total = 0;
@@ -411,6 +456,7 @@ namespace alpha_mu
              << " " << world.serializedWorld;
         if (! world.satisfiedPlausibilityHints.empty())
           cout << " | matched=" << world.satisfiedPlausibilityHints[0];
+        cout << " | passed_path=" << PassedPathSummary(world);
         cout << endl;
       }
     }
@@ -425,8 +471,13 @@ namespace alpha_mu
         cout << "  Sample rejected worlds:" << endl;
 
       cout << "    [" << result.worldExplanation.worlds[i].worldIndex << "] "
-           << result.worldExplanation.worlds[i].rejectionStage << ": "
-           << result.worldExplanation.worlds[i].rejectionReason << endl;
+           << "rejected at "
+           << FriendlyStageName(result.worldExplanation.worlds[i].rejectionStage)
+           << " because "
+           << result.worldExplanation.worlds[i].rejectionReason
+           << " | passed_path="
+           << PassedPathSummary(result.worldExplanation.worlds[i])
+           << endl;
       rejectedLines++;
     }
 

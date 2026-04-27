@@ -412,6 +412,16 @@ Also now present as the first narrow `S3.3` slice:
   filtering both describe the narrowing as a void-suit legality consequence,
   not as a heuristic inference.
 
+Also now present as the first narrow `S3.5` slice:
+
+- decision reporting now emits friendlier stage names and passed-path summaries
+  for both surviving and rejected worlds,
+- rejected worlds are now described in plain language as being rejected at a
+  particular stage because of a particular hard fact,
+- and regression coverage now checks that those richer explanation strings stay
+  aligned with the structured explanation data rather than inventing new
+  semantics in reporting.
+
 ### Goal
 
 Move from curated partial-information examples toward realistic declarer

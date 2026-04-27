@@ -4182,6 +4182,53 @@ namespace alpha_mu
     const double nonDDSSearchSeconds =
       max(0.0, result.searchSeconds - result.ddsLeafSeconds);
 
+    const auto friendlyStageName =
+      [&](const string& stage) -> string
+      {
+        if (stage == "known_cards")
+          return "known cards";
+        if (stage == "bidding")
+          return "bidding";
+        if (stage == "follow_suit")
+          return "follow suit";
+        if (stage == "play_history")
+          return "play history";
+        if (stage == "current_trick")
+          return "current trick";
+        if (stage == "deduplication")
+          return "deduplication";
+        if (stage == "sampling")
+          return "sampling";
+        if (stage == "decision_world_set")
+          return "decision world set";
+        if (stage == "constructor_length")
+          return "constructor length";
+        if (stage == "constructor_hcp")
+          return "constructor HCP";
+        if (stage == "constructor_balanced")
+          return "constructor shape";
+        return stage;
+      };
+
+    const auto passedPathSummary =
+      [&](const WorldExplanation& world) -> string
+      {
+        ostringstream oss;
+        bool first = true;
+        for (unsigned i = 0; i < world.steps.size(); i++)
+        {
+          if (! world.steps[i].passed)
+            break;
+          if (! first)
+            oss << " -> ";
+          oss << friendlyStageName(world.steps[i].stage);
+          first = false;
+        }
+        if (first)
+          return "none";
+        return oss.str();
+      };
+
     ostringstream expectedDecisionLine;
     expectedDecisionLine << "ALPHA_MU_DECISION raw_worlds="
                          << result.worldCount
@@ -4295,6 +4342,43 @@ namespace alpha_mu
                    << ", reuse_cuts=" << result.bridgeSearchStats.ttCuts
                    << ", hit_rate=" << ttHitRate;
 
+    ostringstream expectedTopWorldLine;
+    const unsigned topWorldIndex =
+      result.worldExplanation.plausibilityRankedWorldIndices[0];
+    const WorldExplanation& topWorld =
+      result.worldExplanation.worlds[topWorldIndex];
+    expectedTopWorldLine << "    [" << topWorldIndex << "] score="
+                         << topWorld.plausibilityScore << "/"
+                         << topWorld.plausibilityMaxScore
+                         << " " << topWorld.serializedWorld;
+    if (! topWorld.satisfiedPlausibilityHints.empty())
+      expectedTopWorldLine << " | matched="
+                           << topWorld.satisfiedPlausibilityHints[0];
+    expectedTopWorldLine << " | passed_path="
+                         << passedPathSummary(topWorld);
+
+    unsigned rejectedWorldIndex = result.worldExplanation.worlds.size();
+    for (unsigned i = 0; i < result.worldExplanation.worlds.size(); i++)
+    {
+      if (! result.worldExplanation.worlds[i].accepted)
+      {
+        rejectedWorldIndex = i;
+        break;
+      }
+    }
+    Check(rejectedWorldIndex < result.worldExplanation.worlds.size(),
+      "decision-point reporting regression should have at least one rejected world to describe in plain language");
+    const WorldExplanation& rejectedWorld =
+      result.worldExplanation.worlds[rejectedWorldIndex];
+    ostringstream expectedRejectedWorldLine;
+    expectedRejectedWorldLine << "    [" << rejectedWorld.worldIndex << "] "
+                              << "rejected at "
+                              << friendlyStageName(rejectedWorld.rejectionStage)
+                              << " because "
+                              << rejectedWorld.rejectionReason
+                              << " | passed_path="
+                              << passedPathSummary(rejectedWorld);
+
     ostringstream capture;
     streambuf * const original = cout.rdbuf(capture.rdbuf());
     ReportAlphaMuSolveResult(result);
@@ -4311,6 +4395,10 @@ namespace alpha_mu
       "decision-point reporting regression should emit the Stage 6.2 front-summary aggregates");
     Check(output.find(expectedTTLine.str()) != string::npos,
       "decision-point reporting regression should emit the Stage 6.3 TT exactness and reuse summary");
+    Check(output.find(expectedTopWorldLine.str()) != string::npos,
+      "decision-point reporting regression should emit a plain-language passed path for a top surviving world");
+    Check(output.find(expectedRejectedWorldLine.str()) != string::npos,
+      "decision-point reporting regression should emit a plain-language rejection path for a rejected world");
   }
 
   static void TestPracticalMultiWorldContinuationDepth2Stable()

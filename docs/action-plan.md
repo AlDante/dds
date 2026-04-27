@@ -145,6 +145,17 @@ The first narrow `Stage 3.3` slice is now in place:
   paths describe the same narrowing as a void-suit legality consequence rather
   than as a heuristic discard inference.
 
+### Current Stage 3.5 status
+
+The first narrow `Stage 3.5` slice is now in place:
+
+- decision reporting now describes both surviving and rejected worlds with a
+  plain-language path through the stages they passed,
+- rejected-world output now says where a world was rejected and why in friendly
+  stage names rather than only echoing internal stage identifiers,
+- and regression coverage now locks those richer explanation paths to the actual
+  structured world-explanation data.
+
 ## Workstream 3 — decision-point post-mortem runner
 
 ### Goal
