@@ -133,6 +133,18 @@ The first narrow `Stage 3.2` slice is now in place:
 - and this keeps the current external-auction boundary tight while broadening
   regression coverage for realistic bidding-derived world narrowing.
 
+### Current Stage 3.3 status
+
+The first narrow `Stage 3.3` slice is now in place:
+
+- legality-derived first-show-out evidence is now carried into constructor-local
+  pruning as an explicit void-suit fact,
+- the regression suite now checks that this earlier pruning produces the same
+  final survivor as the later staged follow-suit replay,
+- and explanation coverage now verifies that both constructor-local and staged
+  paths describe the same narrowing as a void-suit legality consequence rather
+  than as a heuristic discard inference.
+
 ## Workstream 3 — decision-point post-mortem runner
 
 ### Goal

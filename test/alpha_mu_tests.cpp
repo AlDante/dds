@@ -1973,6 +1973,102 @@ namespace alpha_mu
   }
 
 
+  static void TestHistoryDerivedConstructionCarriesVoidSuitIntoConstructor()
+  {
+    HistoryDerivedWorldSpec spec;
+    spec.seedWorld = ParsePBNWorld("N:A... K.Q.. 2... J.T..");
+    spec.hiddenSeats.push_back(SEAT_EAST);
+    spec.hiddenSeats.push_back(SEAT_WEST);
+
+    BridgeInformationState unconstrainedInfo;
+    unconstrainedInfo.deriveFollowSuitConstraints = false;
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_NORTH,
+      -1,
+      BridgeMove(SUIT_SPADES, 'A')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_EAST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_HEARTS, 'Q')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_SOUTH,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, '2')));
+    unconstrainedInfo.playHistory.push_back(PlayHistoryEvent(
+      SEAT_WEST,
+      SUIT_SPADES,
+      BridgeMove(SUIT_SPADES, 'J')));
+
+    const HistoryDerivedConstructionResult unconstrained =
+      ConstructCandidateWorldsFromHistory(spec, unconstrainedInfo);
+    Check(unconstrained.worlds.size() == 2,
+      "without constructor-local void-suit carry-through the first-show-out fixture should keep both legal hidden spade-versus-heart swap worlds");
+
+    BridgeInformationState constrainedInfo(unconstrainedInfo);
+    constrainedInfo.deriveFollowSuitConstraints = true;
+
+    WorldGenerationStats stagedStats;
+    const WorldMask stagedMask = GeneratePossibleWorlds(unconstrained.worlds,
+      constrainedInfo, &stagedStats);
+    Check(stagedMask.PopCount() == 1,
+      "the later staged filters should narrow the first-show-out fixture to the single world where East is actually void in spades");
+    Check(stagedStats.afterFollowSuitCount == 1,
+      "the staged follow-suit filter should account for the first-show-out void-suit narrowing");
+
+    const HistoryDerivedConstructionResult constrained =
+      ConstructCandidateWorldsFromHistory(spec, constrainedInfo);
+    Check(constrained.worlds.size() == 1,
+      "constructor-local void-suit carry-through should reduce the first-show-out fixture to the same single world before later filtering");
+    Check(! WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_SPADES, 'K') &&
+          WorldHasCard(constrained.worlds[0], SEAT_WEST, SUIT_SPADES, 'K') &&
+          WorldHasCard(constrained.worlds[0], SEAT_EAST, SUIT_HEARTS, 'T'),
+      "constructor-local void-suit carry-through should move the remaining hidden spade away from East and leave East with the remaining hidden heart");
+
+    WorldGenerationStats constructorStats;
+    const WorldMask constructorMask = GeneratePossibleWorlds(constrained.worlds,
+      constrainedInfo, &constructorStats);
+    Check(constructorMask == WorldMask(1, 0x1ULL),
+      "the world surviving constructor-local void-suit pruning should pass the later staged filters unchanged");
+    Check(constructorStats.candidateWorldCount == 1 &&
+          constructorStats.afterFollowSuitCount == 1,
+      "world-generation stats should see the constructor-pruned one-world pool unchanged at the follow-suit stage");
+
+    const HistoryDerivedConstructionExplanation constructorExplanation =
+      ExplainHistoryDerivedConstruction(spec, constrainedInfo);
+    unsigned acceptedConstructorWorlds = 0;
+    unsigned rejectedAtConstructorLength = 0;
+    for (unsigned i = 0; i < constructorExplanation.worlds.size(); i++)
+    {
+      if (constructorExplanation.worlds[i].accepted)
+        acceptedConstructorWorlds++;
+      else if (constructorExplanation.worlds[i].rejectionStage == "constructor_length" &&
+               constructorExplanation.worlds[i].rejectionReason.find("void in spades") != string::npos)
+      {
+        rejectedAtConstructorLength++;
+      }
+    }
+    Check(acceptedConstructorWorlds == 1 && rejectedAtConstructorLength == 1,
+      "constructor-local void-suit explanation should show one accepted world and one constructor_length rejection at the derived void-suit constraint");
+
+    const WorldGenerationExplanation stagedExplanation =
+      ExplainPossibleWorldGeneration(unconstrained.worlds, constrainedInfo);
+    unsigned acceptedStagedWorlds = 0;
+    unsigned rejectedAtFollowSuit = 0;
+    for (unsigned i = 0; i < stagedExplanation.worlds.size(); i++)
+    {
+      if (stagedExplanation.worlds[i].accepted)
+        acceptedStagedWorlds++;
+      else if (stagedExplanation.worlds[i].rejectionStage == "follow_suit" &&
+               stagedExplanation.worlds[i].rejectionReason.find("void in spades") != string::npos)
+      {
+        rejectedAtFollowSuit++;
+      }
+    }
+    Check(acceptedStagedWorlds == 1 && rejectedAtFollowSuit == 1,
+      "staged world-generation explanation should still describe the same first-show-out narrowing as a follow_suit rejection at the derived void-suit constraint");
+  }
+
+
   static void TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands()
   {
     HistoryDerivedWorldSpec spec;
@@ -4575,6 +4671,7 @@ namespace alpha_mu
       {"history-derived balanced deferral on incomplete hands OK", &TestHistoryDerivedConstructionBalancedShapeDefersOnIncompleteHands},
       {"history-derived hand-type deferral on incomplete hands OK", &TestHistoryDerivedConstructionHandTypeDefersOnIncompleteHands},
       {"history-derived follow-suit construction OK", &TestHistoryDerivedConstructionUsesDerivedFollowSuitLength},
+      {"history-derived void-suit carry-through construction OK", &TestHistoryDerivedConstructionCarriesVoidSuitIntoConstructor},
       {"history-derived visible-seed construction OK", &TestHistoryDerivedConstructionInfersHiddenCardsFromVisibleHands},
       {"history-derived moderate visible-seed pools OK", &TestHistoryDerivedConstructionSupportsModeratelyLargerVisibleSeedPools},
       {"history-derived longer visible-seed history OK", &TestHistoryDerivedConstructionUsesLongerVisibleSeedHistory},

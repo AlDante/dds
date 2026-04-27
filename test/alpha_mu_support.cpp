@@ -619,10 +619,19 @@ namespace alpha_mu
       const PlayHistoryEvent& event = history[i];
       if (event.leadSuit >= 0 && event.move.suit != event.leadSuit)
       {
-        constraints.push_back(WorldConstraint::MaxLength(
-          event.player,
-          event.leadSuit,
-          playedCount[event.player][event.leadSuit]));
+        if (playedCount[event.player][event.leadSuit] == 0)
+        {
+          constraints.push_back(WorldConstraint::VoidSuit(
+            event.player,
+            event.leadSuit));
+        }
+        else
+        {
+          constraints.push_back(WorldConstraint::MaxLength(
+            event.player,
+            event.leadSuit,
+            playedCount[event.player][event.leadSuit]));
+        }
       }
 
       if (event.move.suit >= 0 && event.move.suit < 4)
@@ -937,7 +946,8 @@ namespace alpha_mu
         continue;
 
       if (constraint.kind != CONSTRAINT_HAS_CARD &&
-          constraint.kind != CONSTRAINT_NOT_HAS_CARD)
+          constraint.kind != CONSTRAINT_NOT_HAS_CARD &&
+          constraint.kind != CONSTRAINT_VOID_SUIT)
       {
         continue;
       }
@@ -952,6 +962,8 @@ namespace alpha_mu
 
         if (constraint.kind == CONSTRAINT_HAS_CARD)
           hiddenCards[j].allowedSeatsMask &= SeatBit(constraint.player);
+        else if (constraint.kind == CONSTRAINT_NOT_HAS_CARD)
+          hiddenCards[j].allowedSeatsMask &= ~SeatBit(constraint.player);
         else
           hiddenCards[j].allowedSeatsMask &= ~SeatBit(constraint.player);
       }

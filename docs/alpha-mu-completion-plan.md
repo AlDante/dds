@@ -402,6 +402,16 @@ Also now present as the first narrow `S3.2` slice:
 - and it broadens bidding-derived regression coverage without introducing any
   new auction interpretation semantics.
 
+Also now present as the first narrow `S3.3` slice:
+
+- legality-derived first-show-out evidence is carried into constructor-local
+  pruning as an explicit void-suit fact,
+- the regression suite now checks that this earlier pruning agrees with the
+  later staged follow-suit replay on the same fixture,
+- and the explanation paths now remain aligned: constructor pruning and staged
+  filtering both describe the narrowing as a void-suit legality consequence,
+  not as a heuristic inference.
+
 ### Goal
 
 Move from curated partial-information examples toward realistic declarer
