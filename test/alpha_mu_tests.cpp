@@ -3940,6 +3940,99 @@ namespace alpha_mu
       "decision-point pipeline consistency regression should never report more compacted search worlds than raw candidate worlds");
   }
 
+  static void TestDecisionPointReportingEmitsWorldPipelineMetrics()
+  {
+    AlphaMuDecisionPointRequest request;
+    request.declarerSeat = SEAT_WEST;
+    request.contractLevel = 4;
+    request.deal.trump = 0;
+    request.deal.first = SEAT_NORTH;
+    strcpy(request.deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+    request.depth = 1;
+    request.maxWorlds = 4U;
+    request.prefixCards = 40;
+    request.samplingSeed = 7U;
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+    request.playHistory = ParsePBNPlayHistory(play, request.deal.first,
+      request.deal.trump);
+
+    const AlphaMuSolveResult result = SolveAlphaMuDecisionPoint(request);
+    Check(result.valid,
+      "decision-point reporting regression should produce a valid result");
+
+    ostringstream activeIds;
+    for (unsigned i = 0; i < result.activeWorldIndices.size(); i++)
+    {
+      if (i != 0)
+        activeIds << ",";
+      activeIds << result.activeWorldIndices[i];
+    }
+
+    ostringstream expectedDecisionLine;
+    expectedDecisionLine << "ALPHA_MU_DECISION raw_worlds="
+                         << result.worldCount
+                         << " surviving_worlds=" << result.survivingWorldCount
+                         << " after_known_cards="
+                         << result.worldGenerationStats.afterKnownCardCount
+                         << " after_bidding="
+                         << result.worldGenerationStats.afterBiddingCount
+                         << " after_follow_suit="
+                         << result.worldGenerationStats.afterFollowSuitCount
+                         << " after_play_history="
+                         << result.worldGenerationStats.afterPlayHistoryCount
+                         << " after_current_trick="
+                         << result.worldGenerationStats.afterCurrentTrickCount
+                         << " after_sampling="
+                         << result.worldGenerationStats.afterSamplingCount
+                         << " duplicates_removed="
+                         << result.worldGenerationStats.duplicateWorldsRemoved
+                         << " sampled_out="
+                         << result.worldGenerationStats.sampledOutWorlds
+                         << " active_world_ids="
+                         << activeIds.str();
+
+    ostringstream expectedHumanReadablePipeline;
+    expectedHumanReadablePipeline << "  World pipeline: known="
+                                  << result.worldGenerationStats.afterKnownCardCount
+                                  << ", bidding="
+                                  << result.worldGenerationStats.afterBiddingCount
+                                  << ", follow-suit="
+                                  << result.worldGenerationStats.afterFollowSuitCount
+                                  << ", history="
+                                  << result.worldGenerationStats.afterPlayHistoryCount
+                                  << ", current-trick="
+                                  << result.worldGenerationStats.afterCurrentTrickCount
+                                  << ", sampled="
+                                  << result.worldGenerationStats.afterSamplingCount
+                                  << ", duplicates-removed="
+                                  << result.worldGenerationStats.duplicateWorldsRemoved
+                                  << ", sampled-out="
+                                  << result.worldGenerationStats.sampledOutWorlds;
+
+    ostringstream expectedActiveIdsLine;
+    expectedActiveIdsLine << "  Active raw world ids: "
+                          << activeIds.str();
+
+    ostringstream capture;
+    streambuf * const original = cout.rdbuf(capture.rdbuf());
+    ReportAlphaMuSolveResult(result);
+    cout.rdbuf(original);
+
+    const string output = capture.str();
+    Check(output.find(expectedDecisionLine.str()) != string::npos,
+      "decision-point reporting regression should emit the machine-readable Stage 6.1 world-pipeline summary");
+    Check(output.find(expectedHumanReadablePipeline.str()) != string::npos,
+      "decision-point reporting regression should emit the human-readable world-pipeline summary");
+    Check(output.find(expectedActiveIdsLine.str()) != string::npos,
+      "decision-point reporting regression should emit the active raw-world identities");
+  }
+
   static void TestPracticalMultiWorldContinuationDepth2Stable()
   {
     dealPBN deal;
@@ -4324,6 +4417,7 @@ namespace alpha_mu
        {"decision-point comparison reporting OK", &TestDecisionPointComparisonReporting},
        {"explicit decision-point request API OK", &TestExplicitDecisionPointRequestAPI},
        {"decision-point world pipeline consistency OK", &TestDecisionPointWorldPipelineConsistency},
+       {"decision-point world pipeline reporting OK", &TestDecisionPointReportingEmitsWorldPipelineMetrics},
        {"practical multi-world depth-2 continuation OK", &TestPracticalMultiWorldContinuationDepth2Stable},
        {"practical partial-trick depth-2 continuation OK", &TestPracticalPartialTrickContinuationDepth2Stable},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},

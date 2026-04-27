@@ -218,6 +218,18 @@ namespace alpha_mu
          << ", shape=" << result.constructorStats.afterConstructorBalancedCount
          << ", final=" << result.constructorStats.finalWorldCount
          << endl;
+    cout << "  World pipeline: known="
+         << result.worldGenerationStats.afterKnownCardCount
+         << ", bidding=" << result.worldGenerationStats.afterBiddingCount
+         << ", follow-suit=" << result.worldGenerationStats.afterFollowSuitCount
+         << ", history=" << result.worldGenerationStats.afterPlayHistoryCount
+         << ", current-trick=" << result.worldGenerationStats.afterCurrentTrickCount
+         << ", sampled=" << result.worldGenerationStats.afterSamplingCount
+         << ", duplicates-removed=" << result.worldGenerationStats.duplicateWorldsRemoved
+         << ", sampled-out=" << result.worldGenerationStats.sampledOutWorlds
+         << endl;
+    cout << "  Active raw world ids: "
+         << JoinUnsigned(result.activeWorldIndices) << endl;
     cout << "  TT: " << result.ttStores << " stores, "
          << result.ttHits << " hits / " << result.ttProbes << " probes"
          << endl;
