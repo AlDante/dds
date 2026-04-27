@@ -2208,6 +2208,7 @@ namespace alpha_mu
     unsigned long long ttProbes;
     unsigned long long ttHits;
     unsigned long long ttStores;
+    unsigned long long ttCollisions;
     bool valid;
 
     AlphaMuSolveResult() :
@@ -2255,6 +2256,7 @@ namespace alpha_mu
       ttProbes(0),
       ttHits(0),
       ttStores(0),
+      ttCollisions(0),
       valid(false)
     {
     }

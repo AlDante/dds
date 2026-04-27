@@ -3985,6 +3985,11 @@ namespace alpha_mu
         childFrontVectorMax = childVectors;
     }
 
+    const unsigned long long ttProbeMisses =
+      (result.ttProbes >= result.ttHits ? result.ttProbes - result.ttHits : 0ULL);
+    const double ttHitRate = (result.ttProbes == 0ULL ? 0.0 :
+      static_cast<double>(result.ttHits) / static_cast<double>(result.ttProbes));
+
     ostringstream expectedDecisionLine;
     expectedDecisionLine << "ALPHA_MU_DECISION raw_worlds="
                          << result.worldCount
@@ -3999,6 +4004,14 @@ namespace alpha_mu
                          << result.rootReport.children.size()
                          << " child_vectors_total=" << childFrontVectorTotal
                          << " child_vectors_max=" << childFrontVectorMax
+                         << " tt_exact_stores=" << result.ttStores
+                         << " tt_exact_reuses=" << result.ttHits
+                         << " tt_probe_misses=" << ttProbeMisses
+                         << " tt_collisions=" << result.ttCollisions
+                         << " tt_reuse_cuts=" << result.bridgeSearchStats.ttCuts
+                         << " tt_hit_rate=";
+    expectedDecisionLine.setf(ios::fixed);
+    expectedDecisionLine << setprecision(6) << ttHitRate
                          << " after_known_cards="
                          << result.worldGenerationStats.afterKnownCardCount
                          << " after_bidding="
@@ -4054,6 +4067,17 @@ namespace alpha_mu
                              << ", child_vectors_max="
                              << childFrontVectorMax;
 
+    ostringstream expectedTTLine;
+    expectedTTLine.setf(ios::fixed);
+    expectedTTLine << setprecision(3)
+                   << "  TT: exact_stores=" << result.ttStores
+                   << ", exact_reuses=" << result.ttHits
+                   << ", probes=" << result.ttProbes
+                   << ", probe_misses=" << ttProbeMisses
+                   << ", collisions=" << result.ttCollisions
+                   << ", reuse_cuts=" << result.bridgeSearchStats.ttCuts
+                   << ", hit_rate=" << ttHitRate;
+
     ostringstream capture;
     streambuf * const original = cout.rdbuf(capture.rdbuf());
     ReportAlphaMuSolveResult(result);
@@ -4068,6 +4092,8 @@ namespace alpha_mu
       "decision-point reporting regression should emit the active raw-world identities");
     Check(output.find(expectedFrontSummaryLine.str()) != string::npos,
       "decision-point reporting regression should emit the Stage 6.2 front-summary aggregates");
+    Check(output.find(expectedTTLine.str()) != string::npos,
+      "decision-point reporting regression should emit the Stage 6.3 TT exactness and reuse summary");
   }
 
   static void TestPracticalMultiWorldContinuationDepth2Stable()

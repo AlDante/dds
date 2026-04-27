@@ -321,6 +321,7 @@ namespace alpha_mu
     result.ttProbes = ttStats.probes;
     result.ttHits = ttStats.hits;
     result.ttStores = ttStats.stores;
+    result.ttCollisions = ttStats.collisions;
     result.searchNodes = (progress.recursiveCalls == 0ULL ?
       bestReport.searchNodes : static_cast<unsigned>(progress.recursiveCalls));
     result.ddsLeafCalls = (progress.ddsLeafCalls == 0ULL ?

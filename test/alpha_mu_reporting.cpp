@@ -65,6 +65,14 @@ namespace alpha_mu
       }
       return best;
     }
+
+    double SafeRatio(
+      const unsigned long long numerator,
+      const unsigned long long denominator)
+    {
+      return (denominator == 0ULL ? 0.0 :
+        static_cast<double>(numerator) / static_cast<double>(denominator));
+    }
   }
 
   void ReportBenchmarkMethodSummary(
@@ -190,6 +198,9 @@ namespace alpha_mu
       CountChildFrontVectors(result.rootReport);
     const unsigned childFrontVectorMax =
       MaxChildFrontVectors(result.rootReport);
+    const unsigned long long ttProbeMisses =
+      (result.ttProbes >= result.ttHits ? result.ttProbes - result.ttHits : 0ULL);
+    const double ttHitRate = SafeRatio(result.ttHits, result.ttProbes);
 
     cout.setf(ios::fixed);
     cout << setprecision(3);
@@ -268,8 +279,13 @@ namespace alpha_mu
          << ", child_vectors_total=" << childFrontVectorTotal
          << ", child_vectors_max=" << childFrontVectorMax
          << endl;
-    cout << "  TT: " << result.ttStores << " stores, "
-         << result.ttHits << " hits / " << result.ttProbes << " probes"
+    cout << "  TT: exact_stores=" << result.ttStores
+         << ", exact_reuses=" << result.ttHits
+         << ", probes=" << result.ttProbes
+         << ", probe_misses=" << ttProbeMisses
+         << ", collisions=" << result.ttCollisions
+         << ", reuse_cuts=" << result.bridgeSearchStats.ttCuts
+         << ", hit_rate=" << ttHitRate
          << endl;
     cout << "  Search activity: nodes=" << result.searchNodes
          << ", DDS leaf calls=" << result.ddsLeafCalls << endl;
@@ -426,6 +442,12 @@ namespace alpha_mu
          << " child_count=" << result.rootReport.children.size()
          << " child_vectors_total=" << childFrontVectorTotal
          << " child_vectors_max=" << childFrontVectorMax
+         << " tt_exact_stores=" << result.ttStores
+         << " tt_exact_reuses=" << result.ttHits
+         << " tt_probe_misses=" << ttProbeMisses
+         << " tt_collisions=" << result.ttCollisions
+         << " tt_reuse_cuts=" << result.bridgeSearchStats.ttCuts
+         << " tt_hit_rate=" << ttHitRate
          << " after_known_cards=" << result.worldGenerationStats.afterKnownCardCount
          << " after_bidding=" << result.worldGenerationStats.afterBiddingCount
          << " after_follow_suit=" << result.worldGenerationStats.afterFollowSuitCount
