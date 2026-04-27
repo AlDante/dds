@@ -221,6 +221,8 @@ Already present today:
 - targeted bridge-backed multi-world continuation regressions,
 - three-world root reporting over a deeper continuation,
 - practical real-board depth-2 continuation regressions on `hands/alpha_mu_play.txt` board 1 with `prefixCards=40` and `prefixCards=34`,
+- a practical real-board multi-world depth-3 continuation regression on
+  `hands/alpha_mu_play.txt` board 1 with `prefixCards=32`,
 - root child summaries including valid worlds, useful worlds, `mu`, search nodes, and DDS leaf counts,
 - and focused plus full regression suites that are currently passing.
 

@@ -4564,6 +4564,55 @@ namespace alpha_mu
       "practical partial-trick depth-2 continuation should reach DDS leaves after crossing the partial-trick boundary");
   }
 
+  static void TestPracticalMultiWorldContinuationDepth3Stable()
+  {
+    dealPBN deal;
+    memset(&deal, 0, sizeof(deal));
+    deal.trump = 0;
+    deal.first = 0;
+    strcpy(deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+
+    const int declarerSeat = (deal.first + 3) % 4;
+    const AlphaMuSolveResult first = SolveAlphaMu(
+      deal, declarerSeat, play, 3, 8, 0.0, 32, 7U);
+    const AlphaMuSolveResult second = SolveAlphaMu(
+      deal, declarerSeat, play, 3, 8, 0.0, 32, 7U);
+
+    Check(first.valid && second.valid,
+      "practical multi-world depth-3 continuation should produce valid results on repeated runs");
+    Check(first.prefixPlayLength == 32,
+      "practical multi-world depth-3 continuation should preserve the selected 32-card prefix");
+    Check(first.survivingWorldCount > 1,
+      "practical multi-world depth-3 continuation should keep more than one surviving world");
+    Check(first.depthSearched == 3,
+      "practical multi-world depth-3 continuation should search the requested three tricks");
+    Check(first.rootReport.children.size() >= 2,
+      "practical multi-world depth-3 continuation should expose multiple candidate moves at the root");
+    Check(first.chosenMove == second.chosenMove,
+      "practical multi-world depth-3 continuation should keep the chosen move stable across repeated runs");
+    Check(first.rootReport.searchNodes > 0 && first.rootReport.ddsLeafCalls > 0,
+      "practical multi-world depth-3 continuation should record aggregate search and DDS-leaf activity");
+    Check(first.ttStores > 0,
+      "practical multi-world depth-3 continuation should store practical exact bridge fronts in the TT");
+    Check(first.rootReport.validWorlds == first.rootFront.ValidWorlds() &&
+          first.rootReport.usefulWorlds == first.rootFront.UsefulWorlds(),
+      "practical multi-world depth-3 continuation should keep root world summaries aligned with the searched front");
+    for (unsigned i = 0; i < first.rootReport.children.size(); i++)
+    {
+      Check(first.rootReport.children[i].validWorlds.PopCount() > 0,
+        "every practical multi-world depth-3 child should cover at least one surviving world");
+      Check(first.rootReport.children[i].ddsLeafCalls > 0,
+        "every practical multi-world depth-3 child should reach DDS leaves on the deeper practical continuation");
+    }
+  }
+
   void TestBridgeTranspositionTable()
   {
     // Use the same board as TestEndToEndSolveAlphaMu
@@ -4868,6 +4917,7 @@ namespace alpha_mu
        {"decision-point world pipeline reporting OK", &TestDecisionPointReportingEmitsWorldPipelineMetrics},
        {"practical multi-world depth-2 continuation OK", &TestPracticalMultiWorldContinuationDepth2Stable},
        {"practical partial-trick depth-2 continuation OK", &TestPracticalPartialTrickContinuationDepth2Stable},
+        {"practical multi-world depth-3 continuation OK", &TestPracticalMultiWorldContinuationDepth3Stable},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
        {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
 #ifndef NDEBUG

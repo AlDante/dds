@@ -510,6 +510,18 @@ This stage is done when:
 
 ## Stage 5 — broader and deeper practical bridge search
 
+### Status update (2026-04-27)
+
+The first `S5.5` practical depth-3 slice is now present:
+
+- the regression suite now includes a real-board multi-world depth-3 decision
+  run on board 1 of `hands/alpha_mu_play.txt`,
+- that case checks repeated-run stability, deeper root-child coverage, DDS-leaf
+  activity, TT storage, and root world-summary alignment,
+- and it broadens practical bridge-backed continuation coverage beyond the
+  previously regression-backed depth-2 slice without changing bridge-search
+  semantics.
+
 ### Goal
 
 Move beyond the current practical depth-2 slice to a search that matters on a
