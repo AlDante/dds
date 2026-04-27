@@ -4012,6 +4012,23 @@ namespace alpha_mu
                          << " tt_hit_rate=";
     expectedDecisionLine.setf(ios::fixed);
     expectedDecisionLine << setprecision(6) << ttHitRate
+                         << " cut_empty_world="
+                         << result.bridgeSearchStats.emptyWorldCuts
+                         << " cut_tt=" << result.bridgeSearchStats.ttCuts
+                         << " cut_early_alpha="
+                         << result.bridgeSearchStats.earlyAlphaCuts
+                         << " cut_deep_alpha="
+                         << result.bridgeSearchStats.deepAlphaCuts
+                         << " cut_on_win="
+                         << result.bridgeSearchStats.cutOnWinCuts
+                         << " cut_root="
+                         << result.bridgeSearchStats.rootCuts
+                         << " cut_dds_leaf="
+                         << result.bridgeSearchStats.ddsLeafCuts
+                         << " cut_no_move="
+                         << result.bridgeSearchStats.noMoveLeafCuts
+                         << " terminal_fronts="
+                         << result.bridgeSearchStats.terminalFronts
                          << " after_known_cards="
                          << result.worldGenerationStats.afterKnownCardCount
                          << " after_bidding="
