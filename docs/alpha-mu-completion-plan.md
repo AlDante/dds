@@ -463,6 +463,19 @@ This stage is done when:
 
 ## Stage 4 — world plausibility and weighting
 
+### Status update (2026-04-27)
+
+The first `S4.1` through `S4.3` slices are now in place at the current scoped
+policy:
+
+- the information-state contract now states explicitly that plausibility remains
+  hard/soft separated from world admission and alpha-mu front semantics,
+- decision reporting now exposes plausibility-driven world ranking in plain
+  language,
+- and the decision-point API now supports an explicit experimental root-only
+  weighted choice policy that falls back to plain `mu` when plausibility carries
+  no surviving-world signal.
+
 ### Goal
 
 Make alpha-mu reason not only over membership in the world set, but over how

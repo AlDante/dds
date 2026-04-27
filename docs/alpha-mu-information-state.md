@@ -291,16 +291,27 @@ Current behavior:
 
 - if a surviving world matches the hint, it gains that weight,
 - if it does not match the hint, the world is **not rejected**,
-- plausibility is used only for explanation and deterministic ranking of the
-  already-surviving worlds.
+- plausibility is always used for explanation and deterministic ranking of the
+  already-surviving worlds,
+- and an explicit opt-in decision policy may additionally use those same
+  surviving-world weights at the root only.
 
-This means plausibility is currently **reporting-only**.
-It does **not**:
+Default behavior remains **reporting-only**.
+It does **not** by default:
 
 - alter `GeneratePossibleWorlds()`,
 - alter constructor-local acceptance,
 - alter alpha-mu front semantics,
 - alter move choice silently.
+
+The current experimental weighted mode is intentionally narrow:
+
+- it must be requested explicitly through the decision-point request policy,
+- it changes only the final root-child choice,
+- it uses surviving-world plausibility scores as non-negative weights,
+- it leaves search, TT reuse, cuts, and front construction unchanged,
+- and it falls back to plain `mu` if no surviving world carries positive
+  plausibility weight.
 
 ## Deterministic ranking rule
 
@@ -346,7 +357,7 @@ Not yet modeled here as first-class inputs:
 - a structured auction object with convention meaning,
 - negative-inference strength from choice among equivalent plays,
 - probability calibration from frequency data,
-- direct use of plausibility in alpha-mu backup or move selection.
+- direct use of plausibility in alpha-mu backup or interior search control.
 
 Also not yet first-class in the contract:
 
@@ -354,16 +365,19 @@ Also not yet first-class in the contract:
   available but not chosen,
 - richer ownership implications from repeated later-play patterns,
 - larger ambiguous defender pools beyond the currently regression-backed cases,
-- and weighted use of plausibility in move choice.
+- and any plausibility use beyond the explicit root-only weighted decision mode.
 
 ## Next intended use
 
-The next practical step is to feed plausibility summaries into the future
+The current practical use is to feed plausibility summaries into the
 single-decision post-mortem runner so it can report:
 
 - surviving worlds,
 - why they survived,
 - and which surviving worlds look most plausible,
+- and, when requested explicitly, use those same scores for a root-only
+  weighted move choice.
 
-before any decision is made about letting plausibility influence move choice.
+Any future extension beyond that root-only policy should still preserve the
+hard/soft boundary above and remain regression-backed.
 

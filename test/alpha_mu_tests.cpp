@@ -756,6 +756,76 @@ namespace alpha_mu
   }
 
 
+  static void TestActiveWorldPlausibilityWeightsRespectCompactedOrdering()
+  {
+    WorldGenerationExplanation explanation;
+    explanation.worlds.resize(3);
+    explanation.worlds[0].worldIndex = 0;
+    explanation.worlds[0].plausibilityScore = 1;
+    explanation.worlds[1].worldIndex = 1;
+    explanation.worlds[1].plausibilityScore = 0;
+    explanation.worlds[2].worldIndex = 2;
+    explanation.worlds[2].plausibilityScore = 4;
+
+    vector<unsigned> activeWorldIndices;
+    activeWorldIndices.push_back(2U);
+    activeWorldIndices.push_back(0U);
+
+    const vector<int> weights = BuildActiveWorldPlausibilityWeights(
+      activeWorldIndices, explanation);
+    Check(weights.size() == 2U && weights[0] == 4 && weights[1] == 1,
+      "active-world plausibility weights should follow compacted search-world ordering rather than raw candidate ordering");
+  }
+
+
+  static void TestWeightedDecisionPolicySelectsRootChildExplicitly()
+  {
+    BridgeRootReport report(2);
+
+    BridgeRootChildReport left(2);
+    left.move = BridgeMove(SUIT_CLUBS, 'A');
+    left.front = MakeFront(2, vector<string>(1, "10"));
+    left.mu = left.front.Mu();
+    report.children.push_back(left);
+
+    BridgeRootChildReport right(2);
+    right.move = BridgeMove(SUIT_DIAMONDS, 'A');
+    right.front = MakeFront(2, vector<string>(1, "01"));
+    right.mu = right.front.Mu();
+    report.children.push_back(right);
+
+    vector<int> worldWeights;
+    worldWeights.push_back(5);
+    worldWeights.push_back(1);
+
+    AlphaMuDecisionPolicy appliedPolicy = ALPHA_MU_DECISION_POLICY_MU;
+    double chosenWeightedScore = 0.0;
+    const unsigned weightedIndex = SelectRootChildIndex(report, worldWeights,
+      ALPHA_MU_DECISION_POLICY_WEIGHTED, appliedPolicy, &chosenWeightedScore);
+    Check(appliedPolicy == ALPHA_MU_DECISION_POLICY_WEIGHTED,
+      "weighted decision selection should keep the weighted policy when at least one surviving world has positive plausibility weight");
+    Check(weightedIndex == 0U,
+      "weighted decision selection should prefer the child winning in the heavier surviving world when mu ties");
+    Check(fabs(chosenWeightedScore - (5.0 / 6.0)) < 1e-9,
+      "weighted decision selection should expose the chosen root child's weighted score");
+
+    appliedPolicy = ALPHA_MU_DECISION_POLICY_WEIGHTED;
+    const unsigned muIndex = SelectRootChildIndex(report, worldWeights,
+      ALPHA_MU_DECISION_POLICY_MU, appliedPolicy, &chosenWeightedScore);
+    Check(appliedPolicy == ALPHA_MU_DECISION_POLICY_MU && muIndex == 1U,
+      "plain-mu selection should remain the default even when plausibility weights are available and should keep the canonical move-order tie-break");
+
+    vector<int> zeroWeights(2, 0);
+    appliedPolicy = ALPHA_MU_DECISION_POLICY_WEIGHTED;
+    const unsigned fallbackIndex = SelectRootChildIndex(report, zeroWeights,
+      ALPHA_MU_DECISION_POLICY_WEIGHTED, appliedPolicy, &chosenWeightedScore);
+    Check(appliedPolicy == ALPHA_MU_DECISION_POLICY_MU,
+      "weighted decision selection should fall back to plain mu when no surviving world carries positive plausibility weight");
+    Check(fallbackIndex == 1U,
+      "weighted decision fallback should use the same deterministic child choice as plain mu");
+  }
+
+
   static void TestHistoryDerivedCandidateWorldConstruction()
   {
     HistoryDerivedWorldSpec spec;
@@ -4379,6 +4449,10 @@ namespace alpha_mu
                               << " | passed_path="
                               << passedPathSummary(rejectedWorld);
 
+    ostringstream expectedPolicyLine;
+    expectedPolicyLine << "  Decision policy: "
+                       << AlphaMuDecisionPolicyName(result.appliedDecisionPolicy);
+
     ostringstream capture;
     streambuf * const original = cout.rdbuf(capture.rdbuf());
     ReportAlphaMuSolveResult(result);
@@ -4395,6 +4469,8 @@ namespace alpha_mu
       "decision-point reporting regression should emit the Stage 6.2 front-summary aggregates");
     Check(output.find(expectedTTLine.str()) != string::npos,
       "decision-point reporting regression should emit the Stage 6.3 TT exactness and reuse summary");
+    Check(output.find(expectedPolicyLine.str()) != string::npos,
+      "decision-point reporting regression should emit the explicit Stage 4 decision-policy label");
     Check(output.find(expectedTopWorldLine.str()) != string::npos,
       "decision-point reporting regression should emit a plain-language passed path for a top surviving world");
     Check(output.find(expectedRejectedWorldLine.str()) != string::npos,
@@ -4740,6 +4816,8 @@ namespace alpha_mu
       {"uneven current-trick world counts OK", &TestPartialInformationUnevenCurrentTrickCounts},
       {"follow-suit implications and world explanations OK", &TestFollowSuitImplicationsAndWorldExplanation},
       {"world plausibility reporting OK", &TestWorldPlausibilityReporting},
+      {"active-world plausibility weights OK", &TestActiveWorldPlausibilityWeightsRespectCompactedOrdering},
+      {"weighted decision selection OK", &TestWeightedDecisionPolicySelectsRootChildExplicitly},
       {"history-derived candidate world construction OK", &TestHistoryDerivedCandidateWorldConstruction},
       {"history-derived known-card construction OK", &TestHistoryDerivedConstructionUsesKnownCardLocation},
       {"history-derived known-card exclusion construction OK", &TestHistoryDerivedConstructionUsesKnownCardExclusion},

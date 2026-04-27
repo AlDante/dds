@@ -238,6 +238,16 @@ Already present today:
 - practical trick-boundary and partial-trick depth-2 real-board regressions stay green,
 - stable move selection across repeated runs.
 
+## Plausibility weighting status update (2026-04-27)
+
+The first weighted-policy slice is now present:
+
+- the decision-point request surface exposes an explicit policy choice between
+  plain `mu` and an experimental root-only weighted policy,
+- reporting now tells the analyst which policy was actually applied,
+- and regression coverage now checks compacted-world plausibility weighting,
+  deterministic weighted child choice, and zero-signal fallback to plain `mu`.
+
 ## Workstream 5 — extract durable modules while growing features
 
 ### Goal

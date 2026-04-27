@@ -120,6 +120,129 @@ namespace alpha_mu
             "not active in the compacted decision-point world set searched by alpha-mu"));
       }
     }
+
+    bool BetterMuChoice(
+      const BridgeRootChildReport& candidate,
+      const BridgeRootChildReport& incumbent)
+    {
+      const double candidateMu = candidate.front.Mu();
+      const double incumbentMu = incumbent.front.Mu();
+      return candidateMu > incumbentMu ||
+        (candidateMu == incumbentMu &&
+         BridgeMoveLess(candidate.move, incumbent.move));
+    }
+  }
+
+  const char * AlphaMuDecisionPolicyName(const AlphaMuDecisionPolicy policy)
+  {
+    switch (policy)
+    {
+      case ALPHA_MU_DECISION_POLICY_MU:
+        return "mu";
+      case ALPHA_MU_DECISION_POLICY_WEIGHTED:
+        return "weighted";
+      default:
+        return "unknown";
+    }
+  }
+
+  vector<int> BuildActiveWorldPlausibilityWeights(
+    const vector<unsigned>& activeWorldIndices,
+    const WorldGenerationExplanation& explanation)
+  {
+    vector<int> weights(activeWorldIndices.size(), 0);
+    for (unsigned i = 0; i < activeWorldIndices.size(); i++)
+    {
+      const unsigned rawWorldIndex = activeWorldIndices[i];
+      Check(rawWorldIndex < explanation.worlds.size(),
+        "active world indices should reference explanatory worlds when building plausibility weights");
+      weights[i] = max(0, explanation.worlds[rawWorldIndex].plausibilityScore);
+    }
+    return weights;
+  }
+
+  double WeightedFrontScore(
+    const ParetoFront& front,
+    const vector<int>& worldWeights)
+  {
+    Check(front.worldCount == worldWeights.size(),
+      "weighted root scoring expects one compacted plausibility weight per searched world");
+
+    double totalWeight = 0.0;
+    double weightedScore = 0.0;
+    for (unsigned world = 0; world < front.worldCount; world++)
+    {
+      const double weight = static_cast<double>(max(0, worldWeights[world]));
+      if (weight <= 0.0)
+        continue;
+      totalWeight += weight;
+      weightedScore += weight * static_cast<double>(EvaluateLeafWorld(front, world));
+    }
+
+    if (totalWeight <= 0.0)
+      return front.Mu();
+    return weightedScore / totalWeight;
+  }
+
+  unsigned SelectRootChildIndex(
+    const BridgeRootReport& report,
+    const vector<int>& worldWeights,
+    const AlphaMuDecisionPolicy requestedPolicy,
+    AlphaMuDecisionPolicy& appliedPolicy,
+    double* chosenWeightedScore)
+  {
+    Check(! report.children.empty(),
+      "root-child selection requires at least one candidate move");
+
+    appliedPolicy = requestedPolicy;
+    bool havePositiveWeight = false;
+    for (unsigned i = 0; i < worldWeights.size(); i++)
+    {
+      if (worldWeights[i] > 0)
+      {
+        havePositiveWeight = true;
+        break;
+      }
+    }
+    if (requestedPolicy == ALPHA_MU_DECISION_POLICY_WEIGHTED &&
+        ! havePositiveWeight)
+    {
+      appliedPolicy = ALPHA_MU_DECISION_POLICY_MU;
+    }
+
+    bool haveChoice = false;
+    unsigned bestChildIndex = 0;
+    double bestWeightedScore = 0.0;
+    double bestMu = 0.0;
+    for (unsigned i = 0; i < report.children.size(); i++)
+    {
+      const BridgeRootChildReport& child = report.children[i];
+      const double childMu = child.front.Mu();
+      const double childWeightedScore = WeightedFrontScore(child.front,
+        worldWeights);
+      const bool candidateBetter =
+        (! haveChoice ||
+         (appliedPolicy == ALPHA_MU_DECISION_POLICY_WEIGHTED &&
+          (childWeightedScore > bestWeightedScore ||
+           (childWeightedScore == bestWeightedScore &&
+            (childMu > bestMu ||
+             (childMu == bestMu &&
+              BridgeMoveLess(child.move,
+                report.children[bestChildIndex].move)))))) ||
+         (appliedPolicy == ALPHA_MU_DECISION_POLICY_MU &&
+          BetterMuChoice(child, report.children[bestChildIndex])));
+      if (candidateBetter)
+      {
+        haveChoice = true;
+        bestChildIndex = i;
+        bestWeightedScore = childWeightedScore;
+        bestMu = childMu;
+      }
+    }
+
+    if (chosenWeightedScore != NULL)
+      *chosenWeightedScore = bestWeightedScore;
+    return bestChildIndex;
   }
 
   AlphaMuSolveResult SolveAlphaMu(
@@ -160,6 +283,8 @@ namespace alpha_mu
     result.leaderSeat = request.deal.first;
     result.contractLevel = request.contractLevel;
     result.contractTrumpSuit = (request.deal.trump == 4 ? -1 : request.deal.trump);
+    result.requestedDecisionPolicy = request.decisionPolicy;
+    result.appliedDecisionPolicy = request.decisionPolicy;
 
     const vector<PlayHistoryEvent>& fullHistory = request.playHistory;
     result.fullPlayLength = static_cast<unsigned>(fullHistory.size());
@@ -331,23 +456,16 @@ namespace alpha_mu
     unsigned bestChildIndex = 0;
     if (! bestReport.children.empty())
     {
-      double bestMu = -1.0;
-      for (unsigned i = 0; i < bestReport.children.size(); i++)
-      {
-        const double mu = bestReport.children[i].front.Mu();
-        if (! haveChosenChild || mu > bestMu ||
-            (mu == bestMu &&
-             BridgeMoveLess(bestReport.children[i].move,
-               bestReport.children[bestChildIndex].move)))
-        {
-          haveChosenChild = true;
-          bestMu = mu;
-          bestChildIndex = i;
-        }
-      }
+      const vector<int> compactedWorldWeights = BuildActiveWorldPlausibilityWeights(
+        result.activeWorldIndices, result.worldExplanation);
+      bestChildIndex = SelectRootChildIndex(bestReport, compactedWorldWeights,
+        request.decisionPolicy, result.appliedDecisionPolicy,
+        &result.chosenMoveWeightedScore);
+      haveChosenChild = true;
       result.chosenMove = bestReport.children[bestChildIndex].move;
       result.hasChosenMoveMu = true;
       result.chosenMoveMu = bestReport.children[bestChildIndex].front.Mu();
+      result.hasChosenMoveWeightedScore = true;
     }
 
     if (result.hasActualPlayedMove)

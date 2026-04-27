@@ -396,9 +396,21 @@ namespace alpha_mu
 
     if (result.hasChosenMoveMu || result.hasChosenMoveDDSScore)
     {
+      cout << "  Decision policy: "
+           << AlphaMuDecisionPolicyName(result.appliedDecisionPolicy);
+      if (result.appliedDecisionPolicy != result.requestedDecisionPolicy)
+      {
+        cout << " (requested "
+             << AlphaMuDecisionPolicyName(result.requestedDecisionPolicy)
+             << ", fell back because no surviving world carried positive plausibility weight)";
+      }
+      cout << endl;
+
       cout << "  Chosen move detail:";
       if (result.hasChosenMoveMu)
         cout << " mu=" << setprecision(4) << result.chosenMoveMu;
+      if (result.hasChosenMoveWeightedScore)
+        cout << " weighted=" << setprecision(4) << result.chosenMoveWeightedScore;
       if (result.hasChosenMoveDDSScore)
         cout << " DDS=" << setprecision(3) << result.chosenMoveDDSScore;
       cout << endl;

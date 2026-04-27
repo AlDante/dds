@@ -2010,6 +2010,15 @@ namespace alpha_mu
       const unsigned maxWorlds,
       const unsigned samplingSeed = 42U);
 
+  enum AlphaMuDecisionPolicy
+  {
+    ALPHA_MU_DECISION_POLICY_MU = 0,
+    ALPHA_MU_DECISION_POLICY_WEIGHTED = 1
+  };
+
+  /** @brief Stable text name for a decision policy used in reports and logs. */
+  const char * AlphaMuDecisionPolicyName(const AlphaMuDecisionPolicy policy);
+
   /** @brief Full explicit request for one post-mortem decision-point analysis. */
   struct AlphaMuDecisionPointRequest
   {
@@ -2023,6 +2032,7 @@ namespace alpha_mu
     double timeBudgetSeconds;
     int prefixCards;
     unsigned samplingSeed;
+    AlphaMuDecisionPolicy decisionPolicy;
 
     AlphaMuDecisionPointRequest() :
       deal(),
@@ -2034,7 +2044,8 @@ namespace alpha_mu
       maxWorlds(50U),
       timeBudgetSeconds(0.0),
       prefixCards(-1),
-      samplingSeed(42U)
+      samplingSeed(42U),
+      decisionPolicy(ALPHA_MU_DECISION_POLICY_MU)
     {
       memset(&deal, 0, sizeof(deal));
       informationOverrides.deriveFollowSuitConstraints = true;
@@ -2139,6 +2150,12 @@ namespace alpha_mu
   int EvaluateWorldPlausibility( const ParsedWorld& world, const BridgeInformationState& information, vector<string>* satisfiedLabels, vector<string>* unsatisfiedLabels);
   /** @brief Rank accepted worlds by descending plausibility score, then canonically. */
   vector<unsigned> RankWorldsByPlausibility( const vector<ParsedWorld>& worlds, const WorldMask& candidates, const BridgeInformationState& information);
+  /** @brief Convert compacted active worlds into non-negative plausibility weights. */
+  vector<int> BuildActiveWorldPlausibilityWeights( const vector<unsigned>& activeWorldIndices, const WorldGenerationExplanation& explanation);
+  /** @brief Weighted root-only score that keeps invalid worlds at zero contribution. */
+  double WeightedFrontScore( const ParetoFront& front, const vector<int>& worldWeights);
+  /** @brief Choose a root child under either plain `mu` or opt-in weighted policy. */
+  unsigned SelectRootChildIndex( const BridgeRootReport& report, const vector<int>& worldWeights, const AlphaMuDecisionPolicy requestedPolicy, AlphaMuDecisionPolicy& appliedPolicy, double* chosenWeightedScore);
   /** @brief Convenience overload for simple constraint-only world filtering. */
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const vector<WorldConstraint>& constraints);
   /** @brief Build a binary toy outcome vector from `0`, `1`, and `x` text. */
@@ -2253,6 +2270,8 @@ namespace alpha_mu
     int ddsBestScore;
     bool hasChosenMoveMu;
     double chosenMoveMu;
+    bool hasChosenMoveWeightedScore;
+    double chosenMoveWeightedScore;
     bool hasActualMoveMu;
     double actualMoveMu;
     bool hasChosenMoveDDSScore;
@@ -2265,6 +2284,8 @@ namespace alpha_mu
     unsigned long long ttHits;
     unsigned long long ttStores;
     unsigned long long ttCollisions;
+    AlphaMuDecisionPolicy requestedDecisionPolicy;
+    AlphaMuDecisionPolicy appliedDecisionPolicy;
     bool valid;
 
     AlphaMuSolveResult() :
@@ -2301,6 +2322,8 @@ namespace alpha_mu
       ddsBestScore(0),
       hasChosenMoveMu(false),
       chosenMoveMu(0.0),
+      hasChosenMoveWeightedScore(false),
+      chosenMoveWeightedScore(0.0),
       hasActualMoveMu(false),
       actualMoveMu(0.0),
       hasChosenMoveDDSScore(false),
@@ -2313,6 +2336,8 @@ namespace alpha_mu
       ttHits(0),
       ttStores(0),
       ttCollisions(0),
+      requestedDecisionPolicy(ALPHA_MU_DECISION_POLICY_MU),
+      appliedDecisionPolicy(ALPHA_MU_DECISION_POLICY_MU),
       valid(false)
     {
     }
