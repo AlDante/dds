@@ -43,11 +43,15 @@ INPUT                  = . \
                          ../src/LaterTricks.h \
                          ../test/alpha_mu.cpp \
                          ../test/alpha_mu_core.h \
+                         ../test/alpha_mu_core.cpp \
                          ../test/alpha_mu_front.cpp \
                          ../test/alpha_mu_worlds.cpp \
                          ../test/alpha_mu_bridge.cpp \
-                         ../test/alpha_mu_core.cpp \
-                         ../test/alpha_mu_tests.h
+                         ../test/alpha_mu_decision.cpp \
+                         ../test/alpha_mu_reporting.cpp \
+                         ../test/alpha_mu_support.cpp \
+                         ../test/alpha_mu_tests.h \
+                         ../test/alpha_mu_tests.cpp
 FILE_PATTERNS          = *.md \
                          *.h \
                          README \

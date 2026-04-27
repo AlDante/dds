@@ -144,6 +144,29 @@ There are two concrete backends:
 
 `src/Scheduler.cpp` batches similar boards to improve throughput and reduce repeated work.
 
+## Alpha-mu module ownership
+
+The alpha-mu implementation currently lives under `test/` as a test-area engine
+that calls DDS as a leaf oracle. The modules and their responsibilities are:
+
+| File | Responsibility |
+| --- | --- |
+| `test/alpha_mu.cpp` | CLI entry point: command parsing, mode dispatch, benchmark runner |
+| `test/alpha_mu_core.h` | Shared data structures: `WorldMask`, `OutcomeVector`, `ParetoFront`, `BridgeState`, `TranspositionTable`, `BridgeSearchStats`, `AlphaMuSolveResult`, and all callable entry points |
+| `test/alpha_mu_core.cpp` | Bridge search engine: `SearchBridgeStateInternal`, `MakeBridgeDDSLeafFront`, TT storage/lookup, iterative deepening, root-cut logic, solve orchestration |
+| `test/alpha_mu_front.cpp` | Front and toy-search helpers: `ParetoFront` insert/merge/product/min, `SearchToy`, optimistic completion, outcome-vector operations |
+| `test/alpha_mu_worlds.cpp` | World construction and information-state helpers: `ConstructCandidateWorldsFromHistory`, `GeneratePossibleWorlds`, staged filtering pipeline, follow-suit inference, bidding narrowing |
+| `test/alpha_mu_bridge.cpp` | Bridge-state transition and legality: `MakeBridgeState`, `ApplyBridgeMove`, `GenerateBridgeMoves`, DDS leaf handoff, bridge-state serialization |
+| `test/alpha_mu_decision.cpp` | Decision-point analysis: `SolveDecisionPoint`, information-state assembly, world pipeline routing, comparison reporting |
+| `test/alpha_mu_reporting.cpp` | Output formatting: decision report printing, root summary, per-world explanation, machine-readable log lines |
+| `test/alpha_mu_support.cpp` | Configuration and utility: parallel-mode naming, executable path, option parsing support |
+| `test/alpha_mu_tests.h` | Regression bundle declarations: `RunDefaultTestSuite`, `RunBridgeDDSTestSuite`, individual semantic-gate entry points |
+| `test/alpha_mu_tests.cpp` | Regression bundle implementations: all focused and full-suite test cases |
+
+For detailed algorithm references and invariants, see
+[alpha-mu-invariants.md](alpha-mu-invariants.md). For the data-flow diagram,
+see [alpha-mu-dataflow.md](alpha-mu-dataflow.md).
+
 ## Current architectural guidance for changes
 
 When evolving DDS, the low-risk path is:

@@ -647,6 +647,48 @@ This stage is done when:
 
 ## Stage 7 — Apple M1 Max performance program
 
+### Status update (2026-04-27)
+
+This stage is now complete. The full M1 Max performance program has been
+executed, documented, and closed:
+
+- **S7.1** (benchmark suite): the canonical benchmark suite is frozen in
+  `docs/alpha-mu-benchmark-baseline.md`, defining the primary serial CPU-time
+  workload (`list9.txt` depth 2), the secondary board-parallel throughput
+  workload, the deep validation workload (`list10.txt` depth 3), and the PMU
+  single-board workload, along with acceptance criteria for future changes.
+
+- **S7.2** (profiling): the sampled hot path was profiled and documented across
+  multiple sessions in `docs/performance-log.md`. The dominant path is
+  `SearchBridgeStateInternal` -> `MakeBridgeDDSLeafFront` -> `SolveBoardPBN` ->
+  `ABsearch*`, with DDS leaf evaluation consuming 85-95% of total search time.
+  Front operations, world filtering, and bridge-state copy are minor.
+
+- **S7.3-S7.5** (optimization and measurement): multiple optimization
+  candidates were evaluated using serial-mode CPU time and PMU counters, with
+  results recorded in `docs/performance-log.md`. The M1 Max-specific `ABsearch`
+  path delivered -20.7% wall time. Packed `moveType` reduced instructions by
+  -1.1% and store misses by -1.0% while remaining wall-time-neutral. P-core
+  QoS pinning delivered ~4-5% under contention. All other candidates (hot/cold
+  ThreadData, pos reorder, DepthLocal, NEON intrinsics, CLZ intrinsic,
+  QuickTricks context-struct) were reverted after measurement showed regressions
+  or no improvement.
+
+- **S7.6** (M1 Max-specific paths): the only justified M1 Max-specific path is
+  `DDS_TARGET_APPLE_M1_MAX` in `src/ABsearch_m1max.cpp`, auto-selected on
+  Apple arm64 via `M1_MAX_BUILD=1`. No alpha-mu-specific M1 Max paths were
+  justified by measurement.
+
+- **S7.7** (PGO evaluation): PGO trailed the non-PGO M1 Max build by ~2.9%
+  and is not part of the default release build. The PGO pipeline remains
+  available for experimentation.
+
+Key insight: IPC is flat (3.36-3.43) across all variants. The M1 Max is not
+memory-stalling — the correct strategy is to minimize instruction count. The
+board-parallel wall-clock benchmarks that were used initially had ~20-30%
+run-to-run variance and masked regressions; all future A/B comparisons must use
+serial-mode CPU time via `getrusage`.
+
 ### Goal
 
 Push the implementation as far as justified on Apple M1 Max **without**
@@ -697,6 +739,38 @@ This stage is done when:
 ---
 
 ## Stage 8 — first-class engineering and documentation
+
+### Status update (2026-04-27)
+
+This stage is now complete at the current planned scope:
+
+- **S8.1** (module ownership): `docs/architecture.md` now includes a
+  file-level responsibility table for all `test/alpha_mu_*.{h,cpp}` files,
+  mapping each module to its ownership boundary. All alpha-mu source files have
+  `@file` and `@brief` doxygen comments.
+
+- **S8.2** (bridge-player guide): `docs/alpha-mu-guide.md` provides a
+  plain-language explanation of alpha-mu for bridge players: what it is, how it
+  differs from DDS, what possible worlds are, what the output means, how to
+  read a decision-point analysis, current limitations, and a terminology
+  reference.
+
+- **S8.3** (developer algorithm/invariant docs):
+  `docs/alpha-mu-invariants.md` consolidates the optimization-paper feature
+  matrix, code invariants, module-to-paper-concept mapping, core data-structure
+  contracts, search-control flow, semantic-gate regressions, and extension
+  points into a standalone developer reference.
+
+- **S8.4** (data-flow documentation): `docs/alpha-mu-dataflow.md` provides an
+  ASCII-art pipeline diagram from input hand file through world construction,
+  staged filtering, bridge search, DDS leaf calls, and decision reporting, with
+  phase-timing annotations and module-ownership cross-references.
+
+- **S8.5** (Doxygen coverage): `docs/Doxyfile` INPUT list now includes all
+  alpha-mu source files: `alpha_mu_core.cpp`, `alpha_mu_decision.cpp`,
+  `alpha_mu_reporting.cpp`, `alpha_mu_support.cpp`, and `alpha_mu_tests.cpp`
+  in addition to the previously listed files. `docs/mainpage.md` links all
+  new documentation.
 
 ### Goal
 
