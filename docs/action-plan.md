@@ -15,12 +15,12 @@ definitions of done and the M1 Max performance program, see
 Current repository state is ahead of the original sequencing in this plan:
 
 - `Workstream 1` through `Workstream 4` are functionally landed at their current scoped goals,
-- the focused `bridge_dds` regression bundle is currently green,
+- the focused `bridge_dds` regression bundle is currently green and now includes a stable bridge-backed deep-alpha regression,
 - the full `alpha_mu` suite is currently green,
 - practical real-board depth-2 continuation regressions are present for both the 40-card trick-boundary prefix and the 34-card partial-trick prefix on board 1 of `hands/alpha_mu_play.txt`,
 - richer root-report summaries are present,
 - `Workstream 5` is now functionally landed at the current planned split because the solver has dedicated CLI, core, front, worlds, bridge, decision, reporting, and test units,
-- and `Workstream 6` has started in the decision-point runner because the solve result now carries constructor-stage counts, frontier dominance-reduction counts, TT activity, and bridge-search cut/termination counters.
+- and `Workstream 6` has advanced in the decision-point runner because the solve result now carries constructor-stage counts, truthful staged world-pipeline counts, active raw-world identities, frontier dominance-reduction counts, TT activity, and bridge-search cut/termination counters.
 
 So the practical next step is:
 

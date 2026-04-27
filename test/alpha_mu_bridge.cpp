@@ -1399,74 +1399,28 @@ namespace alpha_mu
     const int declarerSeat,
     const vector<PlayHistoryEvent>& playedCards,
     const BridgeInformationState& information,
-    WorldGenerationStats* worldGenerationStats)
+    WorldGenerationStats* worldGenerationStats,
+    DecisionWorldPipelineResult* decisionWorldPipeline)
   {
     const HistoryDerivedWorldSpec spec =
       BuildWorldSpecFromDeal(fullDeal, declarerSeat, playedCards);
     const HistoryDerivedConstructionResult constructed =
       ConstructCandidateWorldsFromHistory(spec, information);
 
-    vector<ParsedWorld> worlds = constructed.worlds;
-
-    if (worlds.empty())
-      return MakeBridgeStateFromDDSDeal(fullDeal);
-
+    BridgeInformationState pipelineInformation(information);
+    pipelineInformation.followSuitConstraints =
+      CollectFollowSuitConstraints(information);
+    pipelineInformation.deriveFollowSuitConstraints = false;
+    pipelineInformation.playHistory.clear();
+    pipelineInformation.currentTrickHistory.clear();
+    const DecisionWorldPipelineResult pipeline =
+      BuildDecisionWorldPipeline(constructed.worlds, pipelineInformation);
     if (worldGenerationStats != NULL)
-    {
-      *worldGenerationStats = WorldGenerationStats();
-      worldGenerationStats->candidateWorldCount = static_cast<unsigned>(worlds.size());
-    }
+      *worldGenerationStats = pipeline.stats;
+    if (decisionWorldPipeline != NULL)
+      *decisionWorldPipeline = pipeline;
 
-    vector<unsigned> survivingIndices;
-    bool voidSuits[4][4];
-    memset(voidSuits, 0, sizeof(voidSuits));
-    for (unsigned i = 0; i < playedCards.size(); i++)
-    {
-      const PlayHistoryEvent& ev = playedCards[i];
-      if (ev.leadSuit >= 0 && ev.move.suit != ev.leadSuit)
-        voidSuits[ev.player][ev.leadSuit] = true;
-    }
-
-    for (unsigned w = 0; w < worlds.size(); w++)
-    {
-      bool valid = true;
-      for (unsigned h = 0; h < spec.hiddenSeats.size() && valid; h++)
-      {
-        const int seat = spec.hiddenSeats[h];
-        for (int s = 0; s < 4 && valid; s++)
-        {
-          if (voidSuits[seat][s] && ! worlds[w].suits[seat][s].empty())
-            valid = false;
-        }
-      }
-      if (valid)
-        survivingIndices.push_back(w);
-    }
-
-    if (survivingIndices.empty())
-      return MakeBridgeStateFromDDSDeal(fullDeal);
-
-    const unsigned worldLimit = min(64U,
-      (information.sampleLimit == 0 ? 64U : information.sampleLimit));
-
-    if (worlds.size() > 64U || survivingIndices.size() > worldLimit)
-    {
-      const vector<unsigned> selected = SelectDeterministicWorldIndices(
-        worlds, survivingIndices, worldLimit, information.samplingSeed);
-      vector<ParsedWorld> compacted;
-      compacted.reserve(selected.size());
-      for (unsigned i = 0; i < selected.size(); i++)
-        compacted.push_back(worlds[selected[i]]);
-      worlds.swap(compacted);
-
-      if (worldGenerationStats != NULL)
-      {
-        WorldGenerationStats compactedStats;
-        GeneratePossibleWorlds(worlds, information, &compactedStats);
-        compactedStats.candidateWorldCount = static_cast<unsigned>(constructed.worlds.size());
-        *worldGenerationStats = compactedStats;
-      }
-    }
+    const vector<ParsedWorld>& worlds = pipeline.activeWorlds;
 
     WorldMask possibleMask;
     possibleMask.count = static_cast<unsigned>(worlds.size());

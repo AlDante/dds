@@ -96,23 +96,28 @@ namespace alpha_mu
 
     void PopulateDecisionWorldExplanation(
       AlphaMuSolveResult& result,
-      const BridgeState& state,
-      const BridgeInformationState& information)
+      const DecisionWorldPipelineResult& pipeline)
     {
-      result.worldExplanation = ExplainPossibleWorldGeneration(state.worlds,
-        information);
-      result.worldExplanation.finalWorldMask = state.possibleWorlds;
-      result.worldExplanation.plausibilityRankedWorldIndices =
-        RankWorldsByPlausibility(state.worlds, state.possibleWorlds, information);
+      result.worldExplanation = pipeline.explanation;
+      result.activeWorldIndices = pipeline.activeWorldIndices;
+      result.activeWorldSerializations.clear();
+      for (unsigned i = 0; i < pipeline.activeWorlds.size(); i++)
+      {
+        result.activeWorldSerializations.push_back(
+          SerializePBNWorld(pipeline.activeWorlds[i]));
+      }
 
+      set<unsigned> activeIndexSet(pipeline.activeWorldIndices.begin(),
+        pipeline.activeWorldIndices.end());
       for (unsigned i = 0; i < result.worldExplanation.worlds.size(); i++)
       {
         WorldExplanation& world = result.worldExplanation.worlds[i];
-        world.accepted = state.possibleWorlds.Has(i);
+        world.accepted = (activeIndexSet.find(world.worldIndex) !=
+          activeIndexSet.end());
         AddWorldExplanationStep(world, "decision_world_set", world.accepted,
           (world.accepted ?
-            "survived into the current compacted decision-point world set" :
-            "not active in the current compacted decision-point world set"));
+            "survived into the compacted decision-point world set searched by alpha-mu" :
+            "not active in the compacted decision-point world set searched by alpha-mu"));
       }
     }
   }
@@ -195,10 +200,11 @@ namespace alpha_mu
       ExplainHistoryDerivedConstruction(spec, information);
     result.constructorStats = constructorExplanation.stats;
 
+    DecisionWorldPipelineResult decisionWorldPipeline;
     const BridgeState state = MakeBridgeStateFromInformationState(
       request.deal, request.declarerSeat, history, information,
-      &result.worldGenerationStats);
-    PopulateDecisionWorldExplanation(result, state, information);
+      &result.worldGenerationStats, &decisionWorldPipeline);
+    PopulateDecisionWorldExplanation(result, decisionWorldPipeline);
     result.playerToMove = state.playerToMove;
     result.decisionOnDeclarerSide =
       (SeatSide(state.playerToMove) == SeatSide(request.declarerSeat));
@@ -213,8 +219,9 @@ namespace alpha_mu
     result.worldGenerationSeconds =
       chrono::duration<double>(worldGenEnd - worldGenStart).count();
 
-    result.worldCount = static_cast<unsigned>(state.worlds.size());
-    result.survivingWorldCount = state.possibleWorlds.PopCount();
+    result.worldCount = result.worldGenerationStats.candidateWorldCount;
+    result.survivingWorldCount = static_cast<unsigned>(
+      decisionWorldPipeline.activeWorldIndices.size());
 
     if (result.survivingWorldCount == 0)
     {

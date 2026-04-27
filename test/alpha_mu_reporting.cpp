@@ -30,6 +30,18 @@ namespace alpha_mu
     {
       cout << SuitName(move.suit) << " " << move.rank;
     }
+
+    string JoinUnsigned(const vector<unsigned>& values)
+    {
+      ostringstream oss;
+      for (unsigned i = 0; i < values.size(); i++)
+      {
+        if (i != 0)
+          oss << ",";
+        oss << values[i];
+      }
+      return oss.str();
+    }
   }
 
   void ReportBenchmarkMethodSummary(
@@ -351,6 +363,23 @@ namespace alpha_mu
            << result.worldExplanation.worlds[i].rejectionReason << endl;
       rejectedLines++;
     }
+
+    cout << setprecision(3);
+    cout.setf(ios::fixed);
+    cout << setprecision(6);
+    cout << "ALPHA_MU_DECISION"
+         << " raw_worlds=" << result.worldCount
+         << " surviving_worlds=" << result.survivingWorldCount
+         << " after_known_cards=" << result.worldGenerationStats.afterKnownCardCount
+         << " after_bidding=" << result.worldGenerationStats.afterBiddingCount
+         << " after_follow_suit=" << result.worldGenerationStats.afterFollowSuitCount
+         << " after_play_history=" << result.worldGenerationStats.afterPlayHistoryCount
+         << " after_current_trick=" << result.worldGenerationStats.afterCurrentTrickCount
+         << " after_sampling=" << result.worldGenerationStats.afterSamplingCount
+         << " duplicates_removed=" << result.worldGenerationStats.duplicateWorldsRemoved
+         << " sampled_out=" << result.worldGenerationStats.sampledOutWorlds
+         << " active_world_ids=" << JoinUnsigned(result.activeWorldIndices)
+         << endl;
 
     cout << setprecision(3);
   }

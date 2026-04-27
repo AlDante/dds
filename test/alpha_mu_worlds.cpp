@@ -880,6 +880,226 @@ namespace alpha_mu
     return score;
   }
 
+  namespace
+  {
+    struct WorldPipelineState
+    {
+      vector<char> knownCards;
+      vector<char> bidding;
+      vector<char> followSuit;
+      vector<char> playHistory;
+      vector<char> currentTrick;
+      vector<char> deduplication;
+      vector<char> finalSelection;
+      map<string, unsigned> firstSeen;
+      vector<WorldConstraint> appliedFollowSuitConstraints;
+    };
+
+    static unsigned CountAccepted(const vector<char>& accepted)
+    {
+      unsigned count = 0;
+      for (unsigned i = 0; i < accepted.size(); i++)
+      {
+        if (accepted[i])
+          count++;
+      }
+      return count;
+    }
+
+    static vector<unsigned> AcceptedIndices(const vector<char>& accepted)
+    {
+      vector<unsigned> indices;
+      for (unsigned i = 0; i < accepted.size(); i++)
+      {
+        if (accepted[i])
+          indices.push_back(i);
+      }
+      return indices;
+    }
+
+    static vector<unsigned> RankWorldIndicesByPlausibility(
+      const vector<ParsedWorld>& worlds,
+      const vector<unsigned>& indices,
+      const BridgeInformationState& information)
+    {
+      vector<unsigned> ranked(indices);
+      stable_sort(ranked.begin(), ranked.end(),
+        [&](const unsigned left, const unsigned right)
+        {
+          const int leftScore = EvaluateWorldPlausibility(worlds[left], information,
+            NULL, NULL);
+          const int rightScore = EvaluateWorldPlausibility(worlds[right], information,
+            NULL, NULL);
+          if (leftScore != rightScore)
+            return leftScore > rightScore;
+
+          const string leftKey = SerializePBNWorld(worlds[left]);
+          const string rightKey = SerializePBNWorld(worlds[right]);
+          if (leftKey != rightKey)
+            return leftKey < rightKey;
+          return left < right;
+        });
+      return ranked;
+    }
+
+    static WorldMask MakeWorldMaskFromIndices(
+      const unsigned worldCount,
+      const vector<unsigned>& indices)
+    {
+      WorldMask mask = WorldMask::None(worldCount);
+      for (unsigned i = 0; i < indices.size(); i++)
+      {
+        Check(indices[i] < worldCount,
+          "world-mask conversion should not reference a world outside the candidate vector");
+        mask.bits |= (1ULL << indices[i]);
+      }
+      return mask;
+    }
+
+    static WorldPipelineState EvaluateWorldPipeline(
+      const vector<ParsedWorld>& worlds,
+      const BridgeInformationState& information,
+      WorldGenerationStats* stats)
+    {
+      WorldPipelineState pipeline;
+      const unsigned worldCount = static_cast<unsigned>(worlds.size());
+      pipeline.knownCards.assign(worldCount, 0);
+      pipeline.bidding.assign(worldCount, 0);
+      pipeline.followSuit.assign(worldCount, 0);
+      pipeline.playHistory.assign(worldCount, 0);
+      pipeline.currentTrick.assign(worldCount, 0);
+      pipeline.deduplication.assign(worldCount, 0);
+      pipeline.finalSelection.assign(worldCount, 0);
+      pipeline.appliedFollowSuitConstraints =
+        CollectFollowSuitConstraints(information);
+
+      if (stats != NULL)
+      {
+        *stats = WorldGenerationStats();
+        stats->candidateWorldCount = worldCount;
+      }
+
+      for (unsigned i = 0; i < worldCount; i++)
+      {
+        if (WorldMatchesAllConstraints(worlds[i], information.knownCardConstraints))
+          pipeline.knownCards[i] = 1;
+      }
+      if (stats != NULL)
+        stats->afterKnownCardCount = CountAccepted(pipeline.knownCards);
+
+      for (unsigned i = 0; i < worldCount; i++)
+      {
+        if (pipeline.knownCards[i] &&
+            WorldMatchesAllConstraints(worlds[i], information.biddingConstraints))
+        {
+          pipeline.bidding[i] = 1;
+        }
+      }
+      if (stats != NULL)
+        stats->afterBiddingCount = CountAccepted(pipeline.bidding);
+
+      for (unsigned i = 0; i < worldCount; i++)
+      {
+        if (pipeline.bidding[i] &&
+            WorldMatchesAllConstraints(worlds[i],
+              pipeline.appliedFollowSuitConstraints))
+        {
+          pipeline.followSuit[i] = 1;
+        }
+      }
+      if (stats != NULL)
+        stats->afterFollowSuitCount = CountAccepted(pipeline.followSuit);
+
+      for (unsigned i = 0; i < worldCount; i++)
+      {
+        if (pipeline.followSuit[i] &&
+            CheckWorldReplayHistory(worlds[i], information.playHistory,
+              "history").ok)
+        {
+          pipeline.playHistory[i] = 1;
+        }
+      }
+      if (stats != NULL)
+        stats->afterPlayHistoryCount = CountAccepted(pipeline.playHistory);
+
+      for (unsigned i = 0; i < worldCount; i++)
+      {
+        if (pipeline.playHistory[i] &&
+            CheckWorldReplayHistoryAfterHistory(worlds[i], information.playHistory,
+              information.currentTrickHistory, "history").ok)
+        {
+          pipeline.currentTrick[i] = 1;
+        }
+      }
+      if (stats != NULL)
+        stats->afterCurrentTrickCount = CountAccepted(pipeline.currentTrick);
+
+      if (information.deduplicateEquivalentWorlds)
+      {
+        for (unsigned i = 0; i < worldCount; i++)
+        {
+          if (! pipeline.currentTrick[i])
+            continue;
+
+          const string key = SerializePBNWorld(worlds[i]);
+          if (pipeline.firstSeen.find(key) != pipeline.firstSeen.end())
+            continue;
+
+          pipeline.firstSeen[key] = i;
+          pipeline.deduplication[i] = 1;
+        }
+      }
+      else
+      {
+        for (unsigned i = 0; i < worldCount; i++)
+          pipeline.deduplication[i] = pipeline.currentTrick[i];
+      }
+
+      if (stats != NULL)
+      {
+        stats->duplicateWorldsRemoved = CountAccepted(pipeline.currentTrick) -
+          CountAccepted(pipeline.deduplication);
+      }
+
+      vector<unsigned> selected = AcceptedIndices(pipeline.deduplication);
+      const unsigned effectiveSampleLimit =
+        (information.sampleLimit == 0 ? 64U : min(64U, information.sampleLimit));
+      if (selected.size() > effectiveSampleLimit)
+      {
+        sort(selected.begin(), selected.end(),
+          [&](const unsigned left, const unsigned right)
+          {
+            const string leftKey = SerializePBNWorld(worlds[left]);
+            const string rightKey = SerializePBNWorld(worlds[right]);
+            if (leftKey != rightKey)
+              return leftKey < rightKey;
+            return left < right;
+          });
+
+        vector<unsigned> sampled;
+        const unsigned offset = information.samplingSeed %
+          static_cast<unsigned>(selected.size());
+        for (unsigned i = 0; i < effectiveSampleLimit; i++)
+          sampled.push_back(selected[(offset + i) % selected.size()]);
+        sort(sampled.begin(), sampled.end());
+        selected.swap(sampled);
+      }
+
+      for (unsigned i = 0; i < selected.size(); i++)
+        pipeline.finalSelection[selected[i]] = 1;
+
+      if (stats != NULL)
+      {
+        stats->sampledOutWorlds = CountAccepted(pipeline.deduplication) -
+          CountAccepted(pipeline.finalSelection);
+        stats->afterSamplingCount = CountAccepted(pipeline.finalSelection);
+        stats->finalWorldCount = CountAccepted(pipeline.finalSelection);
+      }
+
+      return pipeline;
+    }
+  }
+
   vector<unsigned> RankWorldsByPlausibility(
     const vector<ParsedWorld>& worlds,
     const WorldMask& candidates,
@@ -892,23 +1112,149 @@ namespace alpha_mu
         ranked.push_back(i);
     }
 
-    stable_sort(ranked.begin(), ranked.end(),
-      [&](const unsigned left, const unsigned right)
-      {
-        const int leftScore = EvaluateWorldPlausibility(worlds[left], information,
-          NULL, NULL);
-        const int rightScore = EvaluateWorldPlausibility(worlds[right], information,
-          NULL, NULL);
-        if (leftScore != rightScore)
-          return leftScore > rightScore;
+    return RankWorldIndicesByPlausibility(worlds, ranked, information);
+  }
 
-        const string leftKey = SerializePBNWorld(worlds[left]);
-        const string rightKey = SerializePBNWorld(worlds[right]);
-        if (leftKey != rightKey)
-          return leftKey < rightKey;
-        return left < right;
-      });
-    return ranked;
+  DecisionWorldPipelineResult BuildDecisionWorldPipeline(
+    const vector<ParsedWorld>& candidateWorlds,
+    const BridgeInformationState& information)
+  {
+    DecisionWorldPipelineResult result;
+    result.candidateWorlds = candidateWorlds;
+
+    const WorldPipelineState pipeline = EvaluateWorldPipeline(candidateWorlds,
+      information, &result.stats);
+    result.activeWorldIndices = AcceptedIndices(pipeline.finalSelection);
+    result.activeWorlds.reserve(result.activeWorldIndices.size());
+    for (unsigned i = 0; i < result.activeWorldIndices.size(); i++)
+      result.activeWorlds.push_back(candidateWorlds[result.activeWorldIndices[i]]);
+
+    result.explanation.appliedFollowSuitConstraints =
+      pipeline.appliedFollowSuitConstraints;
+    result.explanation.finalWorldIndices = result.activeWorldIndices;
+    if (candidateWorlds.size() <= 64U)
+    {
+      result.explanation.finalWorldMask = MakeWorldMaskFromIndices(
+        static_cast<unsigned>(candidateWorlds.size()), result.activeWorldIndices);
+    }
+    else
+    {
+      result.explanation.finalWorldMask = WorldMask::All(static_cast<unsigned>(
+        result.activeWorldIndices.size()));
+    }
+    result.explanation.plausibilityRankedWorldIndices =
+      RankWorldIndicesByPlausibility(candidateWorlds,
+        result.activeWorldIndices, information);
+
+    for (unsigned i = 0; i < candidateWorlds.size(); i++)
+    {
+      WorldExplanation world;
+      world.worldIndex = i;
+      world.serializedWorld = SerializePBNWorld(candidateWorlds[i]);
+      for (unsigned h = 0; h < information.plausibilityHints.size(); h++)
+        world.plausibilityMaxScore += information.plausibilityHints[h].weight;
+      world.plausibilityScore = EvaluateWorldPlausibility(candidateWorlds[i],
+        information, &world.satisfiedPlausibilityHints,
+        &world.unsatisfiedPlausibilityHints);
+
+      if (! pipeline.knownCards[i])
+      {
+        world.accepted = false;
+        AddWorldExplanationStep(world, "known_cards", false,
+          FirstConstraintFailureReason(candidateWorlds[i],
+            information.knownCardConstraints));
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "known_cards", true,
+        "passed known-card constraints");
+
+      if (! pipeline.bidding[i])
+      {
+        world.accepted = false;
+        AddWorldExplanationStep(world, "bidding", false,
+          FirstConstraintFailureReason(candidateWorlds[i],
+            information.biddingConstraints));
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "bidding", true,
+        "passed bidding constraints");
+
+      if (! pipeline.followSuit[i])
+      {
+        world.accepted = false;
+        AddWorldExplanationStep(world, "follow_suit", false,
+          FirstConstraintFailureReason(candidateWorlds[i],
+            result.explanation.appliedFollowSuitConstraints));
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "follow_suit", true,
+        (result.explanation.appliedFollowSuitConstraints.empty() ?
+          "no explicit follow-suit implications" :
+          "passed explicit follow-suit implications"));
+
+      if (! pipeline.playHistory[i])
+      {
+        world.accepted = false;
+        AddWorldExplanationStep(world, "play_history", false,
+          CheckWorldReplayHistory(candidateWorlds[i], information.playHistory,
+            "play-history").reason);
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "play_history", true,
+        "replayed prior tricks legally");
+
+      if (! pipeline.currentTrick[i])
+      {
+        world.accepted = false;
+        AddWorldExplanationStep(world, "current_trick", false,
+          CheckWorldReplayHistoryAfterHistory(candidateWorlds[i],
+            information.playHistory, information.currentTrickHistory,
+            "current-trick").reason);
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+      AddWorldExplanationStep(world, "current_trick", true,
+        "replayed the current partial trick legally");
+
+      if (information.deduplicateEquivalentWorlds && ! pipeline.deduplication[i])
+      {
+        world.accepted = false;
+        const string key = SerializePBNWorld(candidateWorlds[i]);
+        const unsigned first = pipeline.firstSeen.find(key)->second;
+        ostringstream oss;
+        oss << "duplicate of surviving world " << first;
+        AddWorldExplanationStep(world, "deduplication", false, oss.str());
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+      if (information.deduplicateEquivalentWorlds)
+        AddWorldExplanationStep(world, "deduplication", true,
+          "kept as the canonical surviving world");
+
+      if (! pipeline.finalSelection[i])
+      {
+        world.accepted = false;
+        ostringstream oss;
+        oss << "deterministic sampling seed " << information.samplingSeed
+            << " skipped this world after canonical ordering";
+        AddWorldExplanationStep(world, "sampling", false, oss.str());
+        result.explanation.worlds.push_back(world);
+        continue;
+      }
+
+      if (information.sampleLimit != 0)
+        AddWorldExplanationStep(world, "sampling", true,
+          "retained by deterministic sampling");
+
+      world.accepted = true;
+      result.explanation.worlds.push_back(world);
+    }
+
+    return result;
   }
 
   WorldMask GeneratePossibleWorlds(
@@ -920,197 +1266,19 @@ namespace alpha_mu
     DebugCheckWorldMaskCapacity(static_cast<unsigned>(worlds.size()),
       "GeneratePossibleWorlds");
 #endif
-    const vector<WorldConstraint> followSuitConstraints =
-      CollectFollowSuitConstraints(information);
-    WorldMask mask = WorldMask::All(static_cast<unsigned>(worlds.size()));
+    const DecisionWorldPipelineResult pipeline = BuildDecisionWorldPipeline(
+      worlds, information);
     if (stats != NULL)
-      stats->candidateWorldCount = mask.PopCount();
-
-    mask = FilterWorldsByConstraints(worlds, mask,
-      information.knownCardConstraints);
-    if (stats != NULL)
-      stats->afterKnownCardCount = mask.PopCount();
-
-    mask = FilterWorldsByConstraints(worlds, mask,
-      information.biddingConstraints);
-    if (stats != NULL)
-      stats->afterBiddingCount = mask.PopCount();
-
-    mask = FilterWorldsByConstraints(worlds, mask, followSuitConstraints);
-    if (stats != NULL)
-      stats->afterFollowSuitCount = mask.PopCount();
-
-    mask = FilterWorldsByHistory(worlds, mask, information.playHistory);
-    if (stats != NULL)
-      stats->afterPlayHistoryCount = mask.PopCount();
-
-    mask = FilterWorldsByHistoryAfterHistory(worlds, mask, information.playHistory,
-      information.currentTrickHistory);
-    if (stats != NULL)
-      stats->afterCurrentTrickCount = mask.PopCount();
-
-    if (information.deduplicateEquivalentWorlds)
-    {
-      unsigned duplicatesRemoved = 0;
-      mask = DeduplicateWorldMask(worlds, mask, duplicatesRemoved);
-      if (stats != NULL)
-        stats->duplicateWorldsRemoved = duplicatesRemoved;
-    }
-
-    unsigned sampledOutWorlds = 0;
-    mask = SampleWorldMaskDeterministically(worlds, mask, information.sampleLimit,
-      information.samplingSeed, sampledOutWorlds);
-    if (stats != NULL)
-    {
-      stats->afterSamplingCount = mask.PopCount();
-      stats->sampledOutWorlds = sampledOutWorlds;
-    }
-
-    if (stats != NULL)
-      stats->finalWorldCount = mask.PopCount();
-    return mask;
+      *stats = pipeline.stats;
+    return MakeWorldMaskFromIndices(static_cast<unsigned>(worlds.size()),
+      pipeline.activeWorldIndices);
   }
 
   WorldGenerationExplanation ExplainPossibleWorldGeneration(
     const vector<ParsedWorld>& worlds,
     const BridgeInformationState& information)
   {
-    WorldGenerationExplanation explanation;
-    explanation.appliedFollowSuitConstraints =
-      CollectFollowSuitConstraints(information);
-
-    const WorldMask allMask = WorldMask::All(static_cast<unsigned>(worlds.size()));
-    const WorldMask knownMask = FilterWorldsByConstraints(worlds, allMask,
-      information.knownCardConstraints);
-    const WorldMask biddingMask = FilterWorldsByConstraints(worlds, knownMask,
-      information.biddingConstraints);
-    const WorldMask followSuitMask = FilterWorldsByConstraints(worlds, biddingMask,
-      explanation.appliedFollowSuitConstraints);
-    const WorldMask playHistoryMask = FilterWorldsByHistory(worlds, followSuitMask,
-      information.playHistory);
-    const WorldMask currentTrickMask = FilterWorldsByHistoryAfterHistory(worlds,
-      playHistoryMask, information.playHistory, information.currentTrickHistory);
-
-    WorldMask dedupMask = currentTrickMask;
-    map<string, unsigned> firstSeen;
-    if (information.deduplicateEquivalentWorlds)
-    {
-      unsigned duplicatesRemoved = 0;
-      dedupMask = DeduplicateWorldMask(worlds, currentTrickMask, duplicatesRemoved);
-      for (unsigned i = 0; i < worlds.size(); i++)
-      {
-        if (! currentTrickMask.Has(i))
-          continue;
-
-        const string key = SerializePBNWorld(worlds[i]);
-        if (firstSeen.find(key) == firstSeen.end())
-          firstSeen[key] = i;
-      }
-    }
-
-    unsigned sampledOutWorlds = 0;
-    explanation.finalWorldMask = SampleWorldMaskDeterministically(worlds, dedupMask,
-      information.sampleLimit, information.samplingSeed, sampledOutWorlds);
-    explanation.plausibilityRankedWorldIndices = RankWorldsByPlausibility(worlds,
-      explanation.finalWorldMask, information);
-
-    for (unsigned i = 0; i < worlds.size(); i++)
-    {
-      WorldExplanation world;
-      world.worldIndex = i;
-      world.serializedWorld = SerializePBNWorld(worlds[i]);
-      for (unsigned h = 0; h < information.plausibilityHints.size(); h++)
-        world.plausibilityMaxScore += information.plausibilityHints[h].weight;
-      world.plausibilityScore = EvaluateWorldPlausibility(worlds[i], information,
-        &world.satisfiedPlausibilityHints, &world.unsatisfiedPlausibilityHints);
-
-      if (! knownMask.Has(i))
-      {
-        AddWorldExplanationStep(world, "known_cards", false,
-          FirstConstraintFailureReason(worlds[i], information.knownCardConstraints));
-        explanation.worlds.push_back(world);
-        continue;
-      }
-      AddWorldExplanationStep(world, "known_cards", true,
-        "passed known-card constraints");
-
-      if (! biddingMask.Has(i))
-      {
-        AddWorldExplanationStep(world, "bidding", false,
-          FirstConstraintFailureReason(worlds[i], information.biddingConstraints));
-        explanation.worlds.push_back(world);
-        continue;
-      }
-      AddWorldExplanationStep(world, "bidding", true,
-        "passed bidding constraints");
-
-      if (! followSuitMask.Has(i))
-      {
-        AddWorldExplanationStep(world, "follow_suit", false,
-          FirstConstraintFailureReason(worlds[i], explanation.appliedFollowSuitConstraints));
-        explanation.worlds.push_back(world);
-        continue;
-      }
-      AddWorldExplanationStep(world, "follow_suit", true,
-        (explanation.appliedFollowSuitConstraints.empty() ?
-          "no explicit follow-suit implications" :
-          "passed explicit follow-suit implications"));
-
-      if (! playHistoryMask.Has(i))
-      {
-        AddWorldExplanationStep(world, "play_history", false,
-          CheckWorldReplayHistory(worlds[i], information.playHistory,
-            "play-history").reason);
-        explanation.worlds.push_back(world);
-        continue;
-      }
-      AddWorldExplanationStep(world, "play_history", true,
-        "replayed prior tricks legally");
-
-      if (! currentTrickMask.Has(i))
-      {
-        AddWorldExplanationStep(world, "current_trick", false,
-          CheckWorldReplayHistoryAfterHistory(worlds[i], information.playHistory,
-            information.currentTrickHistory, "current-trick").reason);
-        explanation.worlds.push_back(world);
-        continue;
-      }
-      AddWorldExplanationStep(world, "current_trick", true,
-        "replayed the current partial trick legally");
-
-      if (information.deduplicateEquivalentWorlds && ! dedupMask.Has(i))
-      {
-        const string key = SerializePBNWorld(worlds[i]);
-        const unsigned first = firstSeen[key];
-        ostringstream oss;
-        oss << "duplicate of surviving world " << first;
-        AddWorldExplanationStep(world, "deduplication", false, oss.str());
-        explanation.worlds.push_back(world);
-        continue;
-      }
-      if (information.deduplicateEquivalentWorlds)
-        AddWorldExplanationStep(world, "deduplication", true,
-          "kept as the canonical surviving world");
-
-      if (! explanation.finalWorldMask.Has(i))
-      {
-        ostringstream oss;
-        oss << "deterministic sampling seed " << information.samplingSeed
-            << " skipped this world after canonical ordering";
-        AddWorldExplanationStep(world, "sampling", false, oss.str());
-        explanation.worlds.push_back(world);
-        continue;
-      }
-
-      if (information.sampleLimit != 0)
-        AddWorldExplanationStep(world, "sampling", true,
-          "retained by deterministic sampling");
-
-      world.accepted = true;
-      explanation.worlds.push_back(world);
-    }
-
-    return explanation;
+    return BuildDecisionWorldPipeline(worlds, information).explanation;
   }
 
   WorldMask GeneratePossibleWorlds(
@@ -1193,6 +1361,7 @@ namespace alpha_mu
 
     return spec;
   }
+
 
   BridgeInformationState BuildInformationStateFromPlay(
     const dealPBN& fullDeal,

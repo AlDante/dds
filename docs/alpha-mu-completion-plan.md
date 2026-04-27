@@ -193,6 +193,7 @@ green before and after every Stage 1 slice:
 
 - `bridge move generation OK`
 - `bridge search control OK`
+- `bridge deep alpha cut OK`
 - `bridge root reporting OK`
 - `partial-information world generation OK`
 - `follow-suit narrowing in partial information OK`
@@ -314,6 +315,20 @@ This stage is done when:
 ---
 
 ## Stage 2 — align the decision-point world pipeline with staged filtering
+
+### Status update (2026-04-26)
+
+This stage is now functionally landed at the currently planned scope:
+
+- the decision-point runner, explanation path, and compacted bridge-search state
+  now share one staged world pipeline,
+- raw constructor-world IDs now survive into the final compacted search-world
+  set,
+- `AlphaMuSolveResult` now reports truthful per-stage counts from that shared
+  pipeline,
+- decision output now includes machine-readable stage-count summaries,
+- and regressions now check both pipeline stability and the bridge-backed deep
+  alpha cut in the focused `bridge_dds` bundle.
 
 ### Goal
 

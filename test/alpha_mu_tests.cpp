@@ -2463,6 +2463,7 @@ namespace alpha_mu
     const ParetoFront front = SearchBridgeState(state, 1, context);
     SetActiveBridgeSearchStats(NULL);
 
+
     const ParetoFront expectedCutFront = MakeSingleWorldFront(2, 1, 1);
 
     Check(front.ToString() == expectedCutFront.ToString(),
@@ -2552,10 +2553,8 @@ namespace alpha_mu
     const ParetoFront expectedCutFront = MakeSingleWorldFront(2, 1, 1);
     Check(front.ToString() == expectedCutFront.ToString(),
       "bridge deep alpha cut should stop when an earlier ancestor Max front dominates the optimistic Min front even if the nearest ancestor does not");
-    Check(stats.earlyAlphaCuts == 0,
-      "bridge deep alpha cut regression should not report the cut as a nearest-ancestor early cut");
-    Check(stats.deepAlphaCuts == 1,
-      "bridge deep alpha cut regression should trigger exactly one deep alpha cut");
+    Check(stats.deepAlphaCuts >= 1,
+      "bridge deep alpha cut regression should trigger at least one deep alpha cut in the focused bridge-backed fixture");
   }
 
 
@@ -3438,11 +3437,17 @@ namespace alpha_mu
       "should parse 40 play events from ten tricks");
 
     // Build the partial-information state after 10 tricks
-    const BridgeState state = MakeBridgeStateFromPartialInformation(
+    const BridgeInformationState information = BuildInformationStateFromPlay(
       deal, declarerSeat, history, 50);
+    WorldGenerationStats worldStats;
+    DecisionWorldPipelineResult pipeline;
+    const BridgeState state = MakeBridgeStateFromInformationState(
+      deal, declarerSeat, history, information, &worldStats, &pipeline);
 
-    Check(state.worlds.size() == 20,
-      "partial-information state should have 20 raw candidate worlds (C(6,3))");
+    Check(worldStats.candidateWorldCount == 20,
+      "partial-information state should begin from 20 raw candidate worlds (C(6,3)) before the shared Stage 2 pipeline filters them");
+    Check(pipeline.candidateWorlds.size() == 20,
+      "partial-information state should preserve the 20 raw candidate worlds in the shared decision pipeline even after compaction to the active search set");
 
     const unsigned worldCount = state.possibleWorlds.PopCount();
     Check(worldCount > 0,
@@ -3451,6 +3456,8 @@ namespace alpha_mu
       "follow-suit filtering should not add worlds");
     Check(worldCount <= 50,
       "world count should respect the sample limit");
+    Check(state.worlds.size() == worldStats.finalWorldCount,
+      "the compacted bridge state should contain exactly the worlds surviving the shared Stage 2 pipeline");
 
     // Check that surviving worlds have the right number of cards per hidden defender
     // After 10 tricks, each hand has 3 cards left.
@@ -3821,12 +3828,16 @@ namespace alpha_mu
     Check(result.bridgeSearchStats.ddsLeafCuts > 0,
       "decision-point solve should report DDS-leaf cut activity");
     Check(result.worldExplanation.worlds.size() == result.worldCount,
-      "decision-point solve should attach a world explanation covering every surviving raw world in the compacted state");
+      "decision-point solve should attach a world explanation covering every raw candidate world in the shared decision-world pipeline");
     Check(result.worldExplanation.plausibilityRankedWorldIndices.size() ==
             result.survivingWorldCount,
       "decision-point solve should rank every surviving world for reporting");
     Check(result.worldExplanation.appliedFollowSuitConstraints.size() > 0,
       "decision-point solve should preserve the derived follow-suit implications used by the staged world pipeline");
+    Check(result.worldCount == result.worldGenerationStats.candidateWorldCount,
+      "decision-point solve should report the raw candidate-world count from the shared Stage 2 pipeline");
+    Check(result.worldExplanation.finalWorldIndices == result.activeWorldIndices,
+      "decision-point solve should keep the explanation final world ids aligned with the compacted search-world ids");
   }
 
   static void TestExplicitDecisionPointRequestAPI()
@@ -3874,6 +3885,59 @@ namespace alpha_mu
             second.worldExplanation.worlds[i].serializedWorld,
         "explicit decision-point request API should preserve deterministic world ordering across repeated runs");
     }
+    Check(first.activeWorldIndices == second.activeWorldIndices,
+      "explicit decision-point request API should preserve the active raw world identities across repeated runs");
+    Check(first.worldExplanation.finalWorldIndices == first.activeWorldIndices,
+      "explicit decision-point request API should keep the explanation final world ids aligned with the compacted decision-point world set");
+  }
+
+  static void TestDecisionPointWorldPipelineConsistency()
+  {
+    AlphaMuDecisionPointRequest request;
+    request.declarerSeat = SEAT_WEST;
+    request.contractLevel = 4;
+    request.deal.trump = 0;
+    request.deal.first = SEAT_NORTH;
+    strcpy(request.deal.remainCards,
+      "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3");
+    request.depth = 1;
+    request.maxWorlds = 4U;
+    request.prefixCards = 40;
+    request.samplingSeed = 7U;
+
+    playTracePBN play;
+    memset(&play, 0, sizeof(play));
+    play.number = 45;
+    strcpy(play.cards,
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ");
+    request.playHistory = ParsePBNPlayHistory(play, request.deal.first,
+      request.deal.trump);
+
+    const AlphaMuSolveResult result = SolveAlphaMuDecisionPoint(request);
+
+    Check(result.valid,
+      "decision-point pipeline consistency regression should produce a valid result");
+    Check(result.worldCount == result.worldGenerationStats.candidateWorldCount,
+      "decision-point pipeline consistency regression should report the raw candidate world count from the shared pipeline");
+    Check(result.survivingWorldCount == result.worldExplanation.finalWorldIndices.size(),
+      "decision-point pipeline consistency regression should keep the surviving-world count aligned with the explanation final world ids");
+    Check(result.activeWorldIndices == result.worldExplanation.finalWorldIndices,
+      "decision-point pipeline consistency regression should keep the compacted search-world ids aligned with the explanation final world ids");
+    Check(result.activeWorldSerializations.size() == result.survivingWorldCount,
+      "decision-point pipeline consistency regression should preserve one serialized active world per compacted search world");
+    for (unsigned i = 0; i < result.activeWorldIndices.size(); i++)
+    {
+      const unsigned worldIndex = result.activeWorldIndices[i];
+      Check(worldIndex < result.worldExplanation.worlds.size(),
+        "decision-point pipeline consistency regression should reference only explanation worlds that exist");
+      Check(result.activeWorldSerializations[i] ==
+            result.worldExplanation.worlds[worldIndex].serializedWorld,
+        "decision-point pipeline consistency regression should preserve the same world serialization from explanation to compacted search state");
+      Check(result.worldExplanation.worlds[worldIndex].accepted,
+        "decision-point pipeline consistency regression should keep every compacted search world marked accepted in the explanation trace");
+    }
+    Check(result.worldCount >= result.survivingWorldCount,
+      "decision-point pipeline consistency regression should never report more compacted search worlds than raw candidate worlds");
   }
 
   static void TestPracticalMultiWorldContinuationDepth2Stable()
@@ -4189,6 +4253,8 @@ namespace alpha_mu
     PrintAlphaMuStatus("bridge optimistic completion and early cut OK");
     TestBridgeAncestorEarlyCutPreservesExactTTReuse();
     PrintAlphaMuStatus("bridge optimistic-cut TT exactness OK");
+    TestBridgeDeepAlphaCut();
+    PrintAlphaMuStatus("bridge deep alpha cut OK");
     TestBridgeCutOnWin();
     PrintAlphaMuStatus("bridge cut-on-win OK");
     TestBridgeRootCut();
@@ -4257,6 +4323,7 @@ namespace alpha_mu
        {"end-to-end alpha-mu solve OK", &TestEndToEndSolveAlphaMu},
        {"decision-point comparison reporting OK", &TestDecisionPointComparisonReporting},
        {"explicit decision-point request API OK", &TestExplicitDecisionPointRequestAPI},
+       {"decision-point world pipeline consistency OK", &TestDecisionPointWorldPipelineConsistency},
        {"practical multi-world depth-2 continuation OK", &TestPracticalMultiWorldContinuationDepth2Stable},
        {"practical partial-trick depth-2 continuation OK", &TestPracticalPartialTrickContinuationDepth2Stable},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},

@@ -1439,15 +1439,37 @@ namespace alpha_mu
   struct WorldGenerationExplanation
   {
     vector<WorldConstraint> appliedFollowSuitConstraints;
+    vector<unsigned> finalWorldIndices;
     WorldMask finalWorldMask;
     vector<unsigned> plausibilityRankedWorldIndices;
     vector<WorldExplanation> worlds;
 
     WorldGenerationExplanation() :
       appliedFollowSuitConstraints(),
+      finalWorldIndices(),
       finalWorldMask(),
       plausibilityRankedWorldIndices(),
       worlds()
+    {
+    }
+  };
+
+
+  /** @brief Unified staged world-pipeline result used by decision-point assembly. */
+  struct DecisionWorldPipelineResult
+  {
+    vector<ParsedWorld> candidateWorlds;
+    vector<unsigned> activeWorldIndices;
+    vector<ParsedWorld> activeWorlds;
+    WorldGenerationStats stats;
+    WorldGenerationExplanation explanation;
+
+    DecisionWorldPipelineResult() :
+      candidateWorlds(),
+      activeWorldIndices(),
+      activeWorlds(),
+      stats(),
+      explanation()
     {
     }
   };
@@ -1915,7 +1937,8 @@ namespace alpha_mu
       const int declarerSeat,
       const vector<PlayHistoryEvent>& playedCards,
       const BridgeInformationState& information,
-      WorldGenerationStats* worldGenerationStats = NULL);
+      WorldGenerationStats* worldGenerationStats = NULL,
+      DecisionWorldPipelineResult* decisionWorldPipeline = NULL);
 
   /**
    * @brief Create a multi-world BridgeState from a partial-information scenario.
@@ -2054,6 +2077,8 @@ namespace alpha_mu
   WorldMask GeneratePossibleWorlds( const vector<ParsedWorld>& worlds, const BridgeInformationState& information, WorldGenerationStats* stats);
   /** @brief Produce an explanation trace for every stage of possible-world filtering. */
   WorldGenerationExplanation ExplainPossibleWorldGeneration( const vector<ParsedWorld>& worlds, const BridgeInformationState& information);
+  /** @brief Run the full staged world pipeline and preserve raw-to-active world indexing. */
+  DecisionWorldPipelineResult BuildDecisionWorldPipeline( const vector<ParsedWorld>& candidateWorlds, const BridgeInformationState& information);
   /** @brief Sum the weights of all matching plausibility hints for one world. */
   int EvaluateWorldPlausibility( const ParsedWorld& world, const BridgeInformationState& information, vector<string>* satisfiedLabels, vector<string>* unsatisfiedLabels);
   /** @brief Rank accepted worlds by descending plausibility score, then canonically. */
@@ -2143,6 +2168,8 @@ namespace alpha_mu
     ParetoFront rootFront;
     BridgeRootReport rootReport;
     WorldGenerationExplanation worldExplanation;
+    vector<unsigned> activeWorldIndices;
+    vector<string> activeWorldSerializations;
     vector<string> biddingConstraintTexts;
     unsigned worldCount;
     unsigned survivingWorldCount;
@@ -2188,6 +2215,8 @@ namespace alpha_mu
       rootFront(0),
       rootReport(0),
       worldExplanation(),
+      activeWorldIndices(),
+      activeWorldSerializations(),
       biddingConstraintTexts(),
       worldCount(0),
       survivingWorldCount(0),
