@@ -3989,6 +3989,8 @@ namespace alpha_mu
       (result.ttProbes >= result.ttHits ? result.ttProbes - result.ttHits : 0ULL);
     const double ttHitRate = (result.ttProbes == 0ULL ? 0.0 :
       static_cast<double>(result.ttHits) / static_cast<double>(result.ttProbes));
+    const double nonDDSSearchSeconds =
+      max(0.0, result.searchSeconds - result.ddsLeafSeconds);
 
     ostringstream expectedDecisionLine;
     expectedDecisionLine << "ALPHA_MU_DECISION raw_worlds="
@@ -4029,6 +4031,14 @@ namespace alpha_mu
                          << result.bridgeSearchStats.noMoveLeafCuts
                          << " terminal_fronts="
                          << result.bridgeSearchStats.terminalFronts
+                         << " world_gen_seconds="
+                         << result.worldGenerationSeconds
+                         << " search_seconds=" << result.searchSeconds
+                         << " bridge_search_seconds="
+                         << nonDDSSearchSeconds
+                         << " dds_leaf_seconds="
+                         << result.ddsLeafSeconds
+                         << " total_seconds=" << result.totalSeconds
                          << " after_known_cards="
                          << result.worldGenerationStats.afterKnownCardCount
                          << " after_bidding="

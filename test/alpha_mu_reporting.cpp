@@ -457,6 +457,11 @@ namespace alpha_mu
          << " cut_dds_leaf=" << result.bridgeSearchStats.ddsLeafCuts
          << " cut_no_move=" << result.bridgeSearchStats.noMoveLeafCuts
          << " terminal_fronts=" << result.bridgeSearchStats.terminalFronts
+         << " world_gen_seconds=" << result.worldGenerationSeconds
+         << " search_seconds=" << result.searchSeconds
+         << " bridge_search_seconds=" << nonDDSSearchSeconds
+         << " dds_leaf_seconds=" << result.ddsLeafSeconds
+         << " total_seconds=" << result.totalSeconds
          << " after_known_cards=" << result.worldGenerationStats.afterKnownCardCount
          << " after_bidding=" << result.worldGenerationStats.afterBiddingCount
          << " after_follow_suit=" << result.worldGenerationStats.afterFollowSuitCount
