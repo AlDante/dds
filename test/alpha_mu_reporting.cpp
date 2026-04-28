@@ -32,6 +32,14 @@ namespace alpha_mu
       cout << SuitName(move.suit) << " " << move.rank;
     }
 
+    string CardToken(const BridgeMove& move)
+    {
+      string token;
+      token.push_back("SHDC"[move.suit]);
+      token.push_back(move.rank);
+      return token;
+    }
+
     string JoinUnsigned(const vector<unsigned>& values)
     {
       ostringstream oss;
@@ -581,6 +589,93 @@ namespace alpha_mu
          << " optimistic_completions=" << result.bridgeSearchStats.optimisticCompletions
          << " decision_policy=" << AlphaMuDecisionPolicyName(result.appliedDecisionPolicy)
          << " chosen_weighted=" << result.chosenMoveWeightedScore
+         << endl;
+
+    cout << setprecision(3);
+  }
+
+  void ReportExactPlayLineResult(const ExactPlayLineResult& result)
+  {
+    cout.setf(ios::fixed);
+    cout << setprecision(3);
+
+    cout << "=== PBN Exact Recommendation ===" << endl;
+    if (! result.valid)
+    {
+      cout << "  Status: no valid exact recommendation" << endl;
+      cout << "  Total time: " << result.totalSeconds << "s" << endl;
+      return;
+    }
+
+    cout << "  Source: " << result.sourcePath;
+    if (! result.boardLabel.empty())
+      cout << " (board=" << result.boardLabel << ")";
+    cout << endl;
+
+    cout << "  Contract: " << result.contractLevel
+         << ContractTrumpName(result.contractTrumpSuit)
+         << " by " << SeatName(result.declarerSeat)
+         << " (leader=" << SeatName(result.leaderSeat) << ")" << endl;
+    cout << "  Position: player=" << SeatName(result.playerToMove)
+         << ", play prefix=" << result.prefixPlayLength
+         << " cards, declarer tricks so far="
+         << result.currentDeclarerTricks << endl;
+    cout << "  Projection: declarer takes "
+         << result.projectedDeclarerTricks << " tricks";
+    if (result.makesContract)
+      cout << " (makes contract)";
+    else
+      cout << " (down " << (result.targetTricks - result.projectedDeclarerTricks)
+           << ")";
+    cout << endl;
+    cout << "  Time: " << result.totalSeconds << "s" << endl;
+
+    if (result.line.empty())
+    {
+      cout << "  Recommended line: no cards remain" << endl;
+    }
+    else
+    {
+      cout << "  Recommended line:" << endl;
+      unsigned trickNumber = result.prefixPlayLength / 4U + 1U;
+      unsigned cardsInTrick = result.prefixPlayLength % 4U;
+      for (unsigned i = 0; i < result.line.size(); i++)
+      {
+        if (cardsInTrick == 0)
+        {
+          cout << "    Trick " << trickNumber << ":" << endl;
+        }
+        else if (i == 0)
+        {
+          cout << "    Trick " << trickNumber << " (continuing with "
+               << cardsInTrick << "/4 cards already played):" << endl;
+        }
+
+        cout << "      " << SeatName(result.line[i].player) << " ";
+        PrintMoveSummary(result.line[i].move);
+        cout << " -> projected=" << result.line[i].projectedDeclarerTricks
+             << endl;
+
+        cardsInTrick++;
+        if (cardsInTrick == 4)
+        {
+          cardsInTrick = 0;
+          trickNumber++;
+        }
+      }
+    }
+
+    cout << setprecision(6);
+    cout << "ALPHA_MU_PBN_RECOMMEND"
+         << " prefix_cards=" << result.prefixPlayLength
+         << " player_to_move=" << SeatName(result.playerToMove)
+         << " projected_tricks=" << result.projectedDeclarerTricks
+         << " target_tricks=" << result.targetTricks
+         << " makes_contract=" << (result.makesContract ? 1 : 0)
+         << " line_cards=" << result.line.size()
+         << " first_move="
+         << (result.line.empty() ? string("-") : CardToken(result.line[0].move))
+         << " total_seconds=" << result.totalSeconds
          << endl;
 
     cout << setprecision(3);

@@ -83,6 +83,43 @@ namespace alpha_mu
       return state;
     }
 
+    BridgeState MakeExactRecommendationState(const PBNBoardRecord& board)
+    {
+      BridgeState state = MakeBridgeStateFromDDSDeal(board.deal);
+      state.maxSide = SeatSide(board.declarerSeat);
+
+      for (unsigned i = 0; i < board.playHistory.size(); i++)
+      {
+        const PlayHistoryEvent& event = board.playHistory[i];
+        Check(event.player == state.playerToMove,
+          "PBN play history should advance the exact recommendation state with the recorded player-to-move order");
+        Check(WorldCanPlayMove(state.worlds[0], state.playerToMove,
+              state.leadSuit, event.move),
+          "PBN play history should be legal in the parsed full-information deal");
+        state = PlayBridgeMove(state, event.move);
+      }
+      return state;
+    }
+
+    bool BetterExactLineChoice(
+      const BridgeState& state,
+      const BridgeMove& candidateMove,
+      const int candidateScore,
+      const BridgeMove& incumbentMove,
+      const int incumbentScore)
+    {
+      const bool maximizing = (SeatSide(state.playerToMove) == state.maxSide);
+      if (maximizing)
+      {
+        return candidateScore > incumbentScore ||
+          (candidateScore == incumbentScore &&
+            BridgeMoveLess(candidateMove, incumbentMove));
+      }
+      return candidateScore < incumbentScore ||
+        (candidateScore == incumbentScore &&
+          BridgeMoveLess(candidateMove, incumbentMove));
+    }
+
     const BridgeRootChildReport * FindRootChildReport(
       const BridgeRootReport& report,
       const BridgeMove& move)
@@ -256,6 +293,8 @@ namespace alpha_mu
     const int prefixCards,
     const unsigned samplingSeed)
   {
+    ValidateFullDealPBN(deal, "solve input deal");
+
     const int trumpSuit = (deal.trump == 4 ? -1 : deal.trump);
     AlphaMuDecisionPointRequest request;
     request.deal = deal;
@@ -270,9 +309,81 @@ namespace alpha_mu
     return SolveAlphaMuDecisionPoint(request);
   }
 
+  ExactPlayLineResult RecommendExactPlayLine(const PBNBoardRecord& board)
+  {
+    ValidateFullDealPBN(board.deal, "exact PBN recommendation deal");
+
+    ExactPlayLineResult result;
+    result.sourcePath = board.sourcePath;
+    result.boardLabel = board.boardLabel;
+    result.prefixPlayLength = static_cast<unsigned>(board.playHistory.size());
+    result.declarerSeat = board.declarerSeat;
+    result.leaderSeat = board.deal.first;
+    result.contractLevel = board.contractLevel;
+    result.contractTrumpSuit = (board.deal.trump == 4 ? -1 : board.deal.trump);
+    result.targetTricks = board.contractLevel + 6;
+
+    const chrono::steady_clock::time_point start = chrono::steady_clock::now();
+
+    SetMaxThreads(0);
+    BridgeState state = MakeExactRecommendationState(board);
+    result.playerToMove = state.playerToMove;
+    result.currentDeclarerTricks = state.maxTricksWon;
+
+    SearchExecutionContext context;
+    if (state.possibleWorlds.Has(0))
+    {
+      const bool terminal =
+        (WorldCardCount(state.worlds[0]) == 0 && state.currentTrick.empty());
+      result.projectedDeclarerTricks = (terminal ? state.maxTricksWon :
+        ExactBridgeDDSScoreForWorld(state, 0, context));
+      result.makesContract =
+        (result.projectedDeclarerTricks >= result.targetTricks);
+      result.valid = true;
+    }
+
+    while (state.possibleWorlds.Has(0))
+    {
+      const vector<BridgeChild> children = ExpandBridgeChildren(state);
+      if (children.empty())
+        break;
+
+      bool haveBest = false;
+      unsigned bestIndex = 0;
+      int bestScore = 0;
+      for (unsigned i = 0; i < children.size(); i++)
+      {
+        const bool terminalChild =
+          (WorldCardCount(children[i].state.worlds[0]) == 0 &&
+           children[i].state.currentTrick.empty());
+        const int score = (terminalChild ? children[i].state.maxTricksWon :
+          ExactBridgeDDSScoreForWorld(children[i].state, 0, context));
+        if (! haveBest || BetterExactLineChoice(state, children[i].move, score,
+              children[bestIndex].move, bestScore))
+        {
+          haveBest = true;
+          bestIndex = i;
+          bestScore = score;
+        }
+      }
+
+      Check(haveBest,
+        "exact PBN recommendation should choose one continuation move whenever legal moves exist");
+      result.line.push_back(ExactPlayLineStep(state.playerToMove,
+        children[bestIndex].move, bestScore));
+      state = children[bestIndex].state;
+    }
+
+    result.totalSeconds = chrono::duration<double>(
+      chrono::steady_clock::now() - start).count();
+    return result;
+  }
+
   AlphaMuSolveResult SolveAlphaMuDecisionPoint(
     const AlphaMuDecisionPointRequest& request)
   {
+    ValidateFullDealPBN(request.deal, "decision input deal");
+
     AlphaMuSolveResult result;
 
     const chrono::steady_clock::time_point totalStart =

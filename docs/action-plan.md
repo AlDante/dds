@@ -33,15 +33,48 @@ deliver the next vertical slice of a real decision-point evaluator that can take
 an actual hand history, reconstruct a plausible information state, and recommend
 a move under uncertainty.
 
+Before extending the uncertainty-facing workflow further, the first concrete
+front-door step should be a standard PBN hand path that can ingest a single
+board and report the exact DDS best continuation line from the current recorded
+play position.
+
 ## Immediate objectives
 
-1. Preserve the current DDS-side benchmarked baseline.
-2. Make the information state significantly more realistic.
-3. Deliver a stable single-decision post-mortem alpha-mu analysis path.
-4. Continue extracting durable engine modules from the current split but still
+1. Add a standard PBN hand entry path that can recommend the exact best line of
+   play for one full-information board.
+2. Preserve the current DDS-side benchmarked baseline.
+3. Make the information state significantly more realistic.
+4. Deliver a stable single-decision post-mortem alpha-mu analysis path.
+5. Continue extracting durable engine modules from the current split but still
    test-area-local implementation.
-5. Add the instrumentation needed to judge recommendation quality and runtime
+6. Add the instrumentation needed to judge recommendation quality and runtime
    cost separately.
+
+## First step — standard PBN hand intake and exact line recommendation
+
+### Goal
+
+Let a user point the solver at a standard single-board PBN file and receive the
+exact DDS continuation line from the current position before any broader
+partial-information alpha-mu workflow is layered on top.
+
+### Tasks
+
+1. parse `[Deal]`, `[Declarer]`, `[Contract]`, and optional `[Play]` from a
+   standard PBN board,
+2. expose a dedicated runner mode for that file-based workflow,
+3. replay the recorded play prefix into an exact one-world bridge state,
+4. choose the full optimal continuation line with DDS-backed exact scores,
+5. report the result clearly as an exact full-information recommendation rather
+   than an alpha-mu uncertainty recommendation.
+
+### Success tests
+
+- a single-board `.pbn` file can be loaded without hand-file conversion,
+- the reported first move matches the exact DDS continuation from that state,
+- the full emitted continuation is legal from the parsed position to the end of
+  the deal,
+- and the CLI output is stable enough for regression use.
 
 ## Deliverable for this cycle
 

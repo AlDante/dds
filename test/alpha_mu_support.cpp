@@ -8,9 +8,182 @@
 
 #include "alpha_mu_core.h"
 
+#include <cctype>
+#include <fstream>
+
 namespace alpha_mu
 {
   using namespace std;
+
+  namespace
+  {
+    string TrimText(const string& text)
+    {
+      size_t begin = 0;
+      while (begin < text.size() &&
+             isspace(static_cast<unsigned char>(text[begin])))
+      {
+        begin++;
+      }
+
+      size_t end = text.size();
+      while (end > begin &&
+             isspace(static_cast<unsigned char>(text[end - 1])))
+      {
+        end--;
+      }
+      return text.substr(begin, end - begin);
+    }
+
+    string UppercaseText(const string& text)
+    {
+      string upper(text);
+      for (unsigned i = 0; i < upper.size(); i++)
+      {
+        upper[i] = static_cast<char>(toupper(
+          static_cast<unsigned char>(upper[i])));
+      }
+      return upper;
+    }
+
+    bool TryParsePBNTagLine(
+      const string& line,
+      string& tag,
+      string& value)
+    {
+      const string trimmed = TrimText(line);
+      if (trimmed.size() < 4 || trimmed[0] != '[' ||
+          trimmed[trimmed.size() - 1] != ']')
+      {
+        return false;
+      }
+
+      const size_t firstSpace = trimmed.find(' ');
+      if (firstSpace == string::npos || firstSpace <= 1)
+        return false;
+
+      tag = trimmed.substr(1, firstSpace - 1);
+      string rawValue = TrimText(trimmed.substr(firstSpace + 1,
+        trimmed.size() - firstSpace - 2));
+      if (rawValue.size() >= 2 && rawValue[0] == '"' &&
+          rawValue[rawValue.size() - 1] == '"')
+      {
+        rawValue = rawValue.substr(1, rawValue.size() - 2);
+      }
+      value = rawValue;
+      return true;
+    }
+
+    string StripBraceComments(const string& line)
+    {
+      string cleaned;
+      int braceDepth = 0;
+      for (unsigned i = 0; i < line.size(); i++)
+      {
+        if (line[i] == '{')
+        {
+          braceDepth++;
+          continue;
+        }
+        if (line[i] == '}')
+        {
+          if (braceDepth > 0)
+            braceDepth--;
+          continue;
+        }
+        if (braceDepth == 0)
+          cleaned.push_back(line[i]);
+      }
+      return cleaned;
+    }
+
+    bool IsCardToken(const string& token)
+    {
+      if (token.size() != 2)
+        return false;
+
+      const string upper = UppercaseText(token);
+      const char suit = upper[0];
+      const char rank = upper[1];
+      return (suit == 'S' || suit == 'H' || suit == 'D' || suit == 'C') &&
+        string("AKQJT98765432").find(rank) != string::npos;
+    }
+
+    void AppendPlayTokens(
+      const string& line,
+      vector<string>& tokens)
+    {
+      istringstream iss(StripBraceComments(line));
+      string token;
+      while (iss >> token)
+      {
+        const string upper = UppercaseText(token);
+        if (upper.empty() || upper == "-" || upper == "*")
+          continue;
+
+        bool numericMarker = true;
+        for (unsigned i = 0; i < upper.size(); i++)
+        {
+          if (! isdigit(static_cast<unsigned char>(upper[i])) &&
+              upper[i] != '.')
+          {
+            numericMarker = false;
+            break;
+          }
+        }
+        if (numericMarker)
+          continue;
+
+        Check(IsCardToken(upper),
+          string("unsupported token in PBN [Play] section: ") + token);
+        tokens.push_back(upper);
+      }
+    }
+
+    int ParsePBNSeatToken(const string& text)
+    {
+      const string upper = UppercaseText(TrimText(text));
+      Check(upper.size() == 1,
+        "PBN seat tags should be one of N, E, S, or W");
+      return SeatIndex(upper[0]);
+    }
+
+    int ParsePBNTrumpToken(const string& text)
+    {
+      const string upper = UppercaseText(TrimText(text));
+      if (upper == "NT" || upper == "N")
+        return -1;
+      Check(upper.size() == 1,
+        "PBN contract denomination should be S, H, D, C, or NT");
+      return SuitFromPlayChar(upper[0]);
+    }
+
+    void ParsePBNContract(
+      const string& text,
+      int& level,
+      int& trumpSuit)
+    {
+      const string trimmed = UppercaseText(TrimText(text));
+      Check(! trimmed.empty(),
+        "PBN [Contract] should not be empty");
+      Check(trimmed != "PASS" && trimmed != "AP" && trimmed != "ALLPASS",
+        "PBN exact recommendation requires a played contract, not pass-out");
+
+      size_t split = 0;
+      while (split < trimmed.size() &&
+             isdigit(static_cast<unsigned char>(trimmed[split])))
+      {
+        split++;
+      }
+      Check(split > 0 && split < trimmed.size(),
+        "PBN [Contract] should look like 3NT, 4S, 5H, 6D, or 7C");
+
+      level = atoi(trimmed.substr(0, split).c_str());
+      Check(level >= 1 && level <= 7,
+        "PBN contract level should be between 1 and 7");
+      trumpSuit = ParsePBNTrumpToken(trimmed.substr(split));
+    }
+  }
 
   static string gAlphaMuExecutablePath = "./build/alpha_mu";
 
@@ -146,6 +319,106 @@ namespace alpha_mu
     return parts;
   }
 
+  PBNBoardRecord LoadPBNBoardRecord(const string& filePath)
+  {
+    ifstream fin(filePath.c_str());
+    Check(fin.is_open(),
+      string("could not open PBN file ") + filePath);
+
+    PBNBoardRecord board;
+    board.sourcePath = filePath;
+
+    bool haveDeal = false;
+    bool haveDeclarer = false;
+    bool haveContract = false;
+    bool inPlaySection = false;
+    string playLeaderToken;
+    vector<string> playTokens;
+
+    string line;
+    while (getline(fin, line))
+    {
+      string tag;
+      string value;
+      if (TryParsePBNTagLine(line, tag, value))
+      {
+        const string upperTag = UppercaseText(tag);
+        if (upperTag == "DEAL" && haveDeal)
+          break;
+
+        inPlaySection = false;
+        if (upperTag == "BOARD" && board.boardLabel.empty())
+          board.boardLabel = TrimText(value);
+        else if (upperTag == "DEAL" && ! haveDeal)
+        {
+          const string dealText = UppercaseText(TrimText(value));
+          Check(! dealText.empty(),
+            "PBN [Deal] should not be empty");
+          Check(dealText.size() < sizeof(board.deal.remainCards),
+            "PBN [Deal] should fit into dealPBN.remainCards");
+          strcpy(board.deal.remainCards, dealText.c_str());
+          haveDeal = true;
+        }
+        else if (upperTag == "DECLARER" && ! haveDeclarer)
+        {
+          board.declarerSeat = ParsePBNSeatToken(value);
+          haveDeclarer = true;
+        }
+        else if (upperTag == "CONTRACT" && ! haveContract)
+        {
+          int trumpSuit = -1;
+          ParsePBNContract(value, board.contractLevel, trumpSuit);
+          board.deal.trump = (trumpSuit < 0 ? 4 : trumpSuit);
+          haveContract = true;
+        }
+        else if (upperTag == "PLAY")
+        {
+          playLeaderToken = TrimText(value);
+          inPlaySection = true;
+        }
+        continue;
+      }
+
+      if (inPlaySection)
+        AppendPlayTokens(line, playTokens);
+    }
+
+    Check(haveDeal,
+      "PBN exact recommendation requires a [Deal] tag");
+    Check(haveDeclarer,
+      "PBN exact recommendation requires a [Declarer] tag");
+    Check(haveContract,
+      "PBN exact recommendation requires a [Contract] tag");
+    ValidateFullDealPBN(board.deal, "PBN [Deal]");
+
+    board.deal.first = (board.declarerSeat + 1) % 4;
+    if (! playLeaderToken.empty())
+    {
+      const int playLeader = ParsePBNSeatToken(playLeaderToken);
+      Check(playLeader == board.deal.first,
+        "PBN [Play] leader should match the opening leader implied by [Declarer]");
+    }
+
+    if (! playTokens.empty())
+    {
+      playTracePBN play;
+      memset(&play, 0, sizeof(play));
+      play.number = static_cast<int>(playTokens.size());
+
+      string cards;
+      for (unsigned i = 0; i < playTokens.size(); i++)
+        cards += playTokens[i];
+      Check(cards.size() < sizeof(play.cards),
+        "PBN [Play] section should fit into playTracePBN.cards");
+      strcpy(play.cards, cards.c_str());
+
+      board.playHistory = ParsePBNPlayHistory(play, board.deal.first,
+        (board.deal.trump == 4 ? -1 : board.deal.trump));
+    }
+
+    return board;
+  }
+
   ParsedWorld ParsePBNWorld(const string& pbn)
   {
     const size_t colon = pbn.find(':');
@@ -170,6 +443,49 @@ namespace alpha_mu
     }
 
     return world;
+  }
+
+  void ValidateFullDealPBN(
+    const dealPBN& deal,
+    const string& context)
+  {
+    const ParsedWorld world = ParsePBNWorld(deal.remainCards);
+    const string ranks = "AKQJT98765432";
+    bool seen[4][13];
+    memset(seen, 0, sizeof(seen));
+
+    unsigned seatCounts[4] = {0, 0, 0, 0};
+    for (int seat = 0; seat < 4; seat++)
+    {
+      for (int suit = 0; suit < 4; suit++)
+      {
+        const string& cards = world.suits[seat][suit];
+        for (unsigned i = 0; i < cards.size(); i++)
+        {
+          const size_t rankIndex = ranks.find(cards[i]);
+          Check(rankIndex != string::npos,
+            context + " should use only standard bridge ranks in remainCards");
+          Check(! seen[suit][rankIndex],
+            context + " should not contain duplicate card " +
+            CardName(BridgeMove(suit, cards[i])));
+          seen[suit][rankIndex] = true;
+          seatCounts[seat]++;
+        }
+      }
+    }
+
+    if (seatCounts[SEAT_NORTH] != 13 || seatCounts[SEAT_EAST] != 13 ||
+        seatCounts[SEAT_SOUTH] != 13 || seatCounts[SEAT_WEST] != 13)
+    {
+      ostringstream oss;
+      oss << context
+          << " should describe a full 52-card deal with 13 cards per seat, but counts were N="
+          << seatCounts[SEAT_NORTH]
+          << " E=" << seatCounts[SEAT_EAST]
+          << " S=" << seatCounts[SEAT_SOUTH]
+          << " W=" << seatCounts[SEAT_WEST];
+      Fail(oss.str());
+    }
   }
 
   bool WorldHasCard(

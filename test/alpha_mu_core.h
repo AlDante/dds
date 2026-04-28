@@ -1791,6 +1791,8 @@ namespace alpha_mu
   vector<string> SplitString( const string& text, const char delimiter, const bool keepEmpty);
   /** @brief Parse a compact PBN world string into the internal world representation. */
   ParsedWorld ParsePBNWorld(const string& pbn);
+  /** @brief Validate that a deal encodes one complete 52-card bridge deal with 13 cards per seat. */
+  void ValidateFullDealPBN(const dealPBN& deal, const string& context);
   /** @brief Return whether a world places a given card at a given seat. */
   bool WorldHasCard( const ParsedWorld& world, const int player, const int suit, const char rank);
   /** @brief Return the length of one suit in one hand. */
@@ -2353,6 +2355,92 @@ namespace alpha_mu
     }
   };
 
+  /** @brief Parsed single-board PBN record used by the exact recommendation path. */
+  struct PBNBoardRecord
+  {
+    string sourcePath;
+    string boardLabel;
+    dealPBN deal;
+    int declarerSeat;
+    int contractLevel;
+    vector<PlayHistoryEvent> playHistory;
+
+    PBNBoardRecord() :
+      sourcePath(),
+      boardLabel(),
+      deal(),
+      declarerSeat(0),
+      contractLevel(0),
+      playHistory()
+    {
+      memset(&deal, 0, sizeof(deal));
+    }
+  };
+
+  /** @brief One exact DDS continuation step emitted for a PBN recommendation line. */
+  struct ExactPlayLineStep
+  {
+    int player;
+    BridgeMove move;
+    int projectedDeclarerTricks;
+
+    ExactPlayLineStep() :
+      player(0),
+      move(),
+      projectedDeclarerTricks(0)
+    {
+    }
+
+    ExactPlayLineStep(
+      const int playerArg,
+      const BridgeMove& moveArg,
+      const int projectedDeclarerTricksArg) :
+      player(playerArg),
+      move(moveArg),
+      projectedDeclarerTricks(projectedDeclarerTricksArg)
+    {
+    }
+  };
+
+  /** @brief Exact DDS best-line recommendation derived from one full-information PBN board. */
+  struct ExactPlayLineResult
+  {
+    string sourcePath;
+    string boardLabel;
+    vector<ExactPlayLineStep> line;
+    unsigned prefixPlayLength;
+    int declarerSeat;
+    int leaderSeat;
+    int contractLevel;
+    int contractTrumpSuit;
+    int playerToMove;
+    int currentDeclarerTricks;
+    int projectedDeclarerTricks;
+    int targetTricks;
+    bool makesContract;
+    bool valid;
+    double totalSeconds;
+
+    ExactPlayLineResult() :
+      sourcePath(),
+      boardLabel(),
+      line(),
+      prefixPlayLength(0),
+      declarerSeat(0),
+      leaderSeat(0),
+      contractLevel(0),
+      contractTrumpSuit(-1),
+      playerToMove(0),
+      currentDeclarerTricks(0),
+      projectedDeclarerTricks(0),
+      targetTricks(0),
+      makesContract(false),
+      valid(false),
+      totalSeconds(0.0)
+    {
+    }
+  };
+
   /**
    * @brief End-to-end alpha-mu solve with TT and iterative deepening.
    *
@@ -2375,8 +2463,16 @@ namespace alpha_mu
   AlphaMuSolveResult SolveAlphaMuDecisionPoint(
       const AlphaMuDecisionPointRequest& request);
 
+  /** @brief Load one standard PBN board (`[Deal]`, `[Declarer]`, `[Contract]`, optional `[Play]`). */
+  PBNBoardRecord LoadPBNBoardRecord(const string& filePath);
+
+  /** @brief Recommend the exact DDS continuation line for one parsed full-information PBN board. */
+  ExactPlayLineResult RecommendExactPlayLine(const PBNBoardRecord& board);
+
   /** @brief Print a human-readable summary of an alpha-mu solve result. */
   void ReportAlphaMuSolveResult(const AlphaMuSolveResult& result);
+  /** @brief Print the exact DDS best-line recommendation for one parsed PBN board. */
+  void ReportExactPlayLineResult(const ExactPlayLineResult& result);
   /** @brief Record the current alpha-mu executable path for self-spawn tests. */
   void SetAlphaMuExecutablePath(const string& path);
   /** @brief Return the current alpha-mu executable path for self-spawn tests. */

@@ -46,6 +46,70 @@ namespace alpha_mu
     return contents;
   }
 
+  static void WriteWholeFile(
+    const string& path,
+    const string& contents)
+  {
+    FILE * fp = fopen(path.c_str(), "wb");
+    Check(fp != NULL,
+      "PBN regression should be able to create its temporary input file");
+    const size_t written = fwrite(contents.data(), 1, contents.size(), fp);
+    fclose(fp);
+    Check(written == contents.size(),
+      "PBN regression should write the full temporary input file");
+  }
+
+  static string CompactPlayToPBNLines(const string& cards)
+  {
+    Check(cards.size() % 2 == 0,
+      "compact PBN play helper expects suit/rank pairs");
+
+    ostringstream oss;
+    for (unsigned i = 0; i < cards.size(); i += 2)
+    {
+      if (i != 0)
+      {
+        if (((i / 2) % 4) == 0)
+          oss << "\n";
+        else
+          oss << ' ';
+      }
+      oss << cards.substr(i, 2);
+    }
+    oss << "\n";
+    return oss.str();
+  }
+
+  static string MakeExactPBNFixtureText()
+  {
+    const string cards =
+      "CTC4CACJH8H4HKH9D5DAD9D2S7S5S2SQD8D4DQD3H3HAH6H7C3C8CQC2S3SKSAS6HQH5HJHTCKC9D6C5S4SJS8C6DJ";
+    return string("[Event \"alpha-mu PBN regression\"]\n") +
+      "[Board \"7\"]\n" +
+      "[Deal \"N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3\"]\n" +
+      "[Declarer \"W\"]\n" +
+      "[Contract \"4S\"]\n" +
+      "[Play \"N\"]\n" +
+      CompactPlayToPBNLines(cards);
+  }
+
+  static BridgeState BuildExactRecommendationStateForTest(
+    const PBNBoardRecord& board)
+  {
+    BridgeState state = MakeBridgeStateFromDDSDeal(board.deal);
+    state.maxSide = SeatSide(board.declarerSeat);
+    for (unsigned i = 0; i < board.playHistory.size(); i++)
+    {
+      Check(board.playHistory[i].player == state.playerToMove,
+        "test exact-state reconstruction should stay aligned with the recorded player-to-move order");
+      Check(WorldCanPlayMove(state.worlds[0], state.playerToMove,
+            state.leadSuit, board.playHistory[i].move),
+        "test exact-state reconstruction should replay only legal recorded cards");
+      state = PlayBridgeMove(state, board.playHistory[i].move);
+    }
+    return state;
+  }
+
   static void TestParetoInsert()
   {
     ParetoFront front(3);
@@ -5056,6 +5120,149 @@ namespace alpha_mu
       "depth-3 iterative deepening should use TT (stores > 0)");
   }
 
+  static void TestLoadPBNBoardRecord()
+  {
+    const string path = "/tmp/alpha_mu_pbn_record_test.pbn";
+    WriteWholeFile(path, MakeExactPBNFixtureText());
+
+    const PBNBoardRecord board = LoadPBNBoardRecord(path);
+    remove(path.c_str());
+
+    Check(board.sourcePath == path,
+      "PBN loader should preserve the source file path");
+    Check(board.boardLabel == "7",
+      "PBN loader should preserve the board label when present");
+    Check(string(board.deal.remainCards) ==
+        "N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3",
+      "PBN loader should copy the [Deal] text verbatim into the DDS deal buffer");
+    Check(board.declarerSeat == SEAT_WEST,
+      "PBN loader should parse the declarer seat");
+    Check(board.deal.first == SEAT_NORTH,
+      "PBN loader should derive the opening leader from the declarer seat");
+    Check(board.deal.trump == SUIT_SPADES,
+      "PBN loader should parse the contract denomination into deal.trump");
+    Check(board.contractLevel == 4,
+      "PBN loader should parse the contract level");
+    Check(board.playHistory.size() == 45,
+      "PBN loader should parse the optional [Play] section into the recorded play history");
+    Check(board.playHistory[0].player == SEAT_NORTH &&
+          board.playHistory[0].leadSuit == SUIT_CLUBS &&
+          board.playHistory[0].move == BridgeMove(SUIT_CLUBS, 'T'),
+      "PBN loader should preserve the first card of the play section as the opening-lead event");
+    Check(board.playHistory[44].move == BridgeMove(SUIT_DIAMONDS, 'J'),
+      "PBN loader should preserve the last parsed play token");
+  }
+
+  static void TestRecommendExactPlayLineFromPBNBoard()
+  {
+    const string path = "/tmp/alpha_mu_pbn_recommend_test.pbn";
+    WriteWholeFile(path, MakeExactPBNFixtureText());
+
+    const PBNBoardRecord board = LoadPBNBoardRecord(path);
+    const ExactPlayLineResult result = RecommendExactPlayLine(board);
+    remove(path.c_str());
+
+    const BridgeState initialState = BuildExactRecommendationStateForTest(board);
+    const int expectedProjection = ExactBridgeDDSScoreForWorld(initialState, 0);
+
+    Check(result.valid,
+      "exact PBN recommendation should produce a valid result on the regression board");
+    Check(result.prefixPlayLength == board.playHistory.size(),
+      "exact PBN recommendation should preserve the parsed play-prefix length");
+    Check(result.playerToMove == initialState.playerToMove,
+      "exact PBN recommendation should report the exact player to move at the parsed position");
+    Check(result.currentDeclarerTricks == initialState.maxTricksWon,
+      "exact PBN recommendation should report declarer tricks already won at the parsed position");
+    Check(result.projectedDeclarerTricks == expectedProjection,
+      "exact PBN recommendation should match the exact DDS projection from the parsed state");
+    Check(result.line.size() == 52U - board.playHistory.size(),
+      "exact PBN recommendation should emit a full continuation to the end of the deal");
+
+    BridgeState replayState(initialState);
+    for (unsigned i = 0; i < result.line.size(); i++)
+    {
+      Check(result.line[i].player == replayState.playerToMove,
+        "exact PBN recommendation should keep the emitted player labels aligned with replayed state transitions");
+      Check(WorldCanPlayMove(replayState.worlds[0], replayState.playerToMove,
+            replayState.leadSuit, result.line[i].move),
+        "exact PBN recommendation should emit only legal cards");
+      replayState = PlayBridgeMove(replayState, result.line[i].move);
+    }
+
+    Check(WorldCardCount(replayState.worlds[0]) == 0 &&
+          replayState.currentTrick.empty(),
+      "exact PBN recommendation should consume every remaining card by the end of the emitted line");
+    Check(replayState.maxTricksWon == result.projectedDeclarerTricks,
+      "exact PBN recommendation should finish with the projected declarer trick total after replaying the emitted line");
+  }
+
+  static void TestPBNRecommendCLIMode()
+  {
+    const string exe = GetAlphaMuExecutablePath();
+    Check(! exe.empty(),
+      "PBN CLI regression should know the current alpha-mu executable path");
+
+    const string inputPath = "/tmp/alpha_mu_pbn_cli_test.pbn";
+    const string outputPath = "/tmp/alpha_mu_pbn_cli_output.txt";
+    WriteWholeFile(inputPath, MakeExactPBNFixtureText());
+    remove(outputPath.c_str());
+
+    string command;
+    const char * dyldLibraryPath = getenv("DYLD_LIBRARY_PATH");
+    if (dyldLibraryPath != NULL && *dyldLibraryPath != '\0')
+      command += string("DYLD_LIBRARY_PATH=") + ShellQuote(dyldLibraryPath) + " ";
+
+    command += ShellQuote(exe) +
+      " pbn_recommend --file " + ShellQuote(inputPath) +
+      " > " + ShellQuote(outputPath) + " 2>&1";
+    const int status = system(command.c_str());
+
+    const string output = ReadWholeFile(outputPath);
+    remove(inputPath.c_str());
+    remove(outputPath.c_str());
+
+    Check(status == 0,
+      "PBN CLI regression should complete successfully");
+    Check(output.find("=== PBN Exact Recommendation ===") != string::npos,
+      "PBN CLI regression should emit the exact recommendation banner");
+    Check(output.find("ALPHA_MU_PBN_RECOMMEND") != string::npos,
+      "PBN CLI regression should emit the machine-readable PBN recommendation line");
+    Check(output.find("PBN exact recommendation OK") != string::npos,
+      "PBN CLI regression should emit the standard success status line");
+  }
+
+  static void TestDecisionCLIModeRejectsMalformedFullDeal()
+  {
+    const string exe = GetAlphaMuExecutablePath();
+    Check(! exe.empty(),
+      "malformed decision CLI regression should know the current alpha-mu executable path");
+
+    const string outputPath = "/tmp/alpha_mu_invalid_deal_cli_output.txt";
+    remove(outputPath.c_str());
+
+    string command;
+    const char * dyldLibraryPath = getenv("DYLD_LIBRARY_PATH");
+    if (dyldLibraryPath != NULL && *dyldLibraryPath != '\0')
+      command += string("DYLD_LIBRARY_PATH=") + ShellQuote(dyldLibraryPath) + " ";
+
+    command += ShellQuote(exe) +
+      " decision --deal-pbn " +
+      ShellQuote("N:AKQ.JT9.876.543 987.654.32.AKQJ T6543.AKQ.AT9.8 J2.32.KQJ54.T976") +
+      " --leader W --declarer N --contract 3NT" +
+      " > " + ShellQuote(outputPath) + " 2>&1";
+    const int status = system(command.c_str());
+
+    const string output = ReadWholeFile(outputPath);
+    remove(outputPath.c_str());
+
+    Check(status != 0,
+      "malformed decision CLI regression should fail fast");
+    Check(output.find("full 52-card deal with 13 cards per seat") != string::npos,
+      "malformed decision CLI regression should explain that decision mode expects a complete deal");
+    Check(output.find("N=12 E=12 S=12 W=13") != string::npos,
+      "malformed decision CLI regression should report the offending seat counts");
+  }
+
 
   void TestDebugWorldMaskCapacityAssertion()
   {
@@ -5198,6 +5405,10 @@ namespace alpha_mu
         {"practical multi-world depth-3 continuation OK", &TestPracticalMultiWorldContinuationDepth3Stable},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
        {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
+         {"standard PBN loading OK", &TestLoadPBNBoardRecord},
+         {"exact PBN recommendation OK", &TestRecommendExactPlayLineFromPBNBoard},
+         {"PBN recommendation CLI OK", &TestPBNRecommendCLIMode},
+         {"malformed decision CLI deal rejection OK", &TestDecisionCLIModeRejectsMalformedFullDeal},
 #ifndef NDEBUG
        {"debug world-mask assertion regression OK", &TestDebugWorldMaskCapacityAssertion}
 #endif

@@ -347,6 +347,35 @@ int main(int argc, char ** argv)
 	  RunBridgeDDSTestSuite();
 	  return 0;
 	}
+	if (mode == "pbn_recommend")
+	{
+	  string filePath;
+
+	  for (int a = 2; a < argc; a++)
+	  {
+		const string flag(argv[a]);
+		Check(IsLongOption(argv[a]),
+		  "pbn_recommend mode expects only long options");
+		Check(a + 1 < argc,
+		  string("pbn_recommend option ") + flag + " requires a value");
+		const string value(argv[++a]);
+
+		if (flag == "--file")
+		  filePath = value;
+		else
+		  Check(false,
+			string("pbn_recommend mode does not recognize option ") + flag);
+	  }
+
+	  Check(! filePath.empty(),
+		"pbn_recommend mode requires --file");
+
+	  const PBNBoardRecord board = LoadPBNBoardRecord(filePath);
+	  const ExactPlayLineResult result = RecommendExactPlayLine(board);
+	  ReportExactPlayLineResult(result);
+	  PrintAlphaMuStatus("PBN exact recommendation OK");
+	  return 0;
+	}
 	if (mode == "solve")
 	{
 	  Check(argc >= 4,

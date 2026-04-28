@@ -97,6 +97,18 @@ Target just the bridge DDS continuation regression bundle:
 DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu bridge_dds
 ```
 
+Recommend the exact DDS best continuation line from a standard single-board PBN
+file:
+
+```zsh
+DYLD_LIBRARY_PATH=../src/build ./build/alpha_mu pbn_recommend --file /path/to/board.pbn
+```
+
+This PBN mode currently expects `[Deal]`, `[Declarer]`, `[Contract]`, and an
+optional `[Play]` section. It reports an **exact full-information DDS line**
+from the current recorded position; it is not the partial-information alpha-mu
+decision workflow.
+
 ## Scope limits
 
 This is not yet a full bridge alpha-mu engine.
@@ -104,7 +116,8 @@ This is not yet a full bridge alpha-mu engine.
 In particular, it does not yet include:
 
 - full-scale possible-world generation from complete bidding or play histories,
-- broad bridge-search horizons beyond the current small multi-trick engine slice.
+- broad bridge-search horizons beyond the current small multi-trick engine slice,
+- or a standard PBN file front end for partial-information alpha-mu decision analysis beyond the exact DDS recommendation path.
 
 Useful-world maintenance, world cuts, empty-entry handling, optimistic impossible-world completion, deep alpha cuts, cut on win, DDS leaf parallelization, a staged constraint-based possible-world generator with explicit cannot-hold constraints plus a first scoped auction-side contract for seat-level HCP ranges, hand types, minimum/maximum suit lengths, partnership suit-length ranges, and partnership HCP-range bidding filters, explicit follow-suit implications derived from discard history, seed-based hidden-seat construction from partial-information worlds using recorded played-card ownership plus constructor-local explicit known-card and bidding card-location pruning, suit-length, hand-type, partnership suit-length range, partnership HCP-range, seat-level HCP, balanced-shape, and follow-suit-derived length pruning, partially specified visible-hand seeds whose hidden-card pool is inferred from the full-deck complement, moderately larger two-defender visible-seed pools with deterministic downselection after staged filtering, longer multi-trick visible-seed histories whose broader pools are narrowed by play-derived follow-suit evidence before any sampling stage, constructor-local world-construction accounting plus explanation traces for card-location, length, HCP, and balanced narrowing, per-world world-generation explanation traces, play-history legality filtering, deduplication, and deterministic seed-based downselection, a first bridge move generator, multi-trick bridge search control with bridge-specific trick backup, bridge root reporting over a larger three-world continuation, DDS-backed bridge leaf evaluation, and a Pareto-front transposition table are now present in the solver.
 
