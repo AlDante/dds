@@ -1,10 +1,10 @@
-# Alpha-Mu Final Acceptance Checklist
+# Alpha-Mu Acceptance Checklist
 
 ## Purpose
 
 This document is the Stage 9 acceptance gate for the alpha-mu completion plan.
-Every row must be marked **Pass** before the implementation is considered
-repository-grade.
+It is a live status record rather than a ceremonial summary: every row must be
+marked **Pass** before the implementation is considered repository-grade.
 
 ## Status matrix
 
@@ -13,7 +13,7 @@ repository-grade.
 | 1.1 | Correctness | Full regression suite green | **Pass** | `./build/alpha_mu` — all checks passed |
 | 1.2 | Correctness | Bridge-backed optimization-paper regressions green | **Pass** | `./build/alpha_mu bridge_dds` — all checks passed |
 | 1.3 | Correctness | One-world DDS parity maintained | **Pass** | `TestBridgeTranspositionTable`, `TestIterativeDeepeningDepth3` |
-| 1.4 | Correctness | No unresolved semantic mismatches | **Pass** | Feature matrix in `alpha-mu-completion-plan.md` Stage 0 |
+| 1.4 | Correctness | No unresolved semantic mismatches | **Open** | The Stage 1 feature matrix in `alpha-mu-completion-plan.md` still classifies optimistic completion / early cut / deep alpha cut / root cut / exact-front TT reuse as `Partial` in the default bridge-search path |
 | 2.1 | Performance | Benchmark suite frozen and documented | **Pass** | `docs/alpha-mu-benchmark-baseline.md` |
 | 2.2 | Performance | Instrumentation complete | **Pass** | `ALPHA_MU_DECISION` line covers world pipeline, front, TT, cut, timing metrics |
 | 2.3 | Performance | Accepted optimizations benchmark-backed | **Pass** | `docs/performance-log.md` records every accepted/reverted candidate |
@@ -35,7 +35,7 @@ repository-grade.
 | Stage | Title | Status |
 |-------|-------|--------|
 | 0 | Semantic baseline and acceptance envelope | **Complete** |
-| 1 | Port optimization-paper search control into bridge engine | **Complete** |
+| 1 | Port optimization-paper search control into bridge engine | **Open** |
 | 2 | Align decision-point world pipeline with staged filtering | **Complete** |
 | 3 | Realistic information-state construction | **Complete** |
 | 4 | World plausibility and weighting | **Complete** |
@@ -43,7 +43,7 @@ repository-grade.
 | 6 | Complete Workstream 6 instrumentation | **Complete** |
 | 7 | Apple M1 Max performance program | **Complete** |
 | 8 | First-class engineering and documentation | **Complete** |
-| 9 | Final acceptance and release gate | **Complete** |
+| 9 | Final acceptance and release gate | **Open** |
 
 ## Remaining known limitations
 
@@ -61,6 +61,8 @@ These are documented limitations, not blockers:
 
 ## Conclusion
 
-All acceptance criteria are met. The alpha-mu implementation is correct,
-measured, documented, and usable as a first-class repository feature.
+Most acceptance criteria are already satisfied: the implementation is measured,
+well documented, regression-backed, and usable. Final Stage 9 acceptance is
+still blocked on the remaining Stage 1 closeout work identified in
+`alpha-mu-completion-plan.md`, plus the release-tag step.
 
