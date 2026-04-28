@@ -54,6 +54,7 @@ The generated site includes:
 - `alpha-mu-information-state.md` — current contract for hard constraints, derived follow-suit facts, and reporting-only plausibility hints in alpha-mu world construction
 - `alpha-mu-multicore-plan.md` — staged plan for multicore alpha-mu implementation and regression validation
 - `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from the current engine-incubation state to a full post-mortem alpha-mu evaluator
+- `alpha-mu-future-roadmap.md` — deferred post-Stage-9 roadmap for optional future alpha-mu enhancements beyond the completed repository scope
 - `alpha-mu-test-set.md` — paper-derived alpha-mu test families and hand sets
 - `profiling.md` — profiling build targets, Instruments workflow, and hotspot checklist
 - `implementation-plan.md` — staged implementation roadmap

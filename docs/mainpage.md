@@ -17,6 +17,7 @@ This documentation set combines curated Markdown guides with generated API pages
 - [Alpha-mu information-state contract](alpha-mu-information-state.md)
 - [Alpha-mu completion plan](alpha-mu-completion-plan.md)
 - [Alpha-mu final acceptance checklist](alpha-mu-acceptance.md)
+- [Alpha-mu future roadmap](alpha-mu-future-roadmap.md)
 - [Alpha-mu multicore plan](alpha-mu-multicore-plan.md)
 - [Alpha-mu test set](alpha-mu-test-set.md)
 - [Profiling procedure](profiling.md)
