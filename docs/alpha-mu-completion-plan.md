@@ -62,9 +62,28 @@ The rules are therefore:
 `Stage 8` exists to close the remaining gaps and prove that these standards have
 been maintained throughout, not to introduce them for the first time.
 
+## Audited status snapshot (2026-04-28)
+
+The repository is no longer at the pre-Stage-0 starting point described by the
+original execution order. After auditing the docs, code, regression suites, and
+current git state, the stage status is:
+
+| Stage | Status | Notes |
+| --- | --- | --- |
+| 0 | **Complete** | Feature matrix, bridge-search invariants, debug assertions, and semantic-gate regressions are present. |
+| 1 | **Partial / open** | Bridge-backed useful-world maintenance, world cuts, opt-in optimistic completion, ancestor cuts, cut-on-win, root cut, and exact-only TT storage are implemented and regression-backed in `bridge_dds`, but the default decision-point path still runs the conservative exact root-report path without ancestor-cut/root-cut enablement, so the feature matrix remains `Partial` for optimistic completion / early cut / deep alpha cut / root cut / exact-front TT reuse. |
+| 2 | **Complete** | One staged world pipeline now feeds explanation, compaction, reporting, and benchmark logs. |
+| 3 | **Complete at current planned scope** | Richer information-state contract, bidding/play-derived narrowing, deterministic capping, explanation improvements, and a real-board recommendation change are all present. |
+| 4 | **Complete at current planned scope** | Plausibility semantics are documented, reporting is richer, and the explicit root-only weighted policy is regression-backed. |
+| 5 | **Complete at current planned scope** | Practical depth-2 and depth-3 bridge-backed continuation regressions are present and deterministic; follow-on move-order / TT work remains optional unless the scope is expanded again. |
+| 6 | **Complete** | Decision logs and benchmark surfaces expose world-pipeline, front, TT, cut, and timing metrics. |
+| 7 | **Complete** | The M1 Max benchmark/profile/measurement program is documented and closed. |
+| 8 | **Complete** | Module ownership, user/developer docs, data-flow docs, and Doxygen coverage are in place. |
+| 9 | **Open** | `S9.1`-`S9.3` are landed, but final acceptance cannot be called complete while Stage 1 remains open, and `S9.4` release tagging has not yet been performed. |
+
 ## Current position
 
-At a high level, the repository already has:
+At a high level, the repository now has:
 
 - the main alpha-mu front data structures,
 - toy-search implementations of the paper semantics and many optimization-paper
@@ -72,13 +91,17 @@ At a high level, the repository already has:
 - bridge-state search with DDS leaf evaluation,
 - decision-point analysis entry points,
 - partial-information world construction and filtering,
-- initial Workstream 6 instrumentation,
+- complete Workstream 6 instrumentation,
+- the Stage 7 M1 Max performance baseline and measurement log,
+- the Stage 8 repository-grade documentation set,
 - and a materially improved module split.
 
-What is **not yet complete** is the transfer of the optimization-paper machinery
-from the toy harness into the real bridge-backed alpha-mu search, together with
-full instrumentation, realistic world modeling, and first-class repository
-integration.
+The remaining substantive implementation gap is narrower than the original
+opening state: Stage 1 is still not fully closed because the default
+decision-point / exact root-report path does not yet enable the bridge-backed
+ancestor-cut/root-cut machinery whose opt-in implementation is already present
+and regression-backed in `bridge_dds`. Final Stage 9 closure is therefore also
+still open, along with the operational release-tag step.
 
 ## Definition of complete alpha-mu
 
@@ -98,29 +121,20 @@ Alpha-mu is considered complete only when all of the following are true:
    players,
 8. and all claims about correctness and performance are regression-backed.
 
-## Immediate execution plan for Stage 0 and Stage 1
+## Current remaining execution plan
 
-The next concrete execution cycle should be:
+The original Stage 0 / Stage 1 bootstrapping sequence has already been carried
+out. From the current audited repository state, the remaining work is:
 
-1. complete `S0.1` by publishing the optimization-paper feature matrix,
-2. complete `S0.2` by documenting bridge-search invariants in both docs and
-   code comments,
-3. complete `S0.3` by adding the missing debug-only bridge-search / TT / front
-   assertions,
-4. start `S1.1` by extending the bridge-search context so later paper
-   optimizations have an explicit place to live,
-5. implement the first bridge-backed optimization-paper slice only after the new
-   assertions and regression gates are in place,
-6. validate after every slice with the focused `partial` and `bridge_dds`
-   bundles and then the full `alpha_mu` suite.
-
-The immediate execution order inside those stages is:
-
-- `S0.1` feature matrix,
-- `S0.2` invariant documentation,
-- `S0.3` assertions and semantic-gate tests,
-- `S1.1` bridge-search context scaffolding,
-- then the first real bridge-backed optimization port in `S1.2`.
+1. close `Stage 1` by lifting the currently opt-in bridge-backed ancestor-cut /
+   root-cut control path into the default decision-point / exact root-report
+   flow, or by otherwise narrowing the public semantics so the feature matrix no
+   longer needs to classify optimistic completion, early cut, deep alpha cut,
+   root cut, and exact-front TT reuse as `Partial`;
+2. rerun the focused `bridge_dds` bundle and the full `alpha_mu` suite after
+   that Stage 1 closeout and refresh the feature matrix / acceptance record;
+3. complete `Stage 9` by performing the release-tag step once the implementation
+   state truly satisfies the completion definition.
 
 ## Optimization-paper feature matrix (Stage 0 / S0.1)
 
@@ -212,6 +226,18 @@ bridge-backed optimization ports.
 
 ## Stage 0 — semantic baseline and acceptance envelope
 
+### Status update (2026-04-28)
+
+This stage is complete:
+
+- the optimization-paper feature matrix exists and is kept current in this
+  document,
+- the bridge-search invariants are documented here and in
+  `docs/alpha-mu-invariants.md`,
+- the debug-only bridge-state / trick / front / context assertions are present
+  in `test/alpha_mu_bridge.cpp`,
+- and the semantic-gate regressions remain green in the full suite.
+
 ### Goal
 
 Freeze the semantic target before adding more optimization logic.
@@ -257,6 +283,28 @@ This stage is done when:
 ---
 
 ## Stage 1 — port optimization-paper search control into the real bridge engine
+
+### Status update (2026-04-28)
+
+This stage is only partially complete:
+
+- `S1.1` and `S1.2` are landed: bridge-search context, useful-world
+  maintenance, zero-world cut, and single-world cut are part of the default
+  bridge search.
+- `S1.3` through `S1.6` are implemented and regression-backed in the focused
+  `bridge_dds` bundle as an opt-in bridge-backed control path:
+  optimistic completion, early cut, deep alpha cut, cut-on-win, and root cut
+  all have dedicated regressions.
+- `S1.7` is only partially closed: TT storage refuses optimistic-cut fronts and
+  keys exact entries by useful-world mask, but the feature matrix still records
+  exact-front TT reuse as `Partial` because the later ancestor-front path has
+  not been fully promoted into the default exact root-report flow.
+
+What remains for this stage is to remove the current split between the
+conservative default decision-point path and the opt-in ancestor-cut/root-cut
+bridge-search path, then update the feature matrix from `Partial` to
+`Implemented` only where the default semantics truly match the optimization
+paper claims.
 
 ### Goal
 
@@ -530,17 +578,23 @@ This stage is done when:
 
 ## Stage 5 — broader and deeper practical bridge search
 
-### Status update (2026-04-27)
+### Status update (2026-04-28)
 
-The first `S5.5` practical depth-3 slice is now present:
+This stage is complete at the current planned scope:
 
-- the regression suite now includes a real-board multi-world depth-3 decision
-  run on board 1 of `hands/alpha_mu_play.txt`,
-- that case checks repeated-run stability, deeper root-child coverage, DDS-leaf
-  activity, TT storage, and root world-summary alignment,
-- and it broadens practical bridge-backed continuation coverage beyond the
-  previously regression-backed depth-2 slice without changing bridge-search
-  semantics.
+- the regression suite includes practical real-board depth-2 continuation cases
+  on board 1 of `hands/alpha_mu_play.txt` for both trick-boundary and
+  partial-trick prefixes,
+- the regression suite also includes the `S5.5` practical multi-world depth-3
+  continuation case on board 1 of `hands/alpha_mu_play.txt`,
+- those cases check repeated-run stability, deeper root-child coverage,
+  DDS-leaf activity, TT storage, and root world-summary alignment,
+- and the current Stage 5 definition of done is satisfied: the repository now
+  exercises practical bridge-backed continuation search beyond the earlier
+  narrow depth-2 showcase slice.
+
+Additional move-order or TT experiments remain valid follow-on work only if the
+scope is widened again; they are not currently blocking Stage 5 closure.
 
 ### Goal
 
@@ -822,14 +876,13 @@ This stage is done when:
 
 ## Stage 9 — final acceptance and release gate
 
-### Status update (2026-04-27)
+### Status update (2026-04-28)
 
-This stage is now complete:
+This stage is not yet complete:
 
 - **S9.1** (acceptance checklist): `docs/alpha-mu-acceptance.md` contains the
-  full acceptance status matrix with pass/fail for every criterion in the five
-  acceptance areas (correctness, performance, documentation, engineering,
-  usability), plus a stage completion summary and known-limitations section.
+  live acceptance status matrix, plus a stage completion summary and
+  known-limitations section.
 
 - **S9.2** (documentation gaps): all remaining `@file`/`@brief` doxygen
   comments have been added to every `test/alpha_mu_*.{h,cpp}` file; the
@@ -838,11 +891,13 @@ This stage is now complete:
 
 - **S9.3** (regression/benchmark gaps): the full regression suite
   (`./build/alpha_mu`) and the focused bridge-DDS suite
-  (`./build/alpha_mu bridge_dds`) both pass green. No outstanding regression
-  or benchmark gaps remain.
+  (`./build/alpha_mu bridge_dds`) both pass green.
 
-- **S9.4** (release tag): the working tree is ready for tagging once the
-  final commit is in place.
+- **Blocking gap**: Stage 1 is still open by this document's own feature matrix
+  and definition of done, so the repository cannot yet be recorded as fully
+  complete under the Stage 9 release gate.
+
+- **S9.4** (release tag): this operational step is also still pending.
 
 ### Goal
 
@@ -891,6 +946,16 @@ This stage is done when all of the following are true:
 - the code is durable and well documented,
 - and alpha-mu is usable as a first-class repository feature rather than a toy,
   prototype, or isolated test harness.
+
+## Remaining work after this audit
+
+Only two items remain on the completion plan's critical path:
+
+1. **Close Stage 1 fully** by reconciling the currently opt-in ancestor-cut /
+   root-cut bridge-search path with the default decision-point semantics and TT
+   reuse guarantees.
+2. **Close Stage 9 operationally** by refreshing the acceptance record after
+   the Stage 1 closeout and creating the intended release tag.
 
 ## Recommended execution order
 
