@@ -48,4 +48,5 @@ __pycache__/
 # Local environment check artifacts
 /docs/.brew_check.txt
 /docs/.doxygen_check.txt
+/docs/build/
 
