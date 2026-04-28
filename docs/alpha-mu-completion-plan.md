@@ -79,7 +79,7 @@ current git state, the stage status is:
 | 6 | **Complete** | Decision logs and benchmark surfaces expose world-pipeline, front, TT, cut, and timing metrics. |
 | 7 | **Complete** | The M1 Max benchmark/profile/measurement program is documented and closed. |
 | 8 | **Complete** | Module ownership, user/developer docs, data-flow docs, and Doxygen coverage are in place. |
-| 9 | **Open** | `S9.1`-`S9.3` are landed and Stage 1 is now closed, but `S9.4` release tagging has not yet been performed. |
+| 9 | **Complete** | `S9.1`-`S9.4` are now closed: the acceptance checklist, documentation, and regression evidence are in place, and the repository-grade alpha-mu release is tagged as `v2.10.0`. |
 
 ## Current position
 
@@ -96,10 +96,10 @@ At a high level, the repository now has:
 - the Stage 8 repository-grade documentation set,
 - and a materially improved module split.
 
-The remaining substantive implementation gap is now operational rather than
-algorithmic: the default decision-point / root-report path has been reconciled
-with the Stage 1 bridge-backed ancestor-cut/root-cut machinery, so the only
-remaining plan item is the Stage 9 release-tag step.
+The original substantive implementation gaps are now closed: the default
+decision-point / root-report path has been reconciled with the Stage 1
+bridge-backed ancestor-cut/root-cut machinery, the acceptance evidence is in
+place, and the repository-grade alpha-mu release is tagged as `v2.10.0`.
 
 ## Definition of complete alpha-mu
 
@@ -121,11 +121,8 @@ Alpha-mu is considered complete only when all of the following are true:
 
 ## Current remaining execution plan
 
-The original Stage 0 / Stage 1 bootstrapping sequence has already been carried
-out. From the current audited repository state, the remaining work is:
-
-1. perform the `Stage 9` release-tag step for the now-closed repository-grade
-   implementation state.
+The original Stage 0 / Stage 1 bootstrapping sequence has now been carried out
+to completion. There is no remaining critical-path work in this plan.
 
 ## Optimization-paper feature matrix (Stage 0 / S0.1)
 
@@ -861,7 +858,7 @@ This stage is done when:
 
 ### Status update (2026-04-28)
 
-This stage is not yet complete:
+This stage is now complete:
 
 - **S9.1** (acceptance checklist): `docs/alpha-mu-acceptance.md` contains the
   live acceptance status matrix, plus a stage completion summary and
@@ -876,7 +873,8 @@ This stage is not yet complete:
   (`./build/alpha_mu`) and the focused bridge-DDS suite
   (`./build/alpha_mu bridge_dds`) both pass green.
 
-- **S9.4** (release tag): this operational step is still pending.
+- **S9.4** (release tag): the first repository-grade alpha-mu release state is
+  now tagged as `v2.10.0`.
 
 ### Goal
 
@@ -928,10 +926,7 @@ This stage is done when all of the following are true:
 
 ## Remaining work after this audit
 
-Only one item remains on the completion plan's critical path:
-
-1. **Close Stage 9 operationally** by creating the intended release tag for the
-   now-closed implementation state.
+There is no remaining critical-path work after this audit and release closeout.
 
 ## Recommended execution order
 

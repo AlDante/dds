@@ -1,3 +1,14 @@
+Release Notes DDS 2.10.0
+------------------------
+- Added the repository-grade alpha-mu imperfect-information solver path,
+  including bridge-backed optimization-paper search controls in the default
+  decision-point / root-report flow.
+- Added staged world construction/filtering, real-board decision-point
+  analysis, plausibility weighting, reporting, instrumentation, and benchmark
+  documentation for alpha-mu.
+- Added focused and full alpha-mu regression coverage together with the Stage 9
+  acceptance checklist and supporting developer / bridge-player docs.
+
 Release Notes DDS 2.9.1
 -----------------------
 test/print.cpp: Fixed bug in equals_to_string() noticed by tucsu.

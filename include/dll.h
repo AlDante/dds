@@ -26,8 +26,8 @@
   #include <stdbool.h> // make "bool" available
 #endif
 
-/* Version 2.9.0. Allowing for 2 digit minor versions */
-#define DDS_VERSION 20900
+/* Version 2.10.0. Allowing for 2 digit minor versions */
+#define DDS_VERSION 21000
 
 
 #define DDS_HANDS 4

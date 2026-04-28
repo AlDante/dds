@@ -43,7 +43,7 @@ marked **Pass** before the implementation is considered repository-grade.
 | 6 | Complete Workstream 6 instrumentation | **Complete** |
 | 7 | Apple M1 Max performance program | **Complete** |
 | 8 | First-class engineering and documentation | **Complete** |
-| 9 | Final acceptance and release gate | **Open** |
+| 9 | Final acceptance and release gate | **Complete** |
 
 ## Remaining known limitations
 
@@ -61,7 +61,7 @@ These are documented limitations, not blockers:
 
 ## Conclusion
 
-Most acceptance criteria are now satisfied: the implementation is measured,
-well documented, regression-backed, and usable. Final Stage 9 acceptance is now
-blocked only on the release-tag step.
+All acceptance criteria are now satisfied: the implementation is measured, well
+documented, regression-backed, and usable. Stage 9 is complete, and the
+repository-grade alpha-mu release state is tagged as `v2.10.0`.
 
