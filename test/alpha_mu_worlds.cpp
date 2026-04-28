@@ -1,9 +1,10 @@
-/*
-  alpha_mu world-construction and information-state helpers
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_worlds.cpp
+ * @brief World construction and information-state helpers: history-derived
+ *        dealing, constraint checking, staged filtering, and world-set capping.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 

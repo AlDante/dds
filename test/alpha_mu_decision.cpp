@@ -1,9 +1,10 @@
-/*
-  alpha_mu decision-point solve helpers
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_decision.cpp
+ * @brief Decision-point solver: world pipeline assembly, staged filtering,
+ *        root solve dispatch, and decision-policy application.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 

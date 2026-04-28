@@ -1,9 +1,10 @@
-/*
-  alpha_mu bridge-state, legality, and search helpers
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_bridge.cpp
+ * @brief Bridge-state assembly, move generation, legality checking, DDS leaf
+ *        evaluation, and recursive bridge-backed alpha-mu search.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 

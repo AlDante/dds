@@ -1,9 +1,11 @@
-/*
-   alpha_mu, an alpha-mu bridge solver
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_tests.cpp
+ * @brief Regression test suite: toy-search semantics, bridge-search semantics,
+ *        world construction, decision-point analysis, and reporting stability.
+ *
+ * Copyright © 2026 by David Jenkins
+ * All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 #include "alpha_mu_tests.h"

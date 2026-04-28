@@ -1,9 +1,10 @@
-/*
-  alpha_mu, an alpha-mu bridge solver
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_core.cpp
+ * @brief Core alpha-mu engine: search orchestration, iterative deepening,
+ *        bridge-state management, and transposition table.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 

@@ -1,9 +1,10 @@
-/*
-  alpha_mu front and toy-search helpers
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_front.cpp
+ * @brief Pareto-front operations and toy-search helpers: outcome vectors,
+ *        dominance, Max/Min front semantics, and toy harness search.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 

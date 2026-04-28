@@ -822,6 +822,28 @@ This stage is done when:
 
 ## Stage 9 — final acceptance and release gate
 
+### Status update (2026-04-27)
+
+This stage is now complete:
+
+- **S9.1** (acceptance checklist): `docs/alpha-mu-acceptance.md` contains the
+  full acceptance status matrix with pass/fail for every criterion in the five
+  acceptance areas (correctness, performance, documentation, engineering,
+  usability), plus a stage completion summary and known-limitations section.
+
+- **S9.2** (documentation gaps): all remaining `@file`/`@brief` doxygen
+  comments have been added to every `test/alpha_mu_*.{h,cpp}` file; the
+  Doxyfile INPUT list was already complete from Stage 8; `docs/mainpage.md`
+  now links the acceptance checklist.
+
+- **S9.3** (regression/benchmark gaps): the full regression suite
+  (`./build/alpha_mu`) and the focused bridge-DDS suite
+  (`./build/alpha_mu bridge_dds`) both pass green. No outstanding regression
+  or benchmark gaps remain.
+
+- **S9.4** (release tag): the working tree is ready for tagging once the
+  final commit is in place.
+
 ### Goal
 
 Prove that the implementation is complete, correct, efficient, and supportable.

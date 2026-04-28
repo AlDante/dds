@@ -1,9 +1,10 @@
-/*
-  alpha_mu reporting helpers
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
-*/
+/**
+ * @file alpha_mu_reporting.cpp
+ * @brief Decision-point reporting: human-readable explanations, machine-readable
+ *        ALPHA_MU_DECISION lines, world explanation traces, and stage summaries.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
+ */
 
 #include "alpha_mu_core.h"
 

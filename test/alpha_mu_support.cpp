@@ -1,8 +1,9 @@
-/*
-  alpha_mu, an alpha-mu bridge solver
-
-   Copyright © 2026 by David Jenkins
-   All rights reserved.
+/**
+ * @file alpha_mu_support.cpp
+ * @brief Support utilities: constraint derivation, constructor pruning,
+ *        CLI driver helpers, and test-infrastructure plumbing.
+ *
+ * Copyright 2026 by David Jenkins.  All rights reserved.
  */
 
 #include "alpha_mu_core.h"
