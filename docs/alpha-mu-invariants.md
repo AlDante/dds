@@ -136,12 +136,12 @@ enforced by debug-only assertions.
 | Useful-world maintenance | Implemented | Min-node shrinks live useful-world mask |
 | Zero-world cut | Implemented | Applied against effective useful-world mask |
 | Single-world cut | Implemented | Collapses to exact DDS-backed single-world front |
-| Optimistic completion | Partial | Opt-in for ancestor-front comparison; exact root-report integration pending |
-| Early cut | Partial | Opt-in nearest-ancestor early cut with exact-only TT storage |
-| Deep alpha cut | Partial | Opt-in against earlier ancestor Max fronts |
+| Optimistic completion | Implemented | Default decision-point / root-report path now enables ancestor-front comparison; explicit conservative contexts remain available for exact regressions |
+| Early cut | Implemented | Default decision path now uses nearest-ancestor early cut with exact-only TT storage |
+| Deep alpha cut | Implemented | Default decision path now applies deep alpha cuts against earlier ancestor Max fronts |
 | Cut-on-win | Implemented | Max-node stops once a child front wins in every useful world |
-| Root cut | Partial | Iterative deepening applies root-cut on stable root mu |
-| Exact-front TT reuse | Partial | World-mask keyed; later slices need tighter semantics |
+| Root cut | Implemented | Default decision-point / root-report iterative deepening now applies root-cut on stable root mu |
+| Exact-front TT reuse | Implemented | World-mask keyed exact entries are retained, optimistic-cut fronts are not stored, and the default decision path now uses those exact-only reuse semantics |
 | DDS-backed leaf evaluation | Implemented | Core real-engine leaf oracle |
 | Bridge root reporting | Implemented | Practical reporting present |
 

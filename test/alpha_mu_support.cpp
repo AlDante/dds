@@ -70,6 +70,13 @@ namespace alpha_mu
     return context;
   }
 
+  void EnableDefaultDecisionPointBridgeSearchControls(
+    SearchExecutionContext& context)
+  {
+    context.bridgeSearch.enableAncestorCuts = true;
+    context.bridgeSearch.requireExactTTFronts = true;
+  }
+
   AlphaMuBenchmarkOptions NormalizeAlphaMuBenchmarkOptions(
     const AlphaMuBenchmarkOptions& options)
   {

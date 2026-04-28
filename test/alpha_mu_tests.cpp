@@ -3454,6 +3454,65 @@ namespace alpha_mu
   }
 
 
+  static void TestDecisionPointDefaultBridgeSearchControls()
+  {
+    SearchExecutionContext earlyCutContext;
+    EnableDefaultDecisionPointBridgeSearchControls(earlyCutContext);
+
+    Check(earlyCutContext.bridgeSearch.enableAncestorCuts,
+      "default decision-point bridge-search controls should enable Stage 1 ancestor cuts");
+    Check(earlyCutContext.bridgeSearch.requireExactTTFronts,
+      "default decision-point bridge-search controls should require exact-only TT reuse semantics");
+
+    const BridgeState minState = MakeBridgeAncestorCutMinFixture();
+    ParetoFront dominating(2);
+    OutcomeVector dominatingVec(2);
+    dominatingVec.valid = WorldMask(2, 0x3ULL);
+    dominatingVec.values[0] = 1;
+    dominatingVec.values[1] = 1;
+    dominating.Insert(dominatingVec);
+    earlyCutContext.bridgeSearch.upperMaxFronts.push_back(&dominating);
+
+    BridgeSearchStats earlyCutStats;
+    SetActiveBridgeSearchStats(&earlyCutStats);
+    const ParetoFront earlyCutFront = SearchBridgeState(minState, 1,
+      earlyCutContext);
+    SetActiveBridgeSearchStats(NULL);
+
+    const ParetoFront expectedEarlyCutFront = MakeSingleWorldFront(2, 1, 1);
+    Check(earlyCutFront.ToString() == expectedEarlyCutFront.ToString(),
+      "default decision-point bridge-search controls should activate the Stage 1 optimistic-completion early cut on the focused bridge fixture");
+    Check(earlyCutStats.optimisticCompletions >= 1,
+      "default decision-point bridge-search controls should record the optimistic completion used for the Stage 1 early cut");
+    Check(earlyCutStats.earlyAlphaCuts == 1,
+      "default decision-point bridge-search controls should trigger exactly one nearest-ancestor early cut on the focused bridge fixture");
+
+    SearchExecutionContext rootCutContext;
+    EnableDefaultDecisionPointBridgeSearchControls(rootCutContext);
+    const BridgeState rootState = MakeBridgeGuaranteedWinRootFixture();
+
+    InitZobrist();
+    BridgeTranspositionTable tt(1U << 8);
+    BridgeTTStats firstStats;
+    const BridgeRootReport first = AnalyzeBridgeRootWithTT(rootState, 2,
+      rootCutContext, &tt, &firstStats, NULL);
+
+    BridgeSearchStats rootCutStats;
+    SetActiveBridgeSearchStats(&rootCutStats);
+    BridgeTTStats secondStats;
+    const BridgeRootReport second = AnalyzeBridgeRootWithTT(rootState, 3,
+      rootCutContext, &tt, &secondStats, &first);
+    SetActiveBridgeSearchStats(NULL);
+
+    Check(first.rootFront.Mu() == second.rootFront.Mu(),
+      "default decision-point bridge-search controls should preserve the stable root mu required by the Stage 1 root cut");
+    Check(second.children.size() == 1,
+      "default decision-point bridge-search controls should stop the deeper root report after the first dominating child once the root mu stabilizes");
+    Check(rootCutStats.rootCuts == 1,
+      "default decision-point bridge-search controls should trigger exactly one Stage 1 root cut on the focused iterative-deepening fixture");
+  }
+
+
   static void TestAlphaMuBenchmarkOptionNormalization()
   {
     AlphaMuBenchmarkOptions options;
@@ -4205,9 +4264,9 @@ namespace alpha_mu
 
     AlphaMuDecisionPointRequest informedRequest(baselineRequest);
     informedRequest.informationOverrides.biddingConstraints.push_back(
-      WorldConstraint::MinLength(SEAT_EAST, SUIT_DIAMONDS, 1));
+      WorldConstraint::MinLength(SEAT_EAST, SUIT_SPADES, 0));
     informedRequest.informationOverrides.biddingConstraints.push_back(
-      WorldConstraint::MaxLength(SEAT_EAST, SUIT_DIAMONDS, 1));
+      WorldConstraint::MaxLength(SEAT_EAST, SUIT_SPADES, 0));
 
     const AlphaMuSolveResult informed =
       SolveAlphaMuDecisionPoint(informedRequest);
@@ -4219,7 +4278,7 @@ namespace alpha_mu
     Check(baseline.chosenMove == BridgeMove(SUIT_DIAMONDS, '3'),
       "real-board bidding-profile regression should start from the unconstrained board-2 depth-1 prefix-36 baseline that chooses a diamond continuation");
     Check(informed.chosenMove == BridgeMove(SUIT_CLUBS, '9'),
-      "real-board bidding-profile regression should switch to the club continuation once East is constrained to exactly one remaining diamond");
+      "real-board bidding-profile regression should switch to the club continuation once East is constrained to exactly zero remaining spades");
     Check(informedRepeat.chosenMove == informed.chosenMove &&
           informedRepeat.activeWorldIndices == informed.activeWorldIndices,
       "real-board bidding-profile regression should remain deterministic once the richer bidding-derived information is applied");
@@ -4230,17 +4289,20 @@ namespace alpha_mu
           informed.worldCount == informed.survivingWorldCount,
       "real-board bidding-profile regression should keep the full surviving world pool active on both sides of the comparison");
     Check(baseline.worldGenerationStats.afterBiddingCount == 35 &&
-          informed.worldGenerationStats.afterBiddingCount == 30,
-      "real-board bidding-profile regression should narrow the board-2 prefix-36 world pool at the bidding stage from 35 worlds to 30 worlds");
+          informed.worldGenerationStats.afterBiddingCount == 13,
+      "real-board bidding-profile regression should narrow the board-2 prefix-36 world pool at the bidding stage from 35 worlds to 13 worlds");
     Check(informed.worldCount < baseline.worldCount,
-      "real-board bidding-profile regression should make the world pool materially smaller once the richer defender-diamond profile is applied");
+      "real-board bidding-profile regression should make the world pool materially smaller once the richer defender-spade profile is applied");
     Check(informed.hasDDSBestMove && informed.chosenMove == informed.ddsBestMove,
       "real-board bidding-profile regression should move the alpha-mu recommendation onto the DDS-best club continuation after the richer bidding-derived narrowing");
     Check(informed.biddingConstraintTexts.size() == 2,
       "real-board bidding-profile regression should surface the explicit richer bidding constraints in analyst-facing reporting text");
+    Check(informed.biddingConstraintTexts[0].find("East must hold at least 0 cards in spades") != string::npos &&
+          informed.biddingConstraintTexts[1].find("East must hold at most 0 cards in spades") != string::npos,
+      "real-board bidding-profile regression should preserve the explicit zero-spade bidding facts in analyst-facing reporting text");
 
     Check(baseline.constructorStats.afterConstructorLengthCount == 35 &&
-          informed.constructorStats.afterConstructorLengthCount == 30,
+          informed.constructorStats.afterConstructorLengthCount == 13,
       "real-board bidding-profile regression should trace the recommendation change to earlier constructor-local bidding-length pruning, not only to later search noise");
   }
 
@@ -4250,9 +4312,9 @@ namespace alpha_mu
       MakeBoard2DecisionRequest(36, 1, 64U, 7U);
     muRequest.informationOverrides.plausibilityHints.push_back(
       WorldPlausibilityHint::Prefer(
-        WorldConstraint::MinLength(SEAT_EAST, SUIT_DIAMONDS, 1),
+        WorldConstraint::MaxLength(SEAT_EAST, SUIT_SPADES, 0),
         7,
-        "East likely kept the last diamond"));
+        "East likely started spadeless"));
 
     AlphaMuDecisionPointRequest weightedRequest(muRequest);
     weightedRequest.decisionPolicy = ALPHA_MU_DECISION_POLICY_WEIGHTED;
@@ -4271,7 +4333,7 @@ namespace alpha_mu
     Check(muResult.chosenMove == BridgeMove(SUIT_DIAMONDS, '3'),
       "real-board weighted-policy regression should preserve the plain-mu diamond choice when plausibility remains soft and the requested decision policy is still mu");
     Check(weightedResult.chosenMove == BridgeMove(SUIT_CLUBS, '9'),
-      "real-board weighted-policy regression should switch to the club continuation when the explicit weighted decision policy follows the plausibility-ranked diamond-one subset");
+      "real-board weighted-policy regression should switch to the club continuation when the explicit weighted decision policy follows the plausibility-ranked spadeless-East subset");
     Check(weightedResult.appliedDecisionPolicy == ALPHA_MU_DECISION_POLICY_WEIGHTED,
       "real-board weighted-policy regression should keep the weighted policy active when some surviving worlds receive positive plausibility weight");
     Check(weightedRepeat.chosenMove == weightedResult.chosenMove &&
@@ -4287,7 +4349,7 @@ namespace alpha_mu
     Check(topWorld.plausibilityScore == 7 &&
           ! topWorld.satisfiedPlausibilityHints.empty() &&
           topWorld.satisfiedPlausibilityHints[0] ==
-            "East likely kept the last diamond",
+            "East likely started spadeless",
       "real-board weighted-policy regression should keep the explanation trace aligned with the plausibility hint that drives the weighted decision change");
   }
 
@@ -5054,6 +5116,8 @@ namespace alpha_mu
     PrintAlphaMuStatus("bridge cut-on-win OK");
     TestBridgeRootCut();
     PrintAlphaMuStatus("bridge root-cut OK");
+    TestDecisionPointDefaultBridgeSearchControls();
+    PrintAlphaMuStatus("default decision-point bridge-search controls OK");
     TestBridgeMultiTrickDDSLeaf();
     PrintAlphaMuStatus("multi-trick bridge DDS leaf search OK");
     PrintAlphaMuStatus("all checks passed");
@@ -5112,6 +5176,7 @@ namespace alpha_mu
       {"root cut toy search OK", &TestRootCutExample},
        {"DDS leaf demo and leaf parallelization OK", &TestDDSLeafDemo},
        {"bridge search execution context parity OK", &TestBridgeSearchExplicitExecutionContext},
+       {"default decision-point bridge-search controls OK", &TestDecisionPointDefaultBridgeSearchControls},
        {"benchmark option normalization OK", &TestAlphaMuBenchmarkOptionNormalization},
        {"benchmark reporting metrics OK", &TestBenchmarkReportingEmitsAlphaMuSearchMetrics},
        {"benchmark summary metrics OK", &TestBenchmarkSummaryTracksAlphaMuSearchMetrics},

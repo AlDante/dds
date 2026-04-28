@@ -13,7 +13,7 @@ marked **Pass** before the implementation is considered repository-grade.
 | 1.1 | Correctness | Full regression suite green | **Pass** | `./build/alpha_mu` — all checks passed |
 | 1.2 | Correctness | Bridge-backed optimization-paper regressions green | **Pass** | `./build/alpha_mu bridge_dds` — all checks passed |
 | 1.3 | Correctness | One-world DDS parity maintained | **Pass** | `TestBridgeTranspositionTable`, `TestIterativeDeepeningDepth3` |
-| 1.4 | Correctness | No unresolved semantic mismatches | **Open** | The Stage 1 feature matrix in `alpha-mu-completion-plan.md` still classifies optimistic completion / early cut / deep alpha cut / root cut / exact-front TT reuse as `Partial` in the default bridge-search path |
+| 1.4 | Correctness | No unresolved semantic mismatches | **Pass** | The Stage 1 feature matrix in `alpha-mu-completion-plan.md` now marks optimistic completion / early cut / deep alpha cut / root cut / exact-front TT reuse as implemented in the default decision-point / root-report path |
 | 2.1 | Performance | Benchmark suite frozen and documented | **Pass** | `docs/alpha-mu-benchmark-baseline.md` |
 | 2.2 | Performance | Instrumentation complete | **Pass** | `ALPHA_MU_DECISION` line covers world pipeline, front, TT, cut, timing metrics |
 | 2.3 | Performance | Accepted optimizations benchmark-backed | **Pass** | `docs/performance-log.md` records every accepted/reverted candidate |
@@ -35,7 +35,7 @@ marked **Pass** before the implementation is considered repository-grade.
 | Stage | Title | Status |
 |-------|-------|--------|
 | 0 | Semantic baseline and acceptance envelope | **Complete** |
-| 1 | Port optimization-paper search control into bridge engine | **Open** |
+| 1 | Port optimization-paper search control into bridge engine | **Complete** |
 | 2 | Align decision-point world pipeline with staged filtering | **Complete** |
 | 3 | Realistic information-state construction | **Complete** |
 | 4 | World plausibility and weighting | **Complete** |
@@ -61,8 +61,7 @@ These are documented limitations, not blockers:
 
 ## Conclusion
 
-Most acceptance criteria are already satisfied: the implementation is measured,
-well documented, regression-backed, and usable. Final Stage 9 acceptance is
-still blocked on the remaining Stage 1 closeout work identified in
-`alpha-mu-completion-plan.md`, plus the release-tag step.
+Most acceptance criteria are now satisfied: the implementation is measured,
+well documented, regression-backed, and usable. Final Stage 9 acceptance is now
+blocked only on the release-tag step.
 

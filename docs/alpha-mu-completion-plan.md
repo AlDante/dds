@@ -71,7 +71,7 @@ current git state, the stage status is:
 | Stage | Status | Notes |
 | --- | --- | --- |
 | 0 | **Complete** | Feature matrix, bridge-search invariants, debug assertions, and semantic-gate regressions are present. |
-| 1 | **Partial / open** | Bridge-backed useful-world maintenance, world cuts, opt-in optimistic completion, ancestor cuts, cut-on-win, root cut, and exact-only TT storage are implemented and regression-backed in `bridge_dds`, but the default decision-point path still runs the conservative exact root-report path without ancestor-cut/root-cut enablement, so the feature matrix remains `Partial` for optimistic completion / early cut / deep alpha cut / root cut / exact-front TT reuse. |
+| 1 | **Complete** | The default decision-point / root-report path now enables the bridge-backed ancestor-cut and root-cut controls, the focused and full regression suites both cover that default path, and exact-only TT storage remains preserved for explicit conservative contexts. |
 | 2 | **Complete** | One staged world pipeline now feeds explanation, compaction, reporting, and benchmark logs. |
 | 3 | **Complete at current planned scope** | Richer information-state contract, bidding/play-derived narrowing, deterministic capping, explanation improvements, and a real-board recommendation change are all present. |
 | 4 | **Complete at current planned scope** | Plausibility semantics are documented, reporting is richer, and the explicit root-only weighted policy is regression-backed. |
@@ -79,7 +79,7 @@ current git state, the stage status is:
 | 6 | **Complete** | Decision logs and benchmark surfaces expose world-pipeline, front, TT, cut, and timing metrics. |
 | 7 | **Complete** | The M1 Max benchmark/profile/measurement program is documented and closed. |
 | 8 | **Complete** | Module ownership, user/developer docs, data-flow docs, and Doxygen coverage are in place. |
-| 9 | **Open** | `S9.1`-`S9.3` are landed, but final acceptance cannot be called complete while Stage 1 remains open, and `S9.4` release tagging has not yet been performed. |
+| 9 | **Open** | `S9.1`-`S9.3` are landed and Stage 1 is now closed, but `S9.4` release tagging has not yet been performed. |
 
 ## Current position
 
@@ -96,12 +96,10 @@ At a high level, the repository now has:
 - the Stage 8 repository-grade documentation set,
 - and a materially improved module split.
 
-The remaining substantive implementation gap is narrower than the original
-opening state: Stage 1 is still not fully closed because the default
-decision-point / exact root-report path does not yet enable the bridge-backed
-ancestor-cut/root-cut machinery whose opt-in implementation is already present
-and regression-backed in `bridge_dds`. Final Stage 9 closure is therefore also
-still open, along with the operational release-tag step.
+The remaining substantive implementation gap is now operational rather than
+algorithmic: the default decision-point / root-report path has been reconciled
+with the Stage 1 bridge-backed ancestor-cut/root-cut machinery, so the only
+remaining plan item is the Stage 9 release-tag step.
 
 ## Definition of complete alpha-mu
 
@@ -126,15 +124,8 @@ Alpha-mu is considered complete only when all of the following are true:
 The original Stage 0 / Stage 1 bootstrapping sequence has already been carried
 out. From the current audited repository state, the remaining work is:
 
-1. close `Stage 1` by lifting the currently opt-in bridge-backed ancestor-cut /
-   root-cut control path into the default decision-point / exact root-report
-   flow, or by otherwise narrowing the public semantics so the feature matrix no
-   longer needs to classify optimistic completion, early cut, deep alpha cut,
-   root cut, and exact-front TT reuse as `Partial`;
-2. rerun the focused `bridge_dds` bundle and the full `alpha_mu` suite after
-   that Stage 1 closeout and refresh the feature matrix / acceptance record;
-3. complete `Stage 9` by performing the release-tag step once the implementation
-   state truly satisfies the completion definition.
+1. perform the `Stage 9` release-tag step for the now-closed repository-grade
+   implementation state.
 
 ## Optimization-paper feature matrix (Stage 0 / S0.1)
 
@@ -148,12 +139,12 @@ out. From the current audited repository state, the remaining work is:
 | Useful-world maintenance | Yes | Yes | Implemented in bridge search | Real bridge Min-node search now shrinks the live useful-world mask across child exploration |
 | Zero-world cut | Yes | Yes | Implemented in bridge search | Bridge search now applies the cut against the effective useful-world mask |
 | Single-world cut | Yes | Yes | Implemented in bridge search | Bridge search now collapses one useful world to an exact DDS-backed single-world front |
-| Optimistic completion | Yes | Partial | Partial | Bridge search now has opt-in optimistic completion for ancestor-front comparison, but exact root-report integration is still pending |
-| Early cut | Yes | Partial | Partial | Bridge search now has opt-in nearest-ancestor early cut with exact-only TT storage, but the exact root-report path does not yet opt in |
-| Deep alpha cut | Yes | Partial | Partial | Bridge search now has opt-in deep alpha cuts against earlier ancestor Max fronts, but the exact root-report path does not yet opt in |
+| Optimistic completion | Yes | Yes | Implemented in bridge search | The default decision-point / root-report path now enables ancestor-front comparison, while explicit conservative contexts remain available for exact regressions |
+| Early cut | Yes | Yes | Implemented in bridge search | The default bridge-backed decision path now uses nearest-ancestor early cut with exact-only TT storage |
+| Deep alpha cut | Yes | Yes | Implemented in bridge search | The default bridge-backed decision path now applies deep alpha cuts against earlier ancestor Max fronts |
 | Cut-on-win | Yes | Yes | Implemented in bridge search | Bridge Max-node search now stops once a child front wins in every useful world |
-| Root cut | Yes | Partial | Partial | Bridge iterative deepening now applies a root-cut stop on stable root `mu`, but reporting remains intentionally conservative about deeper inexact root-child coverage |
-| Exact-front TT reuse | Yes | Partial | Partial | Bridge TT now keys the Stage 1 world-cut slice by useful-world mask and refuses to store optimistic-cut fronts, but later ancestor-front slices still need tighter reuse semantics |
+| Root cut | Yes | Yes | Implemented in bridge search | Bridge iterative deepening now applies root-cut on stable root `mu` in the default decision-point / root-report path |
+| Exact-front TT reuse | Yes | Yes | Implemented in bridge search | Bridge TT keys exact entries by useful-world mask, refuses optimistic-cut fronts, and the default decision path now uses those exact-only reuse semantics |
 | DDS-backed leaf evaluation | N/A | Yes | Implemented in bridge search | Core real-engine leaf oracle |
 | Bridge root reporting | N/A | Yes | Implemented in bridge search | Practical reporting is already present |
 
@@ -286,25 +277,17 @@ This stage is done when:
 
 ### Status update (2026-04-28)
 
-This stage is only partially complete:
+This stage is now complete:
 
-- `S1.1` and `S1.2` are landed: bridge-search context, useful-world
-  maintenance, zero-world cut, and single-world cut are part of the default
-  bridge search.
-- `S1.3` through `S1.6` are implemented and regression-backed in the focused
-  `bridge_dds` bundle as an opt-in bridge-backed control path:
-  optimistic completion, early cut, deep alpha cut, cut-on-win, and root cut
-  all have dedicated regressions.
-- `S1.7` is only partially closed: TT storage refuses optimistic-cut fronts and
-  keys exact entries by useful-world mask, but the feature matrix still records
-  exact-front TT reuse as `Partial` because the later ancestor-front path has
-  not been fully promoted into the default exact root-report flow.
-
-What remains for this stage is to remove the current split between the
-conservative default decision-point path and the opt-in ancestor-cut/root-cut
-bridge-search path, then update the feature matrix from `Partial` to
-`Implemented` only where the default semantics truly match the optimization
-paper claims.
+- `S1.1` and `S1.2` are part of the default bridge search: bridge-search
+  context, useful-world maintenance, zero-world cut, and single-world cut.
+- `S1.3` through `S1.6` are now also part of the default decision-point /
+  root-report path: optimistic completion, early cut, deep alpha cut,
+  cut-on-win, and root cut are all bridge-backed and regression-backed.
+- `S1.7` is closed: TT storage refuses optimistic-cut fronts, keys exact entries
+  by useful-world mask, and the default decision path now uses the same
+  exact-only reuse semantics while explicit conservative contexts remain
+  available for exact regression probes.
 
 ### Goal
 
@@ -473,7 +456,7 @@ Also now present as the first narrow `S3.5` slice:
 Also now present as the remaining Stage 3 closeout evidence slice:
 
 - the regression suite includes a real-board decision on board 2 of
-  `hands/alpha_mu_play.txt` at a 36-card prefix where richer defender-diamond
+  `hands/alpha_mu_play.txt` at a 36-card prefix where richer defender-spade
   information changes the recommended move,
 - that case keeps sampling out of the explanation by staying below the world cap
   on both sides of the comparison,
@@ -539,8 +522,8 @@ Also now present as the `S4.4` comparison slice:
 - the CLI decision runner now accepts explicit decision-policy and plausibility
   options,
 - the regression suite includes a real-board board-2 prefix-36 case where a soft
-  plausibility hint leaves world membership unchanged but the explicit weighted
-  policy changes the chosen move,
+  plausibility hint favoring a spadeless East leaves world membership unchanged
+  but the explicit weighted policy changes the chosen move,
 - and that change is locked to the explanation trace rather than being an
   unreported heuristic side effect.
 
@@ -893,11 +876,7 @@ This stage is not yet complete:
   (`./build/alpha_mu`) and the focused bridge-DDS suite
   (`./build/alpha_mu bridge_dds`) both pass green.
 
-- **Blocking gap**: Stage 1 is still open by this document's own feature matrix
-  and definition of done, so the repository cannot yet be recorded as fully
-  complete under the Stage 9 release gate.
-
-- **S9.4** (release tag): this operational step is also still pending.
+- **S9.4** (release tag): this operational step is still pending.
 
 ### Goal
 
@@ -949,13 +928,10 @@ This stage is done when all of the following are true:
 
 ## Remaining work after this audit
 
-Only two items remain on the completion plan's critical path:
+Only one item remains on the completion plan's critical path:
 
-1. **Close Stage 1 fully** by reconciling the currently opt-in ancestor-cut /
-   root-cut bridge-search path with the default decision-point semantics and TT
-   reuse guarantees.
-2. **Close Stage 9 operationally** by refreshing the acceptance record after
-   the Stage 1 closeout and creating the intended release tag.
+1. **Close Stage 9 operationally** by creating the intended release tag for the
+   now-closed implementation state.
 
 ## Recommended execution order
 

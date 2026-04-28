@@ -385,6 +385,7 @@ namespace alpha_mu
     progress.reportIntervalSeconds = 1.0e30;
     progress.nextReportSeconds = 1.0e30;
     SearchExecutionContext context;
+    EnableDefaultDecisionPointBridgeSearchControls(context);
     context.benchmarkProgress = &progress;
     SetActiveBridgeSearchStats(&result.bridgeSearchStats);
 

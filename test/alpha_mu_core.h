@@ -1772,6 +1772,8 @@ namespace alpha_mu
   AlphaMuParallelMode ParseAlphaMuParallelModeName(const string& text);
   /** @brief Construct an explicit search execution context. */
   SearchExecutionContext MakeSearchExecutionContext( const int ddsThreadId, BenchmarkBoardProgressContext * benchmarkProgress, const AlphaMuParallelMode parallelMode = ALPHA_MU_PARALLEL_SERIAL, const int boardWorkers = 1, const int rootWorkers = 1);
+  /** @brief Enable the Stage 1 bridge-search controls used by the default decision/root-report path. */
+  void EnableDefaultDecisionPointBridgeSearchControls(SearchExecutionContext& context);
   /** @brief Clamp benchmark execution options into a future-proof serial-safe baseline. */
   AlphaMuBenchmarkOptions NormalizeAlphaMuBenchmarkOptions( const AlphaMuBenchmarkOptions& options);
 

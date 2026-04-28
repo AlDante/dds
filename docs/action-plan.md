@@ -161,7 +161,7 @@ The first narrow `Stage 3.5` slice is now in place:
 The first real-board recommendation-change evidence slice is now in place:
 
 - board 2 of `hands/alpha_mu_play.txt` at the 36-card prefix now has a
-  regression where richer defender-diamond information changes the chosen move,
+  regression where richer defender-spade information changes the chosen move,
 - that case keeps sampling out of the comparison by staying below the world cap
   before and after the richer information is applied,
 - and the change is traced to earlier constructor-local plus staged bidding
@@ -266,7 +266,8 @@ Also now present as the first real-board weighted comparison slice:
 - the CLI decision runner accepts explicit decision-policy and plausibility
   options,
 - a real-board board-2 prefix-36 regression now shows the weighted policy
-  changing the chosen move while leaving world membership unchanged,
+  changing the chosen move while leaving world membership unchanged by favoring a
+  spadeless-East subset,
 - and the explanation trace remains aligned with the plausibility hint that
   drives that weighted recommendation change.
 
