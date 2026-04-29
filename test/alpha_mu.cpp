@@ -7,8 +7,8 @@
 #include <stdexcept>
 #include <string>
 
-#include "alpha_mu_core.h"
-#include "alpha_mu_tests.h"
+#include "alpha_mu/api.h"
+#include "alpha_mu/tests.h"
 
 using namespace std;
 using namespace alpha_mu;
@@ -290,66 +290,68 @@ namespace
  */
 int main(int argc, char ** argv)
 {
-  if (argc >= 1 && argv[0] != NULL)
-	SetAlphaMuExecutablePath(argv[0]);
-
-  if (argc >= 2)
+  try
   {
-	const string mode(argv[1]);
-	if (mode == "debug_assert_worldmask_capacity")
-	{
-	  RunDebugWorldMaskCapacityAssertionTrigger();
-	  return 0;
-	}
-	if (mode == "benchmark_dds")
-	{
-	  Check(argc >= 3,
-		"benchmark_dds mode requires a hand-file path argument");
+    if (argc >= 1 && argv[0] != NULL)
+	  SetAlphaMuExecutablePath(argv[0]);
 
-	  const string handFile(argv[2]);
-	  const int maxBoards = ParseOptionalIntArgument(
-		argc, argv, 3, 0, "benchmark_dds max boards");
-	  const string skipSpec = (argc >= 5 ? argv[4] : "");
-	  const BenchmarkMethodSummary summary = BenchmarkDDSExactBoards(
-		handFile, maxBoards, skipSpec);
-	  ReportBenchmarkMethodSummary(summary);
-	  PrintAlphaMuStatus("DDS exact benchmark OK");
-	  return 0;
-	}
-	if (mode == "benchmark_alpha")
+	if (argc >= 2)
 	{
-	  const AlphaMuBenchmarkOptions options =
-		ParseBenchmarkAlphaOptions(argc, argv);
-	  const BenchmarkMethodSummary summary =
-		BenchmarkAlphaMuExactBoards(options);
-	  ReportBenchmarkMethodSummary(summary);
-	  PrintAlphaMuStatus("alpha-mu exact benchmark OK");
-	  return 0;
-	}
-	if (mode == "compare_dds")
-	{
-	  Check(argc >= 3,
-		"compare_dds mode requires a hand-file path argument");
+	  const string mode(argv[1]);
+	  if (mode == "debug_assert_worldmask_capacity")
+	  {
+		RunDebugWorldMaskCapacityAssertionTrigger();
+		return 0;
+	  }
+	  if (mode == "benchmark_dds")
+	  {
+		Check(argc >= 3,
+		  "benchmark_dds mode requires a hand-file path argument");
 
-	  const string handFile(argv[2]);
-	  const int maxDepth = ParseOptionalIntArgument(
-		argc, argv, 3, 1, "compare_dds max depth");
-	  const int maxBoards = ParseOptionalIntArgument(
-		argc, argv, 4, 0, "compare_dds max boards");
-	  const DDSVsAlphaMuComparison comparison = CompareDDSAndAlphaMu(
-		handFile, maxDepth, maxBoards);
-	  ReportDDSVsAlphaMuComparison(comparison);
-	  PrintAlphaMuStatus("DDS vs alpha-mu comparison OK");
-	  return 0;
-	}
-	if (mode == "bridge_dds")
-	{
-	  RunBridgeDDSTestSuite();
-	  return 0;
-	}
-	if (mode == "pbn_recommend")
-	{
-	  string filePath;
+		const string handFile(argv[2]);
+		const int maxBoards = ParseOptionalIntArgument(
+		  argc, argv, 3, 0, "benchmark_dds max boards");
+		const string skipSpec = (argc >= 5 ? argv[4] : "");
+		const BenchmarkMethodSummary summary = BenchmarkDDSExactBoards(
+		  handFile, maxBoards, skipSpec);
+		ReportBenchmarkMethodSummary(summary);
+		PrintAlphaMuStatus("DDS exact benchmark OK");
+		return 0;
+	  }
+	  if (mode == "benchmark_alpha")
+	  {
+		const AlphaMuBenchmarkOptions options =
+		  ParseBenchmarkAlphaOptions(argc, argv);
+		const BenchmarkMethodSummary summary =
+		  BenchmarkAlphaMuExactBoards(options);
+		ReportBenchmarkMethodSummary(summary);
+		PrintAlphaMuStatus("alpha-mu exact benchmark OK");
+		return 0;
+	  }
+	  if (mode == "compare_dds")
+	  {
+		Check(argc >= 3,
+		  "compare_dds mode requires a hand-file path argument");
+
+		const string handFile(argv[2]);
+		const int maxDepth = ParseOptionalIntArgument(
+		  argc, argv, 3, 1, "compare_dds max depth");
+		const int maxBoards = ParseOptionalIntArgument(
+		  argc, argv, 4, 0, "compare_dds max boards");
+		const DDSVsAlphaMuComparison comparison = CompareDDSAndAlphaMu(
+		  handFile, maxDepth, maxBoards);
+		ReportDDSVsAlphaMuComparison(comparison);
+		PrintAlphaMuStatus("DDS vs alpha-mu comparison OK");
+		return 0;
+	  }
+	  if (mode == "bridge_dds")
+	  {
+		RunBridgeDDSTestSuite();
+		return 0;
+	  }
+	  if (mode == "pbn_recommend")
+	  {
+		string filePath;
 
 	  for (int a = 2; a < argc; a++)
 	  {
@@ -632,21 +634,32 @@ int main(int argc, char ** argv)
 	  }
 	  return 0;
 	}
-	if (mode == "partial")
-	{
-	  TestParsePlayHistoryValidation();
-	  PrintAlphaMuStatus("play history parse validation OK");
-	  TestPartialInformationWorldGeneration();
-	  PrintAlphaMuStatus("partial-information world generation OK");
-	  TestFollowSuitNarrowingInPartialInformation();
-	  PrintAlphaMuStatus("follow-suit narrowing in partial information OK");
-	  TestEndToEndSolveAlphaMu();
-	  PrintAlphaMuStatus("end-to-end alpha-mu solve OK");
-	  return 0;
+	  if (mode == "partial")
+	  {
+		TestParsePlayHistoryValidation();
+		PrintAlphaMuStatus("play history parse validation OK");
+		TestPartialInformationWorldGeneration();
+		PrintAlphaMuStatus("partial-information world generation OK");
+		TestFollowSuitNarrowingInPartialInformation();
+		PrintAlphaMuStatus("follow-suit narrowing in partial information OK");
+		TestEndToEndSolveAlphaMu();
+		PrintAlphaMuStatus("end-to-end alpha-mu solve OK");
+		return 0;
+	  }
 	}
-  }
 
-  RunDefaultTestSuite();
-  return 0;
+    RunDefaultTestSuite();
+    return 0;
+  }
+  catch (const exception& ex)
+  {
+	cerr << kAlphaMuMessagePrefix << ex.what() << "\n";
+	return 1;
+  }
+  catch (...)
+  {
+	cerr << kAlphaMuMessagePrefix << "unhandled non-standard exception\n";
+	return 1;
+  }
 }
 

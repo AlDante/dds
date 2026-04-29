@@ -48,7 +48,7 @@ void TimerList::Reset()
 
 void TimerList::Start(
   const ABTimerType groupno,
-  const unsigned timerno)
+  const int timerno)
 {
   if (groupno >= TIMER_NO_SIZE)
     return;
@@ -58,7 +58,7 @@ void TimerList::Start(
 
 void TimerList::End(
   const ABTimerType groupno,
-  const unsigned timerno)
+  const int timerno)
 {
   if (groupno >= TIMER_NO_SIZE)
     return;

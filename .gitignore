@@ -21,9 +21,13 @@ __pycache__/
 *.lib
 *.res
 /src/build/
+/src/build-*/
 /test/build/
+/test/build-*/
 /examples/build/
+/examples/build-*/
 /build/
+/cmake-build-*/
 /src/cmake-build-debug/
 /test/libdds.so
 /examples/libdds.so
@@ -49,4 +53,10 @@ __pycache__/
 /docs/.brew_check.txt
 /docs/.doxygen_check.txt
 /docs/build/
+/test/build/perf_runs/
+/test/build/performance_runs/
+/test/build/alpha_mu_stats/
+/test/TTstats*.txt
+/test/movestats*.txt
+/test/timer*.txt
 

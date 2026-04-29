@@ -64,23 +64,23 @@ struct nodeCardsType // 8 bytes
 class TransTable
 {
   public:
-    TransTable(){};
+    TransTable(){}
 
-    virtual ~TransTable(){};
+    virtual ~TransTable() {}
 
-    virtual void Init(const int handLookup[][15]){};
+    virtual void Init(const int handLookup[][15]) = 0;
 
-    virtual void SetMemoryDefault(const int megabytes){};
+    virtual void SetMemoryDefault(const int megabytes) = 0;
 
-    virtual void SetMemoryMaximum(const int megabytes){};
+    virtual void SetMemoryMaximum(const int megabytes) = 0;
 
-    virtual void MakeTT(){};
+    virtual void MakeTT() = 0;
 
-    virtual void ResetMemory(const TTresetReason reason){};
+    virtual void ResetMemory(const TTresetReason reason) = 0;
 
-    virtual void ReturnAllMemory(){};
+    virtual void ReturnAllMemory() = 0;
 
-    virtual double MemoryInUse() const {return 0.;};
+    virtual double MemoryInUse() const = 0;
 
     virtual nodeCardsType const * Lookup(
       const int trick,
@@ -88,7 +88,7 @@ class TransTable
       const unsigned short aggrTarget[],
       const int handDist[],
       const int limit,
-      bool& lowerFlag){return NULL;};
+      bool& lowerFlag) = 0;
 
     virtual void Add(
       const int trick,
@@ -96,58 +96,58 @@ class TransTable
       const unsigned short aggrTarget[],
       const unsigned short winRanksArg[],
       const nodeCardsType& first,
-      const bool flag){};
+      const bool flag) = 0;
 
     virtual void PrintSuits(
       ofstream& fout, 
       const int trick, 
-      const int hand) const {};
+      const int hand) const {}
 
-    virtual void PrintAllSuits(ofstream& fout) const {};
+    virtual void PrintAllSuits(ofstream& fout) const {}
 
     virtual void PrintSuitStats(
       ofstream& fout, 
       const int trick, 
-      const int hand) const {};
+      const int hand) const {}
 
-    virtual void PrintAllSuitStats(ofstream& fout) const {};
+    virtual void PrintAllSuitStats(ofstream& fout) const {}
 
-    virtual void PrintSummarySuitStats(ofstream& fout) const {};
+    virtual void PrintSummarySuitStats(ofstream& fout) const {}
 
     virtual void PrintEntriesDist(
       ofstream& fout, 
       const int trick,
       const int hand,
-      const int handDist[]) const {};
+      const int handDist[]) const {}
 
     virtual void PrintEntriesDistAndCards(
       ofstream& fout,
       const int trick,
       const int hand,
       const unsigned short aggrTarget[],
-      const int handDist[]) const {};
+      const int handDist[]) const {}
 
     virtual void PrintEntries(
       ofstream& fout, 
       const int trick, 
-      const int hand) const {};
+      const int hand) const {}
 
-    virtual void PrintAllEntries(ofstream& fout) const {};
+    virtual void PrintAllEntries(ofstream& fout) const {}
 
     virtual void PrintEntryStats(
       ofstream& fout, 
       const int trick, 
-      const int hand) const {};
+      const int hand) const {}
 
-    virtual void PrintAllEntryStats(ofstream& fout) const {};
+    virtual void PrintAllEntryStats(ofstream& fout) const {}
 
-    virtual void PrintSummaryEntryStats(ofstream& fout) const {};
+    virtual void PrintSummaryEntryStats(ofstream& fout) const {}
 
-    virtual void PrintPageSummary(ofstream& fout) const {};
+    virtual void PrintPageSummary(ofstream& fout) const {}
 
-    virtual void PrintNodeStats(ofstream& fout) const {};
+    virtual void PrintNodeStats(ofstream& fout) const {}
 
-    virtual void PrintResetStats(ofstream& fout) const {};
+    virtual void PrintResetStats(ofstream& fout) const {}
 };
 
 #ifdef _MSC_VER

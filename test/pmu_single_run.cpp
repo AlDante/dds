@@ -7,17 +7,19 @@
 #include <ctime>
 #include <mach/mach_time.h>
 #include "pmu_counters.h"
-#include "alpha_mu_core.h"
+#include "alpha_mu/api.h"
 
 using namespace alpha_mu;
 
 int main(int argc, char* argv[])
 {
-  if (argc < 4)
+  try
   {
-    fprintf(stderr, "Usage: sudo %s <hands_file> <depth> <max_boards>\n", argv[0]);
-    return 1;
-  }
+    if (argc < 4)
+    {
+      fprintf(stderr, "Usage: sudo %s <hands_file> <depth> <max_boards>\n", argv[0]);
+      return 1;
+    }
 
   const char* handsFile = argv[1];
   int depth = atoi(argv[2]);
@@ -107,5 +109,16 @@ int main(int argc, char* argv[])
     d.l1dCacheMissLd / 1e9,
     d.l1dCacheMissSt / 1e9);
 
-  return 0;
+    return 0;
+  }
+  catch (const std::exception& ex)
+  {
+    fprintf(stderr, "%s%s\n", kAlphaMuMessagePrefix, ex.what());
+    return 1;
+  }
+  catch (...)
+  {
+    fprintf(stderr, "%sunhandled non-standard exception\n", kAlphaMuMessagePrefix);
+    return 1;
+  }
 }

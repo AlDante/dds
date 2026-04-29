@@ -10,6 +10,9 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 - `test/alpha_mu_dds_compare.py`
 - `test/run_alpha_mu_benchmark.py`
 - `test/alpha_mu.cpp`
+- `test/alpha_mu/api.h`
+- `test/alpha_mu/bridge.h`
+- `test/alpha_mu/tests.h`
 - `test/README.alpha-mu-solver.md`
 
 ## What the runner does
@@ -106,6 +109,16 @@ The repository also now contains a separate alpha-mu solver runner:
 - source: `test/alpha_mu.cpp`
 
 Unlike the benchmark runner, the solver runner is not a DDS root-policy measurement tool. It is a separate semantics-oriented test component for Pareto fronts, toy alpha-mu search, and a DDS-backed leaf-evaluation demo.
+
+The CLI intentionally keeps two reporting scopes separate:
+
+- `pbn_recommend` is an exact full-information DDS continuation workflow and
+  reports `ALPHA_MU_PBN_RECOMMEND`.
+- `decision` is the partial-information alpha-mu decision workflow and reports
+  `ALPHA_MU_DECISION`.
+
+Tests should keep those scopes distinct so exact DDS continuation output is not
+mistaken for a hidden-information alpha-mu recommendation.
 
 The new `test/alpha_mu_dds_compare.py` runner sits between the two: it uses the solver's exact one-world bridge benchmark modes to compare original DDS solve speed against alpha-mu solve speed on the same boards, while also checking score agreement at each measured alpha-mu depth.
 

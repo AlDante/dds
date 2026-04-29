@@ -6,7 +6,7 @@
  * Copyright 2026 by David Jenkins.  All rights reserved.
  */
 
-#include "alpha_mu_core.h"
+#include "alpha_mu/bridge.h"
 
 namespace alpha_mu
 {
@@ -488,6 +488,8 @@ namespace alpha_mu
   vector<BridgeMove> GenerateBridgeMoves(const BridgeState& state)
   {
     vector<BridgeMove> moves;
+    moves.reserve(min(static_cast<size_t>(52U),
+      state.worlds.size() * static_cast<size_t>(13U)));
     for (unsigned i = 0; i < state.worlds.size(); i++)
     {
       if (! state.possibleWorlds.Has(i))
@@ -557,6 +559,7 @@ namespace alpha_mu
   {
     vector<BridgeChild> children;
     const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    children.reserve(moves.size());
     for (unsigned i = 0; i < moves.size(); i++)
     {
       BridgeChild child;
@@ -892,6 +895,8 @@ namespace alpha_mu
           *exactComplete = true;
         return *cached;
       }
+      if (ttStats != NULL)
+        ttStats->collisions += tt->CountProbeCollisions(hash, usefulWorlds.bits);
     }
 
     if (usefulWorlds.Empty())

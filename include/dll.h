@@ -115,7 +115,7 @@
 
 // SolveBoard()
 #define RETURN_FIRST_WRONG -19
-#define TEXT_FIRST_WRONG "First is not in 0 .. 2"
+#define TEXT_FIRST_WRONG "First is not in 0 .. 3"
 
 // AnalysePlay*() family of functions.
 // (a) Less than 0 or more than 52 cards supplied.

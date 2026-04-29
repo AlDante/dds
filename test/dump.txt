@@ -1,40 +1,40 @@
-Error code=-2
+Error code=-19
 
 Deal data:
 trump=S
-first=W
-index1=0 index2=0 remainCards=0
+first=
+index1=0 index2=0 remainCards=9360
 index1=0 index2=1 remainCards=0
-index1=0 index2=2 remainCards=0
-index1=0 index2=3 remainCards=0
+index1=0 index2=2 remainCards=4392
+index1=0 index2=3 remainCards=19012
 index1=1 index2=0 remainCards=0
-index1=1 index2=1 remainCards=0
-index1=1 index2=2 remainCards=0
-index1=1 index2=3 remainCards=0
-index1=2 index2=0 remainCards=0
-index1=2 index2=1 remainCards=0
-index1=2 index2=2 remainCards=0
+index1=1 index2=1 remainCards=4392
+index1=1 index2=2 remainCards=19012
+index1=1 index2=3 remainCards=9360
+index1=2 index2=0 remainCards=4392
+index1=2 index2=1 remainCards=19012
+index1=2 index2=2 remainCards=9360
 index1=2 index2=3 remainCards=0
-index1=3 index2=0 remainCards=0
-index1=3 index2=1 remainCards=0
+index1=3 index2=0 remainCards=19012
+index1=3 index2=1 remainCards=9360
 index1=3 index2=2 remainCards=0
-index1=3 index2=3 remainCards=0
+index1=3 index2=3 remainCards=4392
 
 target=-1
-solutions=1
+solutions=3
 mode=1
 
 
-        S --
+        S KT74
         H --
-        D --
-        C --
-S --            S --
-H --            H --
-D --            D --
-C --            C --
-        S --
-        H --
-        D --
+        D Q853
+        C AJ962
+S AJ962         S --
+H KT74          H Q853
+D --            D AJ962
+C Q853          C KT74
+        S Q853
+        H AJ962
+        D KT74
         C --
 

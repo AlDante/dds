@@ -25,8 +25,11 @@
 // Override at compile time (-D flags) or runtime (env vars).
 #include "TTConfig.h"
 
-#define MAXNODE 1
-#define MINNODE 0
+enum NodeType
+{
+  MINNODE = 0,
+  MAXNODE = 1
+};
 
 #define SIMILARDEALLIMIT 5
 #define SIMILARMAXWINNODES 700000
@@ -40,7 +43,12 @@ by Thomas Andrews.
 All hand identities are given as
 0=NORTH, 1=EAST, 2=SOUTH, 3=WEST. */
 
-#define handId(hand, relative) (hand + relative) & 3
+inline constexpr int handId(
+  const int hand,
+  const int relative)
+{
+  return (hand + relative) & 3;
+}
 
 
 extern int lho[DDS_HANDS];

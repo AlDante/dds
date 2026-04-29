@@ -7,6 +7,10 @@ know what you're doing and you'll figure it out :-).
 
 The first step is to compile the library.
 
+The supported build surface for the library, examples, tests, instrumentation,
+and sanitizer lanes is the repository Makefiles. `src/CMakeLists.txt` is kept
+for documentation generation and IDE indexing only.
+
 If you have trouble, read the Makefiles.  They all have the compiler
 warning levels set rather high, and they are set to fail even on
 warnings.  You can turn this off.  The Visual C++ version also
@@ -104,7 +108,7 @@ machine-specific paths.  The library and test binaries should be built with
 the same setting.  For example, from the repository root:
 
     make -C src M1_MAX_BUILD=0 macos
-    make -C test -f Makefiles/Makefile_Mac_clang M1_MAX_BUILD=0 alpha_mu_prototype
+    make -C test -f Makefiles/Makefile_Mac_clang M1_MAX_BUILD=0 alpha_mu
 
 The normal release outputs are written to:
 
@@ -164,7 +168,26 @@ directory.  For example:
     cd test
     export DYLD_LIBRARY_PATH=../src/build-pgo-generate
     export LLVM_PROFILE_FILE=../src/build-pgo-generate/pgo-data/alpha_mu_%p.profraw
-    ./build-pgo-generate/alpha_mu_prototype benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10
+    ./build-pgo-generate/alpha_mu benchmark_alpha ../hands/list9.txt 2 0 --parallel board --board-workers 10
+
+Minimum correctness gate and instrumentation / sanitizer lanes
+--------------------------------------------------------------
+
+From the repository root, the supported convenience targets are:
+
+    make check
+    make instrumented-check
+    make asan-check
+    make ubsan-check
+    make tsan-check
+
+`make check` runs the mandatory `regression_api` public-API gate.
+
+`make instrumented-check` builds and runs the compile-time instrumentation lane
+with `DDS_ALPHA_MU_STATS`, `DDS_TIMING`, `DDS_MOVES`, and `DDS_TT_STATS`.
+
+The sanitizer targets use separate output directories (`build-asan`,
+`build-ubsan`, `build-tsan`) so the normal release build remains untouched.
 
 Merge the resulting `.profraw` files with:
 

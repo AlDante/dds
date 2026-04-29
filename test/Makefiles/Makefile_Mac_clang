@@ -83,32 +83,37 @@ PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
 
 ifeq ($(PROFILE_BUILD),1)
 OPT_FLAGS	= $(PROFILE_OPT_FLAGS)
-BUILD_DIR	= build-profile
-DDS_BUILD_DIR	= ../src/build-profile
-RPATH_DIR	= @loader_path/../../src/build-profile
+	BASE_BUILD_DIR	= build-profile
+	BASE_DDS_BUILD_DIR	= ../src/build-profile
+	BASE_RPATH_DIR	= @loader_path/../../src/build-profile
 else ifeq ($(PGO_MODE),generate)
 OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-generate
-BUILD_DIR	= build-pgo-generate
-DDS_BUILD_DIR	= ../src/build-pgo-generate
-RPATH_DIR	= @loader_path/../../src/build-pgo-generate
+	BASE_BUILD_DIR	= build-pgo-generate
+	BASE_DDS_BUILD_DIR	= ../src/build-pgo-generate
+	BASE_RPATH_DIR	= @loader_path/../../src/build-pgo-generate
 PGO_LINK_FLAGS	= -fprofile-instr-generate
 else ifeq ($(PGO_MODE),use)
 	OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-use=$(PGO_PROFILE_DATA) -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date
-BUILD_DIR	= build-pgo-use
-DDS_BUILD_DIR	= ../src/build-pgo-use
-RPATH_DIR	= @loader_path/../../src/build-pgo-use
+	BASE_BUILD_DIR	= build-pgo-use
+	BASE_DDS_BUILD_DIR	= ../src/build-pgo-use
+	BASE_RPATH_DIR	= @loader_path/../../src/build-pgo-use
 PGO_LINK_FLAGS	= -fprofile-instr-use=$(PGO_PROFILE_DATA)
 else
 OPT_FLAGS	= $(RELEASE_OPT_FLAGS)
-BUILD_DIR	= build
-DDS_BUILD_DIR	= ../src/build
-RPATH_DIR	= @loader_path/../../src/build
+	BASE_BUILD_DIR	= build
+	BASE_DDS_BUILD_DIR	= ../src/build
+	BASE_RPATH_DIR	= @loader_path/../../src/build
 endif
 
 PGO_LINK_FLAGS	?=
+BUILD_DIR	?=	$(BASE_BUILD_DIR)
+DDS_BUILD_DIR	?=	$(BASE_DDS_BUILD_DIR)
+RPATH_DIR	?=	$(BASE_RPATH_DIR)
+EXTRA_COMPILE_FLAGS ?=
+EXTRA_LINK_FLAGS ?=
 
 COMPILE_FLAGS	= $(OPT_FLAGS) -mtune=generic \
-		$(WARN_FLAGS) -std=c++11 $(THREADING) $(M1_MAX_FLAGS)
+		$(WARN_FLAGS) -std=c++11 $(THREADING) $(M1_MAX_FLAGS) $(EXTRA_COMPILE_FLAGS)
 
 .PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu itest profile_binaries depend clean
 
@@ -119,10 +124,10 @@ DLIB 		= $(DLLBASE).lib
 OBJ_DIR		= $(BUILD_DIR)/obj
 
 LINK1_FLAGS	=
-LINK2_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) \
+LINK2_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) $(EXTRA_LINK_FLAGS) \
 		-L$(DDS_BUILD_DIR) -l$(DLLBASE) \
 		-Wl,-rpath,$(RPATH_DIR)
-LINK3_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS)
+LINK3_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) $(EXTRA_LINK_FLAGS)
 
 # This is in addition to $(DTEST).cpp
 

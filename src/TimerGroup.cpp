@@ -59,15 +59,19 @@ void TimerGroup::SetNames(const string& baseName)
 }
 
 
-void TimerGroup::Start(const unsigned no)
+void TimerGroup::Start(const int no)
 {
-  timers[no].Start();
+  if (no < 0 || static_cast<size_t>(no) >= timers.size())
+    return;
+  timers[static_cast<size_t>(no)].Start();
 }
 
 
-void TimerGroup::End(const unsigned no)
+void TimerGroup::End(const int no)
 {
-  timers[no].End();
+  if (no < 0 || static_cast<size_t>(no) >= timers.size())
+    return;
+  timers[static_cast<size_t>(no)].End();
 }
 
 

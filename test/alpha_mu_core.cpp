@@ -233,6 +233,24 @@ namespace alpha_mu
     return NULL;
   }
 
+  unsigned BridgeTranspositionTable::CountProbeCollisions(
+      unsigned long long hash,
+      unsigned long long worldMaskBits) const
+  {
+    unsigned collisions = 0;
+    const unsigned idx = static_cast<unsigned>(hash) & mask;
+    for (unsigned i = 0; i < 4; i++)
+    {
+      const BridgeTTEntry& e = table[(idx + i) & mask];
+      if (! e.occupied)
+        break;
+      if (e.hash == hash && e.worldMaskBits == worldMaskBits)
+        break;
+      collisions++;
+    }
+    return collisions;
+  }
+
   void BridgeTranspositionTable::Store(
       unsigned long long hash,
       unsigned long long worldMaskBits,
@@ -269,9 +287,9 @@ namespace alpha_mu
 
 void Fail(const string& msg)
   {
-    cerr << kAlphaMuMessagePrefix << msg << "\n";
-    exit(1);
+    throw runtime_error(msg);
   }
+
 void Check(const bool condition, const string& msg)
   {
     if (! condition)

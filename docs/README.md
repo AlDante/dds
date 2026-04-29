@@ -48,8 +48,10 @@ The generated site includes:
 
 - `mainpage.md` — landing page
 - `architecture.md` — high-level DDS architecture
+- `dds-invariants.md` — concise solver-side invariant guide for core DDS changes
 - `api-overview.md` — key public APIs and usage patterns
 - `data-structures.md` — important internal and public data structures
+- `code-audit-recommendations.md` — recommended C++ correctness, performance, and software-design improvements from the repository-wide code review
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
 - `alpha-mu-information-state.md` — current contract for hard constraints, derived follow-suit facts, and reporting-only plausibility hints in alpha-mu world construction
 - `alpha-mu-multicore-plan.md` — staged plan for multicore alpha-mu implementation and regression validation
@@ -64,4 +66,11 @@ The generated site includes:
 - `legacy-docs.md` — guide to the historical documentation in `../doc/`
 
 Selected existing Markdown documentation from the repository is also included in the Doxygen input set.
+
+## Build-system ownership
+
+- The repository Makefiles are the supported build surface for the DDS library,
+  tests, examples, sanitizer lanes, and instrumentation lanes.
+- `src/CMakeLists.txt` is intentionally documentation/IDE-only and should not be
+  treated as the canonical library/test build.
 

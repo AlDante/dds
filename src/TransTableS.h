@@ -158,19 +158,19 @@ class TransTableS: public TransTable
 
     ~TransTableS();
 
-    void Init(const int handLookup[][15]);
+    void Init(const int handLookup[][15]) override;
 
-    void SetMemoryDefault(const int megabytes);
+    void SetMemoryDefault(const int megabytes) override;
 
-    void SetMemoryMaximum(const int megabytes);
+    void SetMemoryMaximum(const int megabytes) override;
 
-    void MakeTT();
+    void MakeTT() override;
 
-    void ResetMemory(const TTresetReason reason);
+    void ResetMemory(const TTresetReason reason) override;
 
-    void ReturnAllMemory();
+    void ReturnAllMemory() override;
 
-    double MemoryInUse() const;
+    double MemoryInUse() const override;
 
     nodeCardsType const * Lookup(
       const int trick,
@@ -178,7 +178,7 @@ class TransTableS: public TransTable
       const unsigned short aggrTarget[],
       const int handDist[],
       const int limit,
-      bool& lowerFlag);
+      bool& lowerFlag) override;
 
     void Add(
       const int trick,
@@ -186,11 +186,11 @@ class TransTableS: public TransTable
       const unsigned short aggrTarget[],
       const unsigned short winRanksArg[],
       const nodeCardsType& first,
-      const bool flag);
+      const bool flag) override;
 
-    void PrintNodeStats(ofstream& fout) const;
+    void PrintNodeStats(ofstream& fout) const override;
 
-    void PrintResetStats(ofstream& fout) const;
+    void PrintResetStats(ofstream& fout) const override;
 };
 
 #endif

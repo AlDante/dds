@@ -38,7 +38,22 @@
 #include "../include/dll.h"
 namespace alpha_mu
 {
-  using namespace std;
+  namespace chrono = std::chrono;
+
+  using std::find;
+  using std::istringstream;
+  using std::map;
+  using std::max;
+  using std::min;
+  using std::mt19937_64;
+  using std::ostringstream;
+  using std::runtime_error;
+  using std::set;
+  using std::size_t;
+  using std::sort;
+  using std::stable_sort;
+  using std::string;
+  using std::vector;
 
   /** @brief Structured counters for bridge-search/frontier instrumentation. */
   struct BridgeSearchStats
@@ -403,6 +418,7 @@ namespace alpha_mu
       }
 
       vector<OutcomeVector> kept;
+      kept.reserve(vectors.size() + 1U);
       unsigned removed = 0;
       for (unsigned i = 0; i < vectors.size(); i++)
       {
@@ -2540,6 +2556,7 @@ namespace alpha_mu
     explicit BridgeTranspositionTable(unsigned capacityHint = 1U << 20);
     void Clear();
     const ParetoFront * Probe(unsigned long long hash, unsigned long long worldMaskBits) const;
+    unsigned CountProbeCollisions(unsigned long long hash, unsigned long long worldMaskBits) const;
     void Store(unsigned long long hash, unsigned long long worldMaskBits, const ParetoFront& front);
     unsigned Size() const { return stored; }
     unsigned Capacity() const { return capacity; }

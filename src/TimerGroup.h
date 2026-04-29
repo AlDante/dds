@@ -35,9 +35,9 @@ class TimerGroup
 
     void SetNames(const string& baseName);
 
-    void Start(const unsigned no);
+    void Start(const int no);
 
-    void End(const unsigned no);
+    void End(const int no);
 
     bool Used() const;
 

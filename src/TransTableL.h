@@ -287,27 +287,27 @@ class TransTableL: public TransTable
 
     ~TransTableL();
 
-    void Init(const int handLookup[][15]);
+    void Init(const int handLookup[][15]) override;
 
-    void SetMemoryDefault(const int megabytes);
+    void SetMemoryDefault(const int megabytes) override;
 
-    void SetMemoryMaximum(const int megabytes);
+    void SetMemoryMaximum(const int megabytes) override;
 
-    void MakeTT();
+    void MakeTT() override;
 
-    void ResetMemory(const TTresetReason reason);
+    void ResetMemory(const TTresetReason reason) override;
 
-    void ReturnAllMemory();
+    void ReturnAllMemory() override;
 
-    double MemoryInUse() const;
+    double MemoryInUse() const override;
 
-    nodeCardsType * Lookup(
+    nodeCardsType const * Lookup(
       const int trick,
       const int hand,
       const unsigned short aggrTarget[],
       const int handDist[],
       const int limit,
-      bool& lowerFlag);
+      bool& lowerFlag) override;
 
     void Add(
       const int trick,
@@ -315,23 +315,23 @@ class TransTableL: public TransTable
       const unsigned short aggrTarget[],
       const unsigned short winRanksArg[],
       const nodeCardsType& first,
-      const bool flag);
+      const bool flag) override;
 
     void PrintSuits(
       ofstream& fout,
       const int trick,
-      const int hand) const;
+      const int hand) const override;
 
-    void PrintAllSuits(ofstream& fout) const;
+    void PrintAllSuits(ofstream& fout) const override;
 
     void PrintSuitStats(
       ofstream& fout,
       const int trick,
-      const int hand) const;
+      const int hand) const override;
 
-    void PrintAllSuitStats(ofstream& fout) const;
+    void PrintAllSuitStats(ofstream& fout) const override;
 
-    void PrintSummarySuitStats(ofstream& fout) const;
+    void PrintSummarySuitStats(ofstream& fout) const override;
 
     // Examples:
     // int hd[DDS_HANDS] = { 0x0342, 0x0334, 0x0232, 0x0531 };
@@ -344,30 +344,30 @@ class TransTableL: public TransTable
       ofstream& fout,
       const int trick,
       const int hand,
-      const int handDist[]) const;
+      const int handDist[]) const override;
 
     void PrintEntriesDistAndCards(
       ofstream& fout,
       const int trick,
       const int hand,
       const unsigned short aggrTarget[],
-      const int handDist[]) const;
+      const int handDist[]) const override;
 
     void PrintEntries(
       ofstream& fout,
       const int trick,
-      const int hand) const;
+      const int hand) const override;
 
-    void PrintAllEntries(ofstream& fout) const;
+    void PrintAllEntries(ofstream& fout) const override;
 
     void PrintEntryStats(
       ofstream& fout,
       const int trick,
-      const int hand) const;
+      const int hand) const override;
 
-    void PrintAllEntryStats(ofstream& fout) const;
+    void PrintAllEntryStats(ofstream& fout) const override;
 
-    void PrintSummaryEntryStats(ofstream& fout) const;
+    void PrintSummaryEntryStats(ofstream& fout) const override;
 };
 
 #endif

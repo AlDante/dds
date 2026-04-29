@@ -110,6 +110,44 @@ namespace alpha_mu
     return state;
   }
 
+  static int BruteForceSingleWorldScore(const BridgeState& state)
+  {
+    Check(state.worlds.size() == 1,
+      "bridge brute-force oracle expects exactly one world");
+    Check(state.possibleWorlds == WorldMask(1, 0x1ULL),
+      "bridge brute-force oracle expects the single world to stay active");
+
+    if (WorldCardCount(state.worlds[0]) == 0 && state.currentTrick.empty())
+      return state.maxTricksWon;
+
+    const vector<BridgeMove> moves = GenerateBridgeMoves(state);
+    if (moves.empty())
+      return state.maxTricksWon;
+
+    const bool maximizing = (SeatSide(state.playerToMove) == state.maxSide);
+    int best = (maximizing ? -1 : 14);
+    for (unsigned i = 0; i < moves.size(); i++)
+    {
+      const BridgeState child = PlayBridgeMove(state, moves[i]);
+      const int score = BruteForceSingleWorldScore(child);
+      if (maximizing)
+        best = max(best, score);
+      else
+        best = min(best, score);
+    }
+    return best;
+  }
+
+  static void CheckSingleWorldDDSOracle(
+    const BridgeState& state,
+    const string& tag)
+  {
+    const int oracle = BruteForceSingleWorldScore(state);
+    const int dds = ExactBridgeDDSScoreForWorld(state, 0);
+    Check(dds == oracle,
+      tag + " should match the exact brute-force perfect-information oracle on the same single-world endgame");
+  }
+
   static void TestParetoInsert()
   {
     ParetoFront front(3);
@@ -3257,6 +3295,41 @@ namespace alpha_mu
   }
 
 
+  static void TestBridgeDDSOracleEndgames()
+  {
+    BridgeState quickWinners;
+    quickWinners.playerToMove = SEAT_NORTH;
+    quickWinners.maxSide = SeatSide(quickWinners.playerToMove);
+    quickWinners.trumpSuit = -1;
+    quickWinners.trickLeader = SEAT_NORTH;
+    quickWinners.leadSuit = -1;
+    quickWinners.possibleWorlds = WorldMask(1, 0x1ULL);
+    quickWinners.worlds.push_back(ParsePBNWorld("N:AK... QJ... T9... 87..."));
+    CheckSingleWorldDDSOracle(quickWinners,
+      "DDS quick-winner endgame regression");
+
+    BridgeState nearbyStopper(quickWinners);
+    nearbyStopper.worlds[0] = ParsePBNWorld("N:K2... AQ... JT... 98...");
+    CheckSingleWorldDDSOracle(nearbyStopper,
+      "DDS nearby non-winner endgame regression");
+
+    BridgeState partialTrump;
+    partialTrump.playerToMove = SEAT_SOUTH;
+    partialTrump.maxSide = SeatSide(partialTrump.playerToMove);
+    partialTrump.trumpSuit = SUIT_HEARTS;
+    partialTrump.trickLeader = SEAT_NORTH;
+    partialTrump.leadSuit = SUIT_SPADES;
+    partialTrump.possibleWorlds = WorldMask(1, 0x1ULL);
+    partialTrump.worlds.push_back(ParsePBNWorld("N:.K.. .2.. J.A.. T.Q.."));
+    partialTrump.currentTrick.push_back(BridgeMove(SUIT_SPADES, 'A'));
+    partialTrump.currentTrick.push_back(BridgeMove(SUIT_SPADES, 'Q'));
+    partialTrump.currentTrickPlayers.push_back(SEAT_NORTH);
+    partialTrump.currentTrickPlayers.push_back(SEAT_EAST);
+    CheckSingleWorldDDSOracle(partialTrump,
+      "DDS partial-trick trump endgame regression");
+  }
+
+
   static void TestEmptyEntryInteriorFronts()
   {
     ToyNode bestLeaf("bestLeaf", TOY_LEAF, 3);
@@ -5120,6 +5193,32 @@ namespace alpha_mu
       "depth-3 iterative deepening should use TT (stores > 0)");
   }
 
+  static void TestLoadPBNBoardRecordRejectsMalformedDeal()
+  {
+    const string path = "/tmp/alpha_mu_pbn_bad_record_test.pbn";
+    WriteWholeFile(path,
+      string("[Event \"alpha-mu malformed PBN regression\"]\n") +
+      "[Deal \"N:AKQ.JT9.876.543 987.654.32.AKQJ T6543.AKQ.AT9.8 J2.32.KQJ54.T976\"]\n" +
+      "[Declarer \"W\"]\n" +
+      "[Contract \"4S\"]\n");
+
+    bool caught = false;
+    try
+    {
+      (void) LoadPBNBoardRecord(path);
+    }
+    catch (const runtime_error& ex)
+    {
+      caught = true;
+      Check(string(ex.what()).find("full 52-card deal with 13 cards per seat") != string::npos,
+        "malformed PBN loader regression should explain that exact PBN loading requires a complete 52-card deal");
+    }
+    remove(path.c_str());
+
+    Check(caught,
+      "malformed PBN loader regression should reject an incomplete exact PBN deal");
+  }
+
   static void TestLoadPBNBoardRecord()
   {
     const string path = "/tmp/alpha_mu_pbn_record_test.pbn";
@@ -5229,6 +5328,46 @@ namespace alpha_mu
       "PBN CLI regression should emit the machine-readable PBN recommendation line");
     Check(output.find("PBN exact recommendation OK") != string::npos,
       "PBN CLI regression should emit the standard success status line");
+    Check(output.find("ALPHA_MU_DECISION") == string::npos,
+      "PBN CLI regression should stay in the exact full-information reporting scope rather than the partial-information decision scope");
+    Check(output.find("=== Alpha-Mu Solve Result ===") == string::npos,
+      "PBN CLI regression should not print the partial-information decision banner");
+  }
+
+  static void TestDecisionCLIModeEmitsDecisionSummaryOnly()
+  {
+    const string exe = GetAlphaMuExecutablePath();
+    Check(! exe.empty(),
+      "decision CLI regression should know the current alpha-mu executable path");
+
+    const string outputPath = "/tmp/alpha_mu_decision_cli_output.txt";
+    remove(outputPath.c_str());
+
+    string command;
+    const char * dyldLibraryPath = getenv("DYLD_LIBRARY_PATH");
+    if (dyldLibraryPath != NULL && *dyldLibraryPath != '\0')
+      command += string("DYLD_LIBRARY_PATH=") + ShellQuote(dyldLibraryPath) + " ";
+
+    command += ShellQuote(exe) +
+      " decision --deal-pbn " +
+      ShellQuote("N:QJ6.K652.J85.T98 873.J97.AT764.Q4 K5.T83.KQ9.A7652 AT942.AQ4.32.KJ3") +
+      " --leader N --declarer W --contract 4S --depth 1 --max-worlds 8" +
+      " > " + ShellQuote(outputPath) + " 2>&1";
+    const int status = system(command.c_str());
+
+    const string output = ReadWholeFile(outputPath);
+    remove(outputPath.c_str());
+
+    Check(status == 0,
+      "decision CLI regression should complete successfully on a valid decision-point request");
+    Check(output.find("=== Alpha-Mu Solve Result ===") != string::npos,
+      "decision CLI regression should emit the partial-information decision banner");
+    Check(output.find("ALPHA_MU_DECISION") != string::npos,
+      "decision CLI regression should emit the machine-readable partial-information decision line");
+    Check(output.find("=== PBN Exact Recommendation ===") == string::npos,
+      "decision CLI regression should keep the partial-information decision workflow distinct from exact PBN recommendation output");
+    Check(output.find("ALPHA_MU_PBN_RECOMMEND") == string::npos,
+      "decision CLI regression should not emit the exact PBN recommendation marker");
   }
 
   static void TestDecisionCLIModeRejectsMalformedFullDeal()
@@ -5327,6 +5466,8 @@ namespace alpha_mu
     PrintAlphaMuStatus("default decision-point bridge-search controls OK");
     TestBridgeMultiTrickDDSLeaf();
     PrintAlphaMuStatus("multi-trick bridge DDS leaf search OK");
+    TestBridgeDDSOracleEndgames();
+    PrintAlphaMuStatus("bridge DDS endgame oracle OK");
     PrintAlphaMuStatus("all checks passed");
   }
 
@@ -5404,10 +5545,13 @@ namespace alpha_mu
        {"practical partial-trick depth-2 continuation OK", &TestPracticalPartialTrickContinuationDepth2Stable},
         {"practical multi-world depth-3 continuation OK", &TestPracticalMultiWorldContinuationDepth3Stable},
        {"bridge transposition table OK", &TestBridgeTranspositionTable},
+       {"bridge DDS endgame oracle OK", &TestBridgeDDSOracleEndgames},
        {"iterative deepening depth-3 OK", &TestIterativeDeepeningDepth3},
+         {"malformed PBN loading rejection OK", &TestLoadPBNBoardRecordRejectsMalformedDeal},
          {"standard PBN loading OK", &TestLoadPBNBoardRecord},
          {"exact PBN recommendation OK", &TestRecommendExactPlayLineFromPBNBoard},
          {"PBN recommendation CLI OK", &TestPBNRecommendCLIMode},
+         {"decision CLI exact-scope separation OK", &TestDecisionCLIModeEmitsDecisionSummaryOnly},
          {"malformed decision CLI deal rejection OK", &TestDecisionCLIModeRejectsMalformedFullDeal},
 #ifndef NDEBUG
        {"debug world-mask assertion regression OK", &TestDebugWorldMaskCapacityAssertion}

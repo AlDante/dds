@@ -149,6 +149,12 @@ There are two concrete backends:
 The alpha-mu implementation currently lives under `test/` as a test-area engine
 that calls DDS as a leaf oracle. The modules and their responsibilities are:
 
+- focused wrapper headers under `test/alpha_mu/` now provide narrower module
+  boundaries (`api.h`, `bridge.h`, `tests.h`) while the implementation remains
+  in the historical incubation area;
+- the umbrella `test/alpha_mu_core.h` still exists for compatibility, but new
+  call sites should prefer the narrower wrappers where practical.
+
 | File | Responsibility |
 | --- | --- |
 | `test/alpha_mu.cpp` | CLI entry point: command parsing, mode dispatch, benchmark runner |
@@ -164,8 +170,9 @@ that calls DDS as a leaf oracle. The modules and their responsibilities are:
 | `test/alpha_mu_tests.cpp` | Regression bundle implementations: all focused and full-suite test cases |
 
 For detailed algorithm references and invariants, see
-[alpha-mu-invariants.md](alpha-mu-invariants.md). For the data-flow diagram,
-see [alpha-mu-dataflow.md](alpha-mu-dataflow.md).
+[alpha-mu-invariants.md](alpha-mu-invariants.md). For the core DDS solver-side
+invariant checklist, see [dds-invariants.md](dds-invariants.md). For the
+data-flow diagram, see [alpha-mu-dataflow.md](alpha-mu-dataflow.md).
 
 ## Current architectural guidance for changes
 

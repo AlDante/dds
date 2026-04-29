@@ -667,7 +667,7 @@ int TransTableL::hash8(const int handDist[]) const
 }
 
 
-nodeCardsType * TransTableL::Lookup(
+nodeCardsType const * TransTableL::Lookup(
   const int tricks,
   const int hand,
   const unsigned short aggrTarget[],

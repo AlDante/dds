@@ -93,11 +93,11 @@ class TimerList
 
     void Start(
       const ABTimerType groupno,
-      const unsigned timerno);
+      const int timerno);
 
     void End(
       const ABTimerType groupno,
-      const unsigned timerno);
+      const int timerno);
 
     bool Used() const;
 

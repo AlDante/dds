@@ -9,6 +9,7 @@ This documentation set combines curated Markdown guides with generated API pages
 - [Architecture](architecture.md)
 - [Key data structures](data-structures.md)
 - [API overview](api-overview.md)
+- [C++ codebase audit recommendations](code-audit-recommendations.md)
 - [Alpha-mu and DDS](alpha-mu.md)
 - [Alpha-mu: bridge player's guide](alpha-mu-guide.md)
 - [Alpha-mu algorithm and invariants](alpha-mu-invariants.md)

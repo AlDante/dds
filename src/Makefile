@@ -100,23 +100,27 @@ PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
 
 ifeq ($(PROFILE_BUILD),1)
 OPT_FLAGS	= $(PROFILE_OPT_FLAGS)
-BUILD_DIR	= build-profile
+	BASE_BUILD_DIR	= build-profile
 else ifeq ($(PGO_MODE),generate)
 OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-generate
-BUILD_DIR	= build-pgo-generate
+	BASE_BUILD_DIR	= build-pgo-generate
 PGO_LINK_FLAGS	= -fprofile-instr-generate
 else ifeq ($(PGO_MODE),use)
 	OPT_FLAGS	= $(RELEASE_OPT_FLAGS) -fprofile-instr-use=$(PGO_PROFILE_DATA) -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date
-BUILD_DIR	= build-pgo-use
+	BASE_BUILD_DIR	= build-pgo-use
 PGO_LINK_FLAGS	= -fprofile-instr-use=$(PGO_PROFILE_DATA)
 else
 OPT_FLAGS	= $(RELEASE_OPT_FLAGS)
-BUILD_DIR	= build
+	BASE_BUILD_DIR	= build
 endif
+
+BUILD_DIR	?=	$(BASE_BUILD_DIR)
+EXTRA_COMPILE_FLAGS ?=
+EXTRA_LINK_FLAGS ?=
 
 COMPILE_FLAGS	= -fPIC $(OPT_FLAGS) -mtune=generic -std=c++11 \
 		$(WARN_FLAGS) 	\
-		$(DDS_BEHAVIOR) $(THREAD_COMPILE) $(THREADING)
+		$(DDS_BEHAVIOR) $(THREAD_COMPILE) $(THREADING) $(EXTRA_COMPILE_FLAGS)
 
 DLLBASE		= dds
 
@@ -124,7 +128,7 @@ LINK_FLAGS	=		\
 	-shared			\
 	$(THREAD_LINK)		\
 	$(PGO_LINK_FLAGS)	\
-	-fPIC
+	-fPIC $(EXTRA_LINK_FLAGS)
 
 include $(INCL_SOURCE)
 
