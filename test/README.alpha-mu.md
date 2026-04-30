@@ -130,6 +130,15 @@ Example depth-2 baseline run from the repository root:
 python3 test/run_alpha_mu_benchmark.py --hand-file hands/list1.txt --depth 2 --checkpoint-seconds 30
 ```
 
+Apple-Silicon board-parallel runs can now choose the board-worker backend
+explicitly. The baseline portable executor remains `stl`, while the Apple-only
+executor is `gcd`:
+
+```zsh
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --worker-backend stl --board-workers 4
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --worker-backend gcd --board-workers 4
+```
+
 Skip specific 1-based board numbers or ranges while keeping checkpointed partial progress:
 
 ```zsh

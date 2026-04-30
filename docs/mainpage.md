@@ -16,6 +16,8 @@ This documentation set combines curated Markdown guides with generated API pages
 - [Alpha-mu data flow](alpha-mu-dataflow.md)
 - [Alpha-mu benchmark baseline (M1 Max)](alpha-mu-benchmark-baseline.md)
 - [Alpha-mu information-state contract](alpha-mu-information-state.md)
+- [Apple Silicon P1.6 plan](apple-silicon-p1.6-plan.md)
+- [Apple Silicon P1.6 PR plan](apple-silicon-p1.6-pr-plan.md)
 - [Alpha-mu completion plan](alpha-mu-completion-plan.md)
 - [Alpha-mu final acceptance checklist](alpha-mu-acceptance.md)
 - [Alpha-mu future roadmap](alpha-mu-future-roadmap.md)

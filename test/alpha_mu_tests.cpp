@@ -3562,7 +3562,7 @@ namespace alpha_mu
 
     const BridgeState state = MakeBridgeStateFromDDSDeal(data.dealList[0]);
     const SearchExecutionContext context = MakeSearchExecutionContext(0, NULL,
-      ALPHA_MU_PARALLEL_SERIAL, 1, 1);
+      ALPHA_MU_PARALLEL_SERIAL, ALPHA_MU_WORKER_BACKEND_STL, 1, 1);
 
     Check(! context.bridgeSearch.enableAncestorCuts,
       "explicit execution context should default Stage 1 ancestor-cut scaffolding to disabled so reporting paths stay exact until they opt in");
@@ -3658,6 +3658,7 @@ namespace alpha_mu
     options.maxBoards = 3;
     options.skipSpec = "2";
     options.parallelMode = ALPHA_MU_PARALLEL_ROOT;
+    options.workerBackend = ALPHA_MU_WORKER_BACKEND_GCD;
     options.boardWorkers = 0;
     options.rootWorkers = -7;
     options.ddsThreadId = -3;
@@ -3671,6 +3672,8 @@ namespace alpha_mu
       "benchmark option normalization should preserve workload-selection fields");
     Check(normalized.parallelMode == ALPHA_MU_PARALLEL_ROOT,
       "benchmark option normalization should preserve the requested parallel mode");
+    Check(normalized.workerBackend == ALPHA_MU_WORKER_BACKEND_STL,
+      "benchmark option normalization should force non-board benchmark modes onto the baseline STL worker backend until dedicated backend handling exists");
     Check(normalized.boardWorkers == 1,
       "benchmark option normalization should clamp board workers to at least one");
     Check(normalized.rootWorkers == 1,
@@ -3686,6 +3689,12 @@ namespace alpha_mu
           ParseAlphaMuParallelModeName("board") == ALPHA_MU_PARALLEL_BOARD &&
           ParseAlphaMuParallelModeName("root") == ALPHA_MU_PARALLEL_ROOT,
       "parallel-mode parsing should accept the supported serial, board, and root names");
+    Check(AlphaMuWorkerBackendName(ALPHA_MU_WORKER_BACKEND_STL) == "stl" &&
+          AlphaMuWorkerBackendName(ALPHA_MU_WORKER_BACKEND_GCD) == "gcd",
+      "worker-backend names should render in command-line-friendly text");
+    Check(ParseAlphaMuWorkerBackendName("stl") == ALPHA_MU_WORKER_BACKEND_STL &&
+          ParseAlphaMuWorkerBackendName("gcd") == ALPHA_MU_WORKER_BACKEND_GCD,
+      "worker-backend parsing should accept the supported stl and gcd names");
   }
 
 
@@ -3697,6 +3706,7 @@ namespace alpha_mu
     summary.boardsTested = 2;
     summary.depth = 1;
     summary.parallelMode = ALPHA_MU_PARALLEL_SERIAL;
+    summary.workerBackend = ALPHA_MU_WORKER_BACKEND_STL;
     summary.boardWorkers = 1;
     summary.rootWorkers = 1;
     summary.ddsThreadId = 0;
@@ -3717,6 +3727,8 @@ namespace alpha_mu
     cout.rdbuf(original);
 
     const string output = capture.str();
+    Check(output.find("worker_backend=stl") != string::npos,
+      "benchmark reporting regression should emit the selected worker backend in machine-readable progress logs");
     Check(output.find("search_nodes=123 dds_leaf_calls=45 dds_leaf_seconds=0.250000 bridge_search_seconds=1.250000") != string::npos,
       "benchmark reporting regression should emit per-board alpha-mu search and DDS timing metrics in the machine-readable board log");
     Check(output.find("search_nodes=321 dds_leaf_calls=654 dds_leaf_seconds=1.250000 bridge_search_seconds=1.750000") != string::npos,
@@ -3790,6 +3802,7 @@ namespace alpha_mu
 
     AlphaMuBenchmarkOptions parallelOptions(serialOptions);
     parallelOptions.parallelMode = ALPHA_MU_PARALLEL_BOARD;
+    parallelOptions.workerBackend = ALPHA_MU_WORKER_BACKEND_STL;
     parallelOptions.boardWorkers = 2;
 
     const BenchmarkMethodSummary serialSummary =
@@ -3830,6 +3843,33 @@ namespace alpha_mu
           parallelSummary.ddsLeafSeconds >= 0.0 &&
           parallelSummary.bridgeSearchSeconds >= 0.0,
       "board-parallel benchmark mode should report non-negative aggregate alpha-mu timing splits");
+
+#if defined(__APPLE__) && defined(DDS_THREADS_GCD)
+    AlphaMuBenchmarkOptions gcdOptions(parallelOptions);
+    gcdOptions.workerBackend = ALPHA_MU_WORKER_BACKEND_GCD;
+
+    const BenchmarkMethodSummary gcdSummary =
+      BenchmarkAlphaMuExactBoards(gcdOptions);
+
+    Check(gcdSummary.parallelMode == ALPHA_MU_PARALLEL_BOARD &&
+          gcdSummary.workerBackend == ALPHA_MU_WORKER_BACKEND_GCD &&
+          gcdSummary.boardWorkers == 2 &&
+          gcdSummary.rootWorkers == 1 &&
+          gcdSummary.ddsThreadId >= 0 &&
+          gcdSummary.configuredBoardWorkers >= 1 &&
+          gcdSummary.configuredBoardWorkers <= 2,
+      "Apple GCD board-parallel benchmark summaries should report the requested GCD worker backend and configured worker count");
+    Check(gcdSummary.mismatches == 0,
+      "Apple GCD board-parallel benchmark mode should preserve exact alpha-mu scores on every tested board");
+    Check(gcdSummary.perBoardSeconds.size() == 2,
+      "Apple GCD board-parallel benchmark mode should still report one per-board timing per selected board");
+    Check(parallelSummary.searchNodes == gcdSummary.searchNodes &&
+          parallelSummary.ddsLeafCalls == gcdSummary.ddsLeafCalls,
+      "Apple GCD board-parallel benchmark mode should preserve aggregate alpha-mu node and DDS-leaf counts relative to the STL backend");
+    Check(gcdSummary.ddsLeafSeconds >= 0.0 &&
+          gcdSummary.bridgeSearchSeconds >= 0.0,
+      "Apple GCD board-parallel benchmark mode should report non-negative aggregate alpha-mu timing splits");
+#endif
   }
 
 
@@ -3845,7 +3885,7 @@ namespace alpha_mu
     {
       SetMaxThreads(0);
       const SearchExecutionContext context = MakeSearchExecutionContext(0, NULL,
-        ALPHA_MU_PARALLEL_SERIAL, 1, 1);
+        ALPHA_MU_PARALLEL_SERIAL, ALPHA_MU_WORKER_BACKEND_STL, 1, 1);
       const ParetoFront front = SearchBridgeState(state, 0, context);
       Check(! front.vectors.empty(),
         "repeated DDS reinitialization should leave a valid bridge DDS leaf front available");

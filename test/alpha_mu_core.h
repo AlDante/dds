@@ -1611,6 +1611,14 @@ namespace alpha_mu
   };
 
 
+  /** @brief Board-worker backend used when alpha-mu runs board-parallel benchmark work. */
+  enum AlphaMuWorkerBackend
+  {
+    ALPHA_MU_WORKER_BACKEND_STL = 0,
+    ALPHA_MU_WORKER_BACKEND_GCD = 1
+  };
+
+
   /** @brief Summary for one exact benchmark method over a hand-file workload. */
   struct BenchmarkMethodSummary
   {
@@ -1619,6 +1627,7 @@ namespace alpha_mu
     unsigned boardsTested;
     int depth;
     AlphaMuParallelMode parallelMode;
+    AlphaMuWorkerBackend workerBackend;
     int boardWorkers;
     int rootWorkers;
     int ddsThreadId;
@@ -1637,6 +1646,7 @@ namespace alpha_mu
       boardsTested(0),
       depth(0),
       parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      workerBackend(ALPHA_MU_WORKER_BACKEND_STL),
       boardWorkers(1),
       rootWorkers(1),
       ddsThreadId(0),
@@ -1662,6 +1672,7 @@ namespace alpha_mu
     unsigned totalBoards;
     int depth;
     AlphaMuParallelMode parallelMode;
+    AlphaMuWorkerBackend workerBackend;
     int boardWorkers;
     int rootWorkers;
     int ddsThreadId;
@@ -1681,6 +1692,7 @@ namespace alpha_mu
       totalBoards(0),
       depth(0),
       parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      workerBackend(ALPHA_MU_WORKER_BACKEND_STL),
       boardWorkers(1),
       rootWorkers(1),
       ddsThreadId(0),
@@ -1735,6 +1747,7 @@ namespace alpha_mu
   {
     int ddsThreadId;
     AlphaMuParallelMode parallelMode;
+    AlphaMuWorkerBackend workerBackend;
     int boardWorkers;
     int rootWorkers;
     BenchmarkBoardProgressContext * benchmarkProgress;
@@ -1743,6 +1756,7 @@ namespace alpha_mu
     SearchExecutionContext() :
       ddsThreadId(0),
       parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      workerBackend(ALPHA_MU_WORKER_BACKEND_STL),
       boardWorkers(1),
       rootWorkers(1),
       benchmarkProgress(NULL),
@@ -1760,6 +1774,7 @@ namespace alpha_mu
     int maxBoards;
     string skipSpec;
     AlphaMuParallelMode parallelMode;
+    AlphaMuWorkerBackend workerBackend;
     int boardWorkers;
     int rootWorkers;
     int ddsThreadId;
@@ -1770,6 +1785,7 @@ namespace alpha_mu
       maxBoards(0),
       skipSpec(),
       parallelMode(ALPHA_MU_PARALLEL_SERIAL),
+      workerBackend(ALPHA_MU_WORKER_BACKEND_STL),
       boardWorkers(1),
       rootWorkers(1),
       ddsThreadId(0)
@@ -1786,8 +1802,12 @@ namespace alpha_mu
   string AlphaMuParallelModeName(const AlphaMuParallelMode mode);
   /** @brief Parse a command-line parallel-mode token. */
   AlphaMuParallelMode ParseAlphaMuParallelModeName(const string& text);
+  /** @brief Render a worker-backend enum in command-line and log-friendly text. */
+  string AlphaMuWorkerBackendName(const AlphaMuWorkerBackend backend);
+  /** @brief Parse a command-line worker-backend token. */
+  AlphaMuWorkerBackend ParseAlphaMuWorkerBackendName(const string& text);
   /** @brief Construct an explicit search execution context. */
-  SearchExecutionContext MakeSearchExecutionContext( const int ddsThreadId, BenchmarkBoardProgressContext * benchmarkProgress, const AlphaMuParallelMode parallelMode = ALPHA_MU_PARALLEL_SERIAL, const int boardWorkers = 1, const int rootWorkers = 1);
+  SearchExecutionContext MakeSearchExecutionContext( const int ddsThreadId, BenchmarkBoardProgressContext * benchmarkProgress, const AlphaMuParallelMode parallelMode = ALPHA_MU_PARALLEL_SERIAL, const AlphaMuWorkerBackend workerBackend = ALPHA_MU_WORKER_BACKEND_STL, const int boardWorkers = 1, const int rootWorkers = 1);
   /** @brief Enable the Stage 1 bridge-search controls used by the default decision/root-report path. */
   void EnableDefaultDecisionPointBridgeSearchControls(SearchExecutionContext& context);
   /** @brief Clamp benchmark execution options into a future-proof serial-safe baseline. */

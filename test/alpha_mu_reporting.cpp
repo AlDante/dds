@@ -156,6 +156,7 @@ namespace alpha_mu
          << " boards=" << summary.boardsTested
          << " depth=" << summary.depth
          << " parallel=" << AlphaMuParallelModeName(summary.parallelMode)
+         << " worker_backend=" << AlphaMuWorkerBackendName(summary.workerBackend)
          << " board_workers=" << summary.boardWorkers
          << " root_workers=" << summary.rootWorkers
          << " dds_thread_id=" << summary.ddsThreadId
@@ -192,6 +193,7 @@ namespace alpha_mu
          << " total_boards=" << summary.boardsTested
          << " depth=" << summary.depth
          << " parallel=" << AlphaMuParallelModeName(summary.parallelMode)
+         << " worker_backend=" << AlphaMuWorkerBackendName(summary.workerBackend)
          << " board_workers=" << summary.boardWorkers
          << " root_workers=" << summary.rootWorkers
          << " dds_thread_id=" << summary.ddsThreadId
@@ -226,6 +228,7 @@ namespace alpha_mu
          << " total_boards=" << summary.boardsTested
          << " depth=" << summary.depth
          << " parallel=" << AlphaMuParallelModeName(summary.parallelMode)
+         << " worker_backend=" << AlphaMuWorkerBackendName(summary.workerBackend)
          << " board_workers=" << summary.boardWorkers
          << " root_workers=" << summary.rootWorkers
          << " dds_thread_id=" << summary.ddsThreadId

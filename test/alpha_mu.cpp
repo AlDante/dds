@@ -102,6 +102,8 @@ namespace
 
 	  if (flag == "--parallel")
 	    options.parallelMode = ParseAlphaMuParallelModeName(argv[index + 1]);
+	  else if (flag == "--worker-backend")
+	    options.workerBackend = ParseAlphaMuWorkerBackendName(argv[index + 1]);
 	  else if (flag == "--board-workers")
 	  {
 	    Check(TryParseIntArgument(argv[index + 1], options.boardWorkers),

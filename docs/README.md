@@ -54,6 +54,8 @@ The generated site includes:
 - `code-audit-recommendations.md` — recommended C++ correctness, performance, and software-design improvements from the repository-wide code review
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
 - `alpha-mu-information-state.md` — current contract for hard constraints, derived follow-suit facts, and reporting-only plausibility hints in alpha-mu world construction
+- `apple-silicon-p1.6-plan.md` — Apple-Silicon specialization and threading plan for balancing DDS portability against alpha-mu performance needs
+- `apple-silicon-p1.6-pr-plan.md` — PR-sized execution sequence for the Apple-Silicon P1.6 work, starting with the alpha-mu worker-backend abstraction
 - `alpha-mu-multicore-plan.md` — staged plan for multicore alpha-mu implementation and regression validation
 - `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from the current engine-incubation state to a full post-mortem alpha-mu evaluator
 - `alpha-mu-future-roadmap.md` — deferred post-Stage-9 roadmap for optional future alpha-mu enhancements beyond the completed repository scope

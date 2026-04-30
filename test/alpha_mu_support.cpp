@@ -227,16 +227,43 @@ namespace alpha_mu
     throw runtime_error("Unknown alpha-mu parallel mode");
   }
 
+  string AlphaMuWorkerBackendName(const AlphaMuWorkerBackend backend)
+  {
+    switch (backend)
+    {
+      case ALPHA_MU_WORKER_BACKEND_STL:
+        return "stl";
+
+      case ALPHA_MU_WORKER_BACKEND_GCD:
+        return "gcd";
+
+      default:
+        throw runtime_error("Unknown alpha-mu worker backend");
+    }
+  }
+
+  AlphaMuWorkerBackend ParseAlphaMuWorkerBackendName(const string& text)
+  {
+    if (text == "stl")
+      return ALPHA_MU_WORKER_BACKEND_STL;
+    else if (text == "gcd")
+      return ALPHA_MU_WORKER_BACKEND_GCD;
+
+    throw runtime_error("Unknown alpha-mu worker backend");
+  }
+
   SearchExecutionContext MakeSearchExecutionContext(
     const int ddsThreadId,
     BenchmarkBoardProgressContext * benchmarkProgress,
     const AlphaMuParallelMode parallelMode,
+    const AlphaMuWorkerBackend workerBackend,
     const int boardWorkers,
     const int rootWorkers)
   {
     SearchExecutionContext context;
     context.ddsThreadId = ddsThreadId;
     context.parallelMode = parallelMode;
+    context.workerBackend = workerBackend;
     context.boardWorkers = boardWorkers;
     context.rootWorkers = rootWorkers;
     context.benchmarkProgress = benchmarkProgress;
@@ -260,6 +287,8 @@ namespace alpha_mu
       normalized.rootWorkers = 1;
     if (normalized.ddsThreadId < 0)
       normalized.ddsThreadId = 0;
+    if (normalized.parallelMode != ALPHA_MU_PARALLEL_BOARD)
+      normalized.workerBackend = ALPHA_MU_WORKER_BACKEND_STL;
     return normalized;
   }
 

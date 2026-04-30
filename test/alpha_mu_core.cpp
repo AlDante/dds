@@ -12,6 +12,10 @@
 #include <mutex>
 #include <thread>
 
+#if defined(__APPLE__) && defined(DDS_THREADS_GCD)
+#include <dispatch/dispatch.h>
+#endif
+
 namespace alpha_mu
 {
   using namespace std;
@@ -424,6 +428,81 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
       return min(boardsToTest, min(requestedWorkers, availableWorkers));
     }
 
+    void RunAlphaMuBoardWorkersSTL(
+      const unsigned boardWorkerCount,
+      const function<void(unsigned)>& worker)
+    {
+      vector<thread> workers;
+      workers.reserve(boardWorkerCount);
+      for (unsigned workerIndex = 0; workerIndex < boardWorkerCount; workerIndex++)
+        workers.push_back(thread(worker, workerIndex));
+
+      for (unsigned i = 0; i < workers.size(); i++)
+        workers[i].join();
+    }
+
+    void RunAlphaMuBoardWorkersGCD(
+      const unsigned boardWorkerCount,
+      const function<void(unsigned)>& worker)
+    {
+#if defined(__APPLE__) && defined(DDS_THREADS_GCD)
+      atomic<bool> stop(false);
+      exception_ptr workerFailure;
+      mutex workerFailureMutex;
+      atomic<bool> * const stopPtr = &stop;
+      exception_ptr * const workerFailurePtr = &workerFailure;
+      mutex * const workerFailureMutexPtr = &workerFailureMutex;
+
+      dispatch_apply(static_cast<size_t>(boardWorkerCount),
+        dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0),
+        ^(size_t workerIndex)
+      {
+        if (stopPtr->load())
+          return;
+
+        try
+        {
+          worker(static_cast<unsigned>(workerIndex));
+        }
+        catch (...)
+        {
+          stopPtr->store(true);
+          lock_guard<mutex> lock(* workerFailureMutexPtr);
+          if (* workerFailurePtr == NULL)
+            *workerFailurePtr = current_exception();
+        }
+      });
+
+      if (workerFailure != NULL)
+        rethrow_exception(workerFailure);
+#else
+      UNUSED(boardWorkerCount);
+      UNUSED(worker);
+      Fail("benchmark_alpha worker backend gcd is only available on Apple builds with DDS GCD support");
+#endif
+    }
+
+    void RunAlphaMuBoardWorkers(
+      const AlphaMuWorkerBackend workerBackend,
+      const unsigned boardWorkerCount,
+      const function<void(unsigned)>& worker)
+    {
+      switch (workerBackend)
+      {
+        case ALPHA_MU_WORKER_BACKEND_STL:
+          RunAlphaMuBoardWorkersSTL(boardWorkerCount, worker);
+          return;
+
+        case ALPHA_MU_WORKER_BACKEND_GCD:
+          RunAlphaMuBoardWorkersGCD(boardWorkerCount, worker);
+          return;
+
+        default:
+          Fail("benchmark_alpha worker backend is unknown");
+          return;
+      }
+    }
+
     AlphaMuBenchmarkBoardResult RunAlphaMuBenchmarkBoard(
       const HandFileData& data,
       const string& resolvedHandFile,
@@ -447,6 +526,7 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
       progress.totalBoards = totalBoards;
       progress.depth = options.depth;
       progress.parallelMode = options.parallelMode;
+      progress.workerBackend = options.workerBackend;
       progress.boardWorkers = options.boardWorkers;
       progress.rootWorkers = options.rootWorkers;
       progress.ddsThreadId = ddsThreadId;
@@ -461,6 +541,7 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
         ddsThreadId,
         &progress,
         options.parallelMode,
+        options.workerBackend,
         options.boardWorkers,
         options.rootWorkers);
 
@@ -515,6 +596,7 @@ BenchmarkMethodSummary BenchmarkDDSExactBoards(
     summary.method = "dds";
     summary.handFile = ResolvePath(handFile);
     summary.parallelMode = ALPHA_MU_PARALLEL_SERIAL;
+    summary.workerBackend = ALPHA_MU_WORKER_BACKEND_STL;
     summary.boardWorkers = 1;
     summary.rootWorkers = 1;
     summary.ddsThreadId = 0;
@@ -577,6 +659,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
     summary.method = "alpha_mu";
     summary.handFile = ResolvePath(options.handFile);
     summary.parallelMode = options.parallelMode;
+    summary.workerBackend = options.workerBackend;
     summary.boardWorkers = options.boardWorkers;
     summary.rootWorkers = options.rootWorkers;
     const vector<unsigned> boardNumbers = SelectBenchmarkBoardNumbers(data,
@@ -666,13 +749,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
         }
       };
 
-      vector<thread> workers;
-      workers.reserve(boardWorkerCount);
-      for (unsigned workerIndex = 0; workerIndex < boardWorkerCount; workerIndex++)
-        workers.push_back(thread(worker, workerIndex));
-
-      for (unsigned i = 0; i < workers.size(); i++)
-        workers[i].join();
+      RunAlphaMuBoardWorkers(options.workerBackend, boardWorkerCount, worker);
 
       if (workerFailure != NULL)
         rethrow_exception(workerFailure);
@@ -775,6 +852,7 @@ void MaybeReportBenchmarkBoardProgress(
          << " total_boards=" << progress->totalBoards
          << " depth=" << progress->depth
          << " parallel=" << AlphaMuParallelModeName(progress->parallelMode)
+         << " worker_backend=" << AlphaMuWorkerBackendName(progress->workerBackend)
          << " board_workers=" << progress->boardWorkers
          << " root_workers=" << progress->rootWorkers
          << " dds_thread_id=" << progress->ddsThreadId

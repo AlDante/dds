@@ -37,6 +37,7 @@ def build_command(
     max_boards: int,
     skip_boards: str,
     parallel: str,
+    worker_backend: str,
     board_workers: int,
     root_workers: int,
     dds_thread_id: int,
@@ -59,6 +60,8 @@ def build_command(
         [
             "--parallel",
             parallel,
+            "--worker-backend",
+            worker_backend,
             "--board-workers",
             str(board_workers),
             "--root-workers",
@@ -100,6 +103,7 @@ def update_reported_benchmark_settings(
         status["benchmark_parallel"] = parallel_value
 
     for field_name, status_name in (
+        ("worker_backend", "benchmark_worker_backend"),
         ("board_workers", "benchmark_board_workers"),
         ("root_workers", "benchmark_root_workers"),
         ("dds_thread_id", "benchmark_dds_thread_id"),
@@ -107,6 +111,9 @@ def update_reported_benchmark_settings(
     ):
         raw_value = fields.get(field_name)
         if raw_value is None:
+            continue
+        if field_name == "worker_backend":
+            status[status_name] = raw_value
             continue
         try:
             status[status_name] = int(raw_value)
@@ -159,6 +166,7 @@ def main() -> int:
     parser.add_argument("--heartbeat-seconds", type=float, default=30.0)
     parser.add_argument("--skip-boards", default="")
     parser.add_argument("--parallel", choices=["serial", "board", "root"], default="serial")
+    parser.add_argument("--worker-backend", choices=["stl", "gcd"], default="stl")
     parser.add_argument("--board-workers", type=int, default=1)
     parser.add_argument("--root-workers", type=int, default=1)
     parser.add_argument("--dds-thread-id", type=int, default=0)
@@ -191,6 +199,7 @@ def main() -> int:
         args.max_boards,
         args.skip_boards,
         args.parallel,
+        args.worker_backend,
         args.board_workers,
         args.root_workers,
         args.dds_thread_id,
@@ -213,6 +222,7 @@ def main() -> int:
         f"max_boards={args.max_boards}\n",
         f"skip_boards={args.skip_boards}\n",
         f"parallel={args.parallel}\n",
+        f"worker_backend={args.worker_backend}\n",
         f"board_workers={args.board_workers}\n",
         f"root_workers={args.root_workers}\n",
         f"dds_thread_id={args.dds_thread_id}\n",
@@ -243,6 +253,7 @@ def main() -> int:
         "max_boards": args.max_boards,
         "skip_boards": args.skip_boards,
         "parallel": args.parallel,
+        "worker_backend": args.worker_backend,
         "board_workers": args.board_workers,
         "root_workers": args.root_workers,
         "dds_thread_id": args.dds_thread_id,
@@ -252,6 +263,7 @@ def main() -> int:
         "checkpoint_seconds": args.checkpoint_seconds,
         "heartbeat_seconds": args.heartbeat_seconds,
         "benchmark_parallel": None,
+        "benchmark_worker_backend": None,
         "benchmark_board_workers": None,
         "benchmark_root_workers": None,
         "benchmark_dds_thread_id": None,

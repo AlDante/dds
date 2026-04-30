@@ -112,6 +112,15 @@ For board-parallel throughput experiments, pass the parallel settings explicitly
 python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --board-workers 4
 ```
 
+On Apple Silicon, the alpha-mu board scheduler can also be selected explicitly.
+Use the existing `stl` backend as the baseline and compare it against the
+Apple-only `gcd` backend on the same workload, for example:
+
+```zsh
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --worker-backend stl --board-workers 4
+python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --worker-backend gcd --board-workers 4
+```
+
 ## Recorded results
 
 Routine standardized runs are recorded in:
