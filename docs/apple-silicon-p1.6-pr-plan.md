@@ -134,8 +134,10 @@ This repository change set implements:
 
 - **PR 1**
 - **PR 2**
+- **PR 3**
 
-The Apple-only `GCD` board-worker backend now exists in alpha-mu's board-parallel
-benchmark layer. The next natural step is PR 3: making `stl` vs `gcd`
-comparisons routine and reproducible in the benchmark workflow.
+The repository now includes a dedicated backend-comparison runner and Makefile
+entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with
+semantic-stability checks. The next natural step is PR 4: deciding whether any
+remaining Apple-Silicon bottleneck still lies inside `DDS` itself.
 

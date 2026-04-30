@@ -1,6 +1,6 @@
 .PHONY: docs profile profile-clean check api-check instrumented-build instrumented-check \
 	asan-build asan-check ubsan-build ubsan-check tsan-build tsan-check \
-	perf-build perf-check perf-bench perf
+	perf-build perf-check perf-bench perf apple-backend-compare
 
 # ---------- Documentation ----------
 
@@ -31,6 +31,18 @@ PERF_BOARD_WORKERS ?= 8
 PERF_HANDS         ?= hands/list9.txt
 PERF_DEPTH         ?= 2
 PERF_LOG_DIR       ?= test/build/perf_runs
+APPLE_COMPARE_HANDS ?= hands/list10.txt
+APPLE_COMPARE_DEPTH ?= 3
+APPLE_COMPARE_MAX_BOARDS ?= 0
+APPLE_COMPARE_SKIP_BOARDS ?= 2
+APPLE_COMPARE_PARALLEL ?= board
+APPLE_COMPARE_BOARD_WORKERS ?= 4
+APPLE_COMPARE_ROOT_WORKERS ?= 1
+APPLE_COMPARE_DDS_THREAD_ID ?= 0
+APPLE_COMPARE_WARMUPS ?= 1
+APPLE_COMPARE_REPEATS ?= 5
+APPLE_COMPARE_WARN_CV ?= 0.10
+APPLE_COMPARE_OUTPUT_DIR ?=
 DDS_LIB_DIR        = src/build
 INSTRUMENTED_DDS_LIB_DIR = src/build-instrumented
 ASAN_DDS_LIB_DIR   = src/build-asan
@@ -135,4 +147,19 @@ perf-bench: perf-build
 perf: perf-check perf-bench
 	@echo ""
 	@echo "=== All performance checks passed ==="
+
+apple-backend-compare: perf-build
+	python3 test/alpha_mu_backend_compare.py \
+		--hand-file $(APPLE_COMPARE_HANDS) \
+		--depth $(APPLE_COMPARE_DEPTH) \
+		--max-boards $(APPLE_COMPARE_MAX_BOARDS) \
+		--skip-boards "$(APPLE_COMPARE_SKIP_BOARDS)" \
+		--parallel $(APPLE_COMPARE_PARALLEL) \
+		--board-workers $(APPLE_COMPARE_BOARD_WORKERS) \
+		--root-workers $(APPLE_COMPARE_ROOT_WORKERS) \
+		--dds-thread-id $(APPLE_COMPARE_DDS_THREAD_ID) \
+		--warmups $(APPLE_COMPARE_WARMUPS) \
+		--repeats $(APPLE_COMPARE_REPEATS) \
+		--warn-cv $(APPLE_COMPARE_WARN_CV) \
+		--output-dir "$(APPLE_COMPARE_OUTPUT_DIR)"
 

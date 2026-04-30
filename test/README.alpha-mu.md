@@ -7,6 +7,7 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 ## Files
 
 - `test/alpha_mu_benchmark.py`
+- `test/alpha_mu_backend_compare.py`
 - `test/alpha_mu_dds_compare.py`
 - `test/run_alpha_mu_benchmark.py`
 - `test/alpha_mu.cpp`
@@ -138,6 +139,20 @@ executor is `gcd`:
 python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --worker-backend stl --board-workers 4
 python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2 --parallel board --worker-backend gcd --board-workers 4
 ```
+
+For a routine repeated comparison bundle with semantic-stability checks and a
+summary report, use the dedicated backend-comparison runner:
+
+```zsh
+python3 test/alpha_mu_backend_compare.py --hand-file hands/list10.txt --depth 3 --parallel board --board-workers 4 --warmups 1 --repeats 5
+```
+
+This writes a timestamped bundle under:
+
+- `test/build/alpha_mu_backend_compare/<timestamp>/`
+
+including per-run logs, copied `.status.json` sidecars, `summary.json`, and
+`summary.md`.
 
 Skip specific 1-based board numbers or ranges while keeping checkpointed partial progress:
 
