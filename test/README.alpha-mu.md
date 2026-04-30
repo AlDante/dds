@@ -23,8 +23,9 @@ It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` 
 3. runs representative workloads,
 4. captures raw logs,
 5. parses `ALPHA_MU root ...` lines,
-6. writes `summary.json` and `summary.md`,
-7. restores a normal non-instrumented library build by default.
+6. aggregates per-context DDS root-phase timing fields such as `ab_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, and `build_us`,
+7. writes `summary.json` and `summary.md`,
+8. restores a normal non-instrumented library build by default.
 
 ## Default workloads
 
@@ -37,6 +38,7 @@ In the current workload mix:
 
 - `regression_api` is the main source of `SolveBoardInternal` and `SolveSameBoard` measurements,
 - `play_analysis_benchmark` is the dedicated source of `AnalyseLaterBoard` measurements,
+- `alpha_mu_leaf_depth0` is the dedicated exact leaf workload for the same DDS solve path alpha-mu uses at depth 0,
 - the `dtest` runs are still valuable, but they primarily provide throughput timing for representative solve batches.
 
 ## Extra workloads

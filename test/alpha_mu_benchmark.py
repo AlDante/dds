@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -14,17 +13,18 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-ROOT_LINE_RE = re.compile(
-    r"ALPHA_MU root context=(?P<context>\S+) "
-    r"probes=(?P<probes>\d+) "
-    r"initial_guess=(?P<initial_guess>-?\d+) "
-    r"initial_bounds=\[(?P<lower>-?\d+),(?P<upper>-?\d+)\] "
-    r"final_score=(?P<final_score>-?\d+) "
-    r"guess_relation=(?P<guess_relation>\S+)"
-)
-
-AVG_USER_TIME_RE = re.compile(r"Avg user time \(ms\)\s+(?P<value>[0-9]+(?:\.[0-9]+)?)")
-REGRESSION_OK_RE = re.compile(r"regression_api: OK")
+PHASE_TIME_FIELDS = [
+    "ab_us",
+    "make_us",
+    "undo_us",
+    "eval_us",
+    "nextmove_us",
+    "qt_us",
+    "lt_us",
+    "movegen_us",
+    "lookup_us",
+    "build_us",
+]
 
 
 DEFAULT_WORKLOADS = [
@@ -50,6 +50,28 @@ DEFAULT_WORKLOADS = [
         "name": "play_analysis_benchmark",
         "cwd": "test",
         "command": ["./build/play_analysis_benchmark"],
+        "requires_dyld": True,
+    },
+    {
+        "name": "alpha_mu_leaf_depth0",
+        "cwd": "test",
+        "command": [
+            "./build/alpha_mu",
+            "benchmark_alpha",
+            "../hands/list1.txt",
+            "0",
+            "1",
+            "--parallel",
+            "serial",
+            "--worker-backend",
+            "stl",
+            "--board-workers",
+            "1",
+            "--root-workers",
+            "1",
+            "--dds-thread-id",
+            "0",
+        ],
         "requires_dyld": True,
     },
 ]
@@ -101,18 +123,33 @@ def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None
 
 def parse_root_lines(output: str) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
-    for match in ROOT_LINE_RE.finditer(output):
-        entries.append(
-            {
-                "context": match.group("context"),
-                "probes": int(match.group("probes")),
-                "initial_guess": int(match.group("initial_guess")),
-                "initial_lowerbound": int(match.group("lower")),
-                "initial_upperbound": int(match.group("upper")),
-                "final_score": int(match.group("final_score")),
-                "guess_relation": match.group("guess_relation"),
-            }
-        )
+    for line in output.splitlines():
+        if not line.startswith("ALPHA_MU root "):
+            continue
+
+        fields: dict[str, str] = {}
+        for token in line.strip().split()[2:]:
+            if "=" not in token:
+                continue
+            key, value = token.split("=", 1)
+            fields[key] = value
+
+        bounds = fields.get("initial_bounds", "[0,0]")
+        bounds_text = bounds.strip("[]")
+        lower_text, _, upper_text = bounds_text.partition(",")
+        entry: dict[str, Any] = {
+            "context": fields.get("context", "unknown"),
+            "probes": int(fields.get("probes", "0")),
+            "initial_guess": int(fields.get("initial_guess", "0")),
+            "initial_lowerbound": int(lower_text or "0"),
+            "initial_upperbound": int(upper_text or "0"),
+            "final_score": int(fields.get("final_score", "0")),
+            "guess_relation": fields.get("guess_relation", "unknown"),
+        }
+        for field_name in PHASE_TIME_FIELDS:
+            if field_name in fields:
+                entry[field_name] = int(fields[field_name])
+        entries.append(entry)
     return entries
 
 
@@ -133,7 +170,7 @@ def aggregate_root_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
         relation_counts = Counter(entry["guess_relation"] for entry in context_entries)
         score_counts = Counter(entry["final_score"] for entry in context_entries)
 
-        summary[context] = {
+        context_summary: dict[str, Any] = {
             "count": len(context_entries),
             "avg_probes": average([float(v) for v in probe_values]),
             "max_probes": max(probe_values),
@@ -143,15 +180,31 @@ def aggregate_root_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
             "guess_relation_counts": dict(sorted(relation_counts.items())),
             "final_score_counts": dict(sorted(score_counts.items())),
         }
+        for field_name in PHASE_TIME_FIELDS:
+            phase_values = [float(entry[field_name]) for entry in context_entries if field_name in entry]
+            if phase_values:
+                context_summary[f"avg_{field_name}"] = average(phase_values)
+                context_summary[f"max_{field_name}"] = max(phase_values)
+
+        summary[context] = context_summary
 
     return summary
 
 
 def extract_avg_user_time(output: str) -> float | None:
-    match = AVG_USER_TIME_RE.search(output)
-    if not match:
-        return None
-    return float(match.group("value"))
+    marker = "Avg user time (ms)"
+    for line in output.splitlines():
+        if marker not in line:
+            continue
+        tail = line.split(marker, 1)[1].strip()
+        if not tail:
+            return None
+        first = tail.split()[0]
+        try:
+            return float(first)
+        except ValueError:
+            return None
+    return None
 
 
 def build_commands(root: Path, restore_normal_build: bool) -> list[tuple[str, list[str], Path, dict[str, str] | None]]:
@@ -166,7 +219,7 @@ def build_commands(root: Path, restore_normal_build: bool) -> list[tuple[str, li
         ),
         (
             "build_instrumented_library",
-            ["make", "macos", "DDS_BEHAVIOR=-DDDS_ALPHA_MU_STATS"],
+            ["make", "macos", "EXTRA_COMPILE_FLAGS=-DDDS_ALPHA_MU_STATS -DDDS_TIMING"],
             src_dir,
             None,
         ),
@@ -179,6 +232,7 @@ def build_commands(root: Path, restore_normal_build: bool) -> list[tuple[str, li
                 "regression_api",
                 "dtest",
                 "play_analysis_benchmark",
+                "alpha_mu",
             ],
             test_dir,
             None,
@@ -231,6 +285,16 @@ def markdown_summary(summary: dict[str, Any]) -> str:
             lines.append(f"- Avg final score: `{context_summary['avg_final_score']:.2f}`")
             lines.append(f"- Guess relation counts: `{json.dumps(context_summary['guess_relation_counts'], sort_keys=True)}`")
             lines.append(f"- Final score counts: `{json.dumps(context_summary['final_score_counts'], sort_keys=True)}`")
+            phase_lines = []
+            for field_name in PHASE_TIME_FIELDS:
+                avg_key = f"avg_{field_name}"
+                max_key = f"max_{field_name}"
+                if avg_key in context_summary:
+                    phase_lines.append(
+                        f"{field_name}: avg={context_summary[avg_key]:.1f} max={context_summary[max_key]:.0f}"
+                    )
+            if phase_lines:
+                lines.append(f"- Phase timings (us): `{'; '.join(phase_lines)}`")
             lines.append("")
 
     lines.append("## Notes")
@@ -238,6 +302,7 @@ def markdown_summary(summary: dict[str, Any]) -> str:
     lines.append("- `SolveSameBoard` observations come from repeat-solve paths exercised by the existing harnesses.")
     lines.append("- In the current default mix, `regression_api` is the main source of `SolveBoardInternal` and `SolveSameBoard` measurements, while `dtest` provides throughput timing.")
     lines.append("- `play_analysis_benchmark` is the dedicated source of `AnalyseLaterBoard` measurements.")
+    lines.append("- `alpha_mu_leaf_depth0` is the dedicated exact leaf workload that exercises the same DDS solve path alpha-mu uses at depth 0.")
     lines.append("- The benchmark runner restores a normal non-instrumented library build by default.")
     lines.append("")
     return "\n".join(lines)
@@ -309,7 +374,7 @@ def main() -> int:
                 "returncode": result["returncode"],
                 "elapsed_seconds": result["elapsed_seconds"],
                 "avg_user_time_ms": extract_avg_user_time(result["output"]),
-                "regression_ok": bool(REGRESSION_OK_RE.search(result["output"])) if "regression_api" in workload["name"] else None,
+                "regression_ok": ("regression_api: OK" in result["output"]) if "regression_api" in workload["name"] else None,
                 "root_line_count": len(root_entries),
             }
             steps.append({**result, **workload_summary})

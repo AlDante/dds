@@ -135,9 +135,12 @@ This repository change set implements:
 - **PR 1**
 - **PR 2**
 - **PR 3**
+- **PR 4** (measurement-first slice)
 
 The repository now includes a dedicated backend-comparison runner and Makefile
 entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with
-semantic-stability checks. The next natural step is PR 4: deciding whether any
-remaining Apple-Silicon bottleneck still lies inside `DDS` itself.
+semantic-stability checks. The current PR4 slice adds per-root DDS phase timing
+export for the exact leaf contexts alpha-mu actually uses, so future Apple DDS
+tuning can be driven by measured `ab_us`, `qt_us`, `lt_us`, `movegen_us`,
+`lookup_us`, and `build_us` data instead of another speculative micro-change.
 

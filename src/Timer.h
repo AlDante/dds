@@ -50,6 +50,8 @@ class Timer
 
     int UserTime() const;
 
+      long UserTimeMicroseconds() const;
+
     void operator += (const Timer& add);
 
     void operator -= (const Timer& deduct);

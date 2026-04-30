@@ -104,6 +104,15 @@ void TimerGroup::Sum(Timer& sum) const
 }
 
 
+long TimerGroup::UserTimeMicroseconds() const
+{
+  long total = 0;
+  for (unsigned i = 0; i < timers.size(); i++)
+    total += timers[i].UserTimeMicroseconds();
+  return total;
+}
+
+
 void TimerGroup::operator -= (const TimerGroup& deduct)
 {
   for (unsigned i = 0; i < timers.size(); i++)

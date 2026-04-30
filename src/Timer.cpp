@@ -78,6 +78,12 @@ int Timer::UserTime() const
 }
 
 
+long Timer::UserTimeMicroseconds() const
+{
+  return userCum;
+}
+
+
 void Timer::operator +=(const Timer& add)
 {
   count += add.count;

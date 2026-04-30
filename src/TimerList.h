@@ -78,6 +78,51 @@ enum ABTimerType
 };
 
 
+struct TimerListSummary
+{
+  long abUserMicros;
+  long makeUserMicros;
+  long undoUserMicros;
+  long evaluateUserMicros;
+  long nextMoveUserMicros;
+  long quickTricksUserMicros;
+  long laterTricksUserMicros;
+  long moveGenUserMicros;
+  long lookupUserMicros;
+  long buildUserMicros;
+
+  TimerListSummary() :
+    abUserMicros(0),
+    makeUserMicros(0),
+    undoUserMicros(0),
+    evaluateUserMicros(0),
+    nextMoveUserMicros(0),
+    quickTricksUserMicros(0),
+    laterTricksUserMicros(0),
+    moveGenUserMicros(0),
+    lookupUserMicros(0),
+    buildUserMicros(0)
+  {
+  }
+
+  TimerListSummary operator-(const TimerListSummary& other) const
+  {
+    TimerListSummary delta;
+    delta.abUserMicros = abUserMicros - other.abUserMicros;
+    delta.makeUserMicros = makeUserMicros - other.makeUserMicros;
+    delta.undoUserMicros = undoUserMicros - other.undoUserMicros;
+    delta.evaluateUserMicros = evaluateUserMicros - other.evaluateUserMicros;
+    delta.nextMoveUserMicros = nextMoveUserMicros - other.nextMoveUserMicros;
+    delta.quickTricksUserMicros = quickTricksUserMicros - other.quickTricksUserMicros;
+    delta.laterTricksUserMicros = laterTricksUserMicros - other.laterTricksUserMicros;
+    delta.moveGenUserMicros = moveGenUserMicros - other.moveGenUserMicros;
+    delta.lookupUserMicros = lookupUserMicros - other.lookupUserMicros;
+    delta.buildUserMicros = buildUserMicros - other.buildUserMicros;
+    return delta;
+  }
+};
+
+
 class TimerList
 {
   private:
@@ -100,6 +145,8 @@ class TimerList
       const int timerno);
 
     bool Used() const;
+
+    TimerListSummary Summary() const;
 
     void PrintStats(ofstream& fout) const;
 };

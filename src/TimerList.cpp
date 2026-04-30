@@ -77,6 +77,30 @@ bool TimerList::Used() const
 }
 
 
+TimerListSummary TimerList::Summary() const
+{
+  TimerListSummary summary;
+
+  TimerGroup ABGroup;
+  ABGroup = timerGroups[TIMER_NO_AB];
+  ABGroup.Differentiate();
+  for (unsigned g = 1; g < TIMER_NO_SIZE; g++)
+    ABGroup -= timerGroups[g];
+
+  summary.abUserMicros = ABGroup.UserTimeMicroseconds();
+  summary.makeUserMicros = timerGroups[TIMER_NO_MAKE].UserTimeMicroseconds();
+  summary.undoUserMicros = timerGroups[TIMER_NO_UNDO].UserTimeMicroseconds();
+  summary.evaluateUserMicros = timerGroups[TIMER_NO_EVALUATE].UserTimeMicroseconds();
+  summary.nextMoveUserMicros = timerGroups[TIMER_NO_NEXTMOVE].UserTimeMicroseconds();
+  summary.quickTricksUserMicros = timerGroups[TIMER_NO_QT].UserTimeMicroseconds();
+  summary.laterTricksUserMicros = timerGroups[TIMER_NO_LT].UserTimeMicroseconds();
+  summary.moveGenUserMicros = timerGroups[TIMER_NO_MOVEGEN].UserTimeMicroseconds();
+  summary.lookupUserMicros = timerGroups[TIMER_NO_LOOKUP].UserTimeMicroseconds();
+  summary.buildUserMicros = timerGroups[TIMER_NO_BUILD].UserTimeMicroseconds();
+  return summary;
+}
+
+
 void TimerList::PrintStats(ofstream& fout) const
 {
   if (! TimerList::Used())

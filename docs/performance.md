@@ -106,6 +106,14 @@ For deeper alpha-mu benchmark instrumentation, keep using the dedicated runner:
 python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --max-boards 0 --skip-boards 2
 ```
 
+For DDS-side leaf-path instrumentation that now includes per-context root timing
+fields such as `ab_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, and
+`build_us`, use:
+
+```zsh
+python3 test/alpha_mu_benchmark.py
+```
+
 For board-parallel throughput experiments, pass the parallel settings explicitly, for example:
 
 ```zsh

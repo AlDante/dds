@@ -113,7 +113,8 @@ static void ReportRootSearchStats(
   const int initialLowerbound,
   const int initialUpperbound,
   const int finalScore,
-  const int probes)
+  const int probes,
+  const TimerListSummary& timerSummary)
 {
   ostringstream oss;
 
@@ -125,6 +126,16 @@ static void ReportRootSearchStats(
       << initialUpperbound << "]"
       << " final_score=" << finalScore
       << " guess_relation=" << RootGuessRelation(initialGuess, finalScore)
+      << " ab_us=" << timerSummary.abUserMicros
+      << " make_us=" << timerSummary.makeUserMicros
+      << " undo_us=" << timerSummary.undoUserMicros
+      << " eval_us=" << timerSummary.evaluateUserMicros
+      << " nextmove_us=" << timerSummary.nextMoveUserMicros
+      << " qt_us=" << timerSummary.quickTricksUserMicros
+      << " lt_us=" << timerSummary.laterTricksUserMicros
+      << " movegen_us=" << timerSummary.moveGenUserMicros
+      << " lookup_us=" << timerSummary.lookupUserMicros
+      << " build_us=" << timerSummary.buildUserMicros
       << "\n";
 
   cout << oss.str();
@@ -150,6 +161,10 @@ static int SearchExactScoreRoot(
   const int initialLowerbound = lowerbound;
   const int initialUpperbound = upperbound;
   int probes = 0;
+  TimerListSummary timerSummaryBefore;
+#ifdef DDS_TIMING
+  timerSummaryBefore = thrp->timerList.Summary();
+#endif
 #else
   (void) context;
 #endif
@@ -191,13 +206,18 @@ static int SearchExactScoreRoot(
     *bestMoveP = mv;
 
 #ifdef DDS_ALPHA_MU_STATS
+  TimerListSummary timerSummaryAfter;
+#ifdef DDS_TIMING
+  timerSummaryAfter = thrp->timerList.Summary();
+#endif
   ReportRootSearchStats(
     context,
     initialGuess,
     initialLowerbound,
     initialUpperbound,
     lowerbound,
-    probes);
+    probes,
+    timerSummaryAfter - timerSummaryBefore);
 #endif
 
   return lowerbound;

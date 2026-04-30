@@ -45,6 +45,8 @@ class TimerGroup
 
     void Sum(Timer& sum) const;
 
+      long UserTimeMicroseconds() const;
+
     void operator -= (const TimerGroup& deduct);
 
     string Header() const;
