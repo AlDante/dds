@@ -142,5 +142,6 @@ entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with
 semantic-stability checks. The current PR4 slice adds per-root DDS phase timing
 export for the exact leaf contexts alpha-mu actually uses, so future Apple DDS
 tuning can be driven by measured `ab_us`, `qt_us`, `lt_us`, `movegen_us`,
-`lookup_us`, and `build_us` data instead of another speculative micro-change.
+`lookup_us`, `build_us`, and `undo_us` data instead of another speculative
+micro-change.
 

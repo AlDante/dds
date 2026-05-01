@@ -15,15 +15,12 @@ from typing import Any
 
 PHASE_TIME_FIELDS = [
     "ab_us",
-    "make_us",
-    "undo_us",
-    "eval_us",
-    "nextmove_us",
     "qt_us",
     "lt_us",
     "movegen_us",
     "lookup_us",
     "build_us",
+    "undo_us",
 ]
 
 

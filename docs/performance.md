@@ -107,8 +107,8 @@ python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --
 ```
 
 For DDS-side leaf-path instrumentation that now includes per-context root timing
-fields such as `ab_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, and
-`build_us`, use:
+fields `ab_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, `build_us`, and
+`undo_us`, use:
 
 ```zsh
 python3 test/alpha_mu_benchmark.py
