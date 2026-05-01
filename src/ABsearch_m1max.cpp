@@ -44,6 +44,68 @@ void Undo3(
 
 namespace
 {
+  const int DDSM1HandDelta[DDS_SUITS] = { 256, 16, 1, 0 };
+
+  inline __attribute__((always_inline)) void DDSM1RestoreCard(
+    pos * posPoint,
+    const int hand,
+    const moveType& mply)
+  {
+    const int suit = mply.suit;
+    const unsigned short rankMask = bitMapRank[mply.rank];
+
+    posPoint->rankInSuit[hand][suit] = static_cast<unsigned short>(
+      posPoint->rankInSuit[hand][suit] | rankMask);
+    posPoint->aggr[suit] = static_cast<unsigned short>(
+      posPoint->aggr[suit] | rankMask);
+    posPoint->handDist[hand] += DDSM1HandDelta[suit];
+    posPoint->length[hand][suit]++;
+  }
+
+  inline __attribute__((always_inline)) void DDSM1Undo0(
+    pos * posPoint,
+    ThreadData * thrp,
+    const int depth,
+    const moveType& mply)
+  {
+    DDSM1RestoreCard(posPoint, handId(posPoint->first[depth], 3), mply);
+
+    WinnersType const * wp = &thrp->winners[(depth + 3) >> 2];
+    for (int n = 0; n < wp->number; n++)
+    {
+      const WinnerEntryType& entry = wp->winner[n];
+      const int suit = entry.suit;
+      posPoint->winner[suit].rank = entry.winnerRank;
+      posPoint->winner[suit].hand = entry.winnerHand;
+      posPoint->secondBest[suit].rank = entry.secondRank;
+      posPoint->secondBest[suit].hand = entry.secondHand;
+    }
+  }
+
+  inline __attribute__((always_inline)) void DDSM1Undo1(
+    pos * posPoint,
+    const int depth,
+    const moveType& mply)
+  {
+    DDSM1RestoreCard(posPoint, posPoint->first[depth], mply);
+  }
+
+  inline __attribute__((always_inline)) void DDSM1Undo2(
+    pos * posPoint,
+    const int depth,
+    const moveType& mply)
+  {
+    DDSM1RestoreCard(posPoint, handId(posPoint->first[depth], 1), mply);
+  }
+
+  inline __attribute__((always_inline)) void DDSM1Undo3(
+    pos * posPoint,
+    const int depth,
+    const moveType& mply)
+  {
+    DDSM1RestoreCard(posPoint, handId(posPoint->first[depth], 2), mply);
+  }
+
   inline bool DDSM1Unlikely(const bool value)
   {
     return __builtin_expect(value ? 1 : 0, 0);
@@ -195,7 +257,7 @@ bool ABsearch(
     TIMER_END(TIMER_NO_AB, depth - 1);
 
     TIMER_START(TIMER_NO_UNDO, depth);
-    Undo1(posPoint, depth, * mply);
+    DDSM1Undo1(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
     if (DDSM1Unlikely(value == success))
@@ -571,7 +633,7 @@ bool ABsearch1(
     TIMER_END(TIMER_NO_AB, depth - 1);
 
     TIMER_START(TIMER_NO_UNDO, depth);
-    Undo2(posPoint, depth, * mply);
+    DDSM1Undo2(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
     if (DDSM1Unlikely(value == success))
@@ -645,7 +707,7 @@ bool ABsearch2(
     TIMER_END(TIMER_NO_AB, depth - 1);
 
     TIMER_START(TIMER_NO_UNDO, depth);
-    Undo3(posPoint, depth, * mply);
+    DDSM1Undo3(posPoint, depth, * mply);
     TIMER_END(TIMER_NO_UNDO, depth);
 
     if (DDSM1Unlikely(value == success))
@@ -725,7 +787,7 @@ bool ABsearch3(
     TIMER_END(TIMER_NO_AB, depth - 1);
 
     TIMER_START(TIMER_NO_UNDO, depth);
-    Undo0(posPoint, depth, * mply, thrp);
+    DDSM1Undo0(posPoint, thrp, depth, * mply);
 
     if (thrp->nodeTypeStore[posPoint->first[depth - 1]] == MAXNODE)
       posPoint->tricksMAX--;
