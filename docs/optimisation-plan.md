@@ -235,3 +235,11 @@ This would bring the `list9` depth-2 board-parallel benchmark from the current ~
 | Packed `moveType` to 4 bytes | ❌ | Mixed results, already 8 bytes |
 | `pos` hot-field reorder | ❌ | Mixed results, layout already reasonable |
 
+## Additional ideas
+We know that it is the ranks of the cards which are important. So it makes sense to also look at the distribution of 
+the rank patterns across the different suits. For example, unless we are looking at the trump suit, then S: 9 6 2, H: 10 5 is the same as S: 9 6, H: 10 5 2.
+
+Look into https://lemire.me/blog/2026/04/27/you-can-beat-the-binary-search/
+https://algorithmica.org/en/eytzinger
+https://arxiv.org/pdf/1509.05053
+https://erikdemaine.org/papers/BRICS2002/paper.pdf
