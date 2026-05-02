@@ -23,6 +23,12 @@ PHASE_TIME_FIELDS = [
     "undo_us",
 ]
 
+LEGACY_PHASE_TIME_FIELDS = {
+    "make_us",
+    "eval_us",
+    "nextmove_us",
+}
+
 
 DEFAULT_WORKLOADS = [
     {
@@ -131,6 +137,25 @@ def parse_root_lines(output: str) -> list[dict[str, Any]]:
             key, value = token.split("=", 1)
             fields[key] = value
 
+        legacy_phase_fields = sorted(field_name for field_name in LEGACY_PHASE_TIME_FIELDS if field_name in fields)
+        if legacy_phase_fields:
+            legacy_text = ", ".join(legacy_phase_fields)
+            raise ValueError(f"ALPHA_MU root line used legacy phase fields: {legacy_text}: {line}")
+
+        unexpected_phase_fields = sorted(
+            field_name
+            for field_name in fields
+            if field_name.endswith("_us") and field_name not in PHASE_TIME_FIELDS
+        )
+        if unexpected_phase_fields:
+            unexpected_text = ", ".join(unexpected_phase_fields)
+            raise ValueError(f"ALPHA_MU root line used unexpected phase fields: {unexpected_text}: {line}")
+
+        missing_phase_fields = [field_name for field_name in PHASE_TIME_FIELDS if field_name not in fields]
+        if missing_phase_fields:
+            missing_text = ", ".join(missing_phase_fields)
+            raise ValueError(f"ALPHA_MU root line missed required phase fields: {missing_text}: {line}")
+
         bounds = fields.get("initial_bounds", "[0,0]")
         bounds_text = bounds.strip("[]")
         lower_text, _, upper_text = bounds_text.partition(",")
@@ -144,8 +169,7 @@ def parse_root_lines(output: str) -> list[dict[str, Any]]:
             "guess_relation": fields.get("guess_relation", "unknown"),
         }
         for field_name in PHASE_TIME_FIELDS:
-            if field_name in fields:
-                entry[field_name] = int(fields[field_name])
+            entry[field_name] = int(fields[field_name])
         entries.append(entry)
     return entries
 

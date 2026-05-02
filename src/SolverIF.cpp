@@ -107,6 +107,20 @@ static const char * RootGuessRelation(
 }
 
 
+static void AppendRootPhaseTimingFields(
+  ostringstream& oss,
+  const TimerListSummary& timerSummary)
+{
+  oss << " ab_us=" << timerSummary.abUserMicros
+      << " qt_us=" << timerSummary.quickTricksUserMicros
+      << " lt_us=" << timerSummary.laterTricksUserMicros
+      << " movegen_us=" << timerSummary.moveGenUserMicros
+      << " lookup_us=" << timerSummary.lookupUserMicros
+      << " build_us=" << timerSummary.buildUserMicros
+      << " undo_us=" << timerSummary.undoUserMicros;
+}
+
+
 static void ReportRootSearchStats(
   const RootSearchContext context,
   const int initialGuess,
@@ -125,15 +139,10 @@ static void ReportRootSearchStats(
       << " initial_bounds=[" << initialLowerbound << ","
       << initialUpperbound << "]"
       << " final_score=" << finalScore
-      << " guess_relation=" << RootGuessRelation(initialGuess, finalScore)
-      << " ab_us=" << timerSummary.abUserMicros
-      << " qt_us=" << timerSummary.quickTricksUserMicros
-      << " lt_us=" << timerSummary.laterTricksUserMicros
-      << " movegen_us=" << timerSummary.moveGenUserMicros
-      << " lookup_us=" << timerSummary.lookupUserMicros
-      << " build_us=" << timerSummary.buildUserMicros
-      << " undo_us=" << timerSummary.undoUserMicros
-      << "\n";
+      << " guess_relation=" << RootGuessRelation(initialGuess, finalScore);
+
+  AppendRootPhaseTimingFields(oss, timerSummary);
+  oss << "\n";
 
   cout << oss.str();
 }
