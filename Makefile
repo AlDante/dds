@@ -48,6 +48,7 @@ INSTRUMENTED_DDS_LIB_DIR = src/build-instrumented
 ASAN_DDS_LIB_DIR   = src/build-asan
 UBSAN_DDS_LIB_DIR  = src/build-ubsan
 TSAN_DDS_LIB_DIR   = src/build-tsan
+INSTRUMENTED_REGRESSION_HANDS = ../hands/list10.txt
 INSTRUMENTED_DDS_BEHAVIOR = -DDDS_ALPHA_MU_STATS -DDDS_TIMING -DDDS_MOVES -DDDS_TT_STATS
 INSTRUMENTED_EXTRA_COMPILE_FLAGS = -DDDS_ALPHA_MU_STATS -DDDS_TIMING -DDDS_MOVES -DDDS_TT_STATS
 ASAN_FLAGS         = -fsanitize=address,undefined -fno-omit-frame-pointer
@@ -75,7 +76,7 @@ instrumented-build:
 
 instrumented-check: instrumented-build
 	@echo "=== Instrumented correctness: regression_api ==="
-	cd test && DYLD_LIBRARY_PATH=../$(INSTRUMENTED_DDS_LIB_DIR) ./build-instrumented/regression_api ../hands/list10.txt ../hands/thomas1.txt
+	cd test && DYLD_LIBRARY_PATH=../$(INSTRUMENTED_DDS_LIB_DIR) ./build-instrumented/regression_api $(INSTRUMENTED_REGRESSION_HANDS)
 	@echo ""
 	@echo "=== Instrumented correctness: play_analysis_benchmark ==="
 	cd test && DYLD_LIBRARY_PATH=../$(INSTRUMENTED_DDS_LIB_DIR) ./build-instrumented/play_analysis_benchmark

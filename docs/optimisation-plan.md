@@ -243,3 +243,5 @@ Look into https://lemire.me/blog/2026/04/27/you-can-beat-the-binary-search/
 https://algorithmica.org/en/eytzinger
 https://arxiv.org/pdf/1509.05053
 https://erikdemaine.org/papers/BRICS2002/paper.pdf
+
+Zero-Window Search: https://www.chessprogramming.org/Zero-Window_Search https://cs.nyu.edu/~pbethe/bridgeReview200908.pdf

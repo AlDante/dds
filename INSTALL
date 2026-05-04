@@ -185,6 +185,8 @@ From the repository root, the supported convenience targets are:
 
 `make instrumented-check` builds and runs the compile-time instrumentation lane
 with `DDS_ALPHA_MU_STATS`, `DDS_TIMING`, `DDS_MOVES`, and `DDS_TT_STATS`.
+Its `regression_api` step uses the focused `hands/list10.txt` dataset and
+intentionally skips the long-running `thomas1` and `thomas2` cases.
 
 The sanitizer targets use separate output directories (`build-asan`,
 `build-ubsan`, `build-tsan`) so the normal release build remains untouched.
