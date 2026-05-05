@@ -47,7 +47,8 @@ So in short:
 - **PR 1** implements **Stage 2**
 - **PR 2** implements **Stage 3**
 - **PR 3** implements the routine-comparison part of **Stage 4**
-- **PR 4** completes the current scoped **Stage 4** and **Stage 5** work
+- **PR 4** completes **Stage 4** and the current **Stage 5** preserved-
+  fallback evaluation
 - **PR 5** is the concrete decision point for **Stage 6**, only if a real
   portability tradeoff is later needed
 
@@ -163,8 +164,9 @@ This PR should proceed only if measurement shows that the remaining alpha-mu bot
 
 ### Current outcome (`2026-05-05`)
 
-`PR 4` is complete for the current scoped plan.
+`PR 4` is complete.
 
+- Stage 4 is complete. Nothing remains in Stage 4.
 - The Stage-4 evidence refresh was re-run and still placed the dominant
   remaining cost inside DDS leaf work.
 - The preserved-fallback DDS candidates were then evaluated without weakening
@@ -199,17 +201,16 @@ Every such PR must state:
 
 ### Current readiness assessment (`2026-05-05`)
 
-The repository is now at the point where `PR 5` can be evaluated explicitly, but
-it is **still not justified** by the refreshed evidence.
+The repository is now at the point where `PR 5` can be evaluated explicitly,
+but it is **still not justified** by the refreshed evidence.
 
-To make status unambiguous: `PR 1` through `PR 4` are complete for the current
-scoped plan. The final Stage-4 evidence-refresh pass has now been re-run and
-summarized, and the current preserved-fallback Stage-5 cycle is also closed, so
-the remaining open items now belong to `PR 5` evaluation only. Any future
-`Bucket B` optimisation would be a fresh follow-on cycle, not unfinished PR4
+To make status unambiguous: `PR 1` through `PR 4` are complete. Stage 4 is
+complete. Stage 5 is complete for the current preserved-fallback cycle. The
+remaining open items now belong to `PR 5` evaluation only. Any future `Bucket
+B` optimisation would be a fresh follow-on cycle, not unfinished PR4
 carry-over.
 
-- `PR 1` through `PR 4` are complete for the current scoped plan.
+- `PR 1` through `PR 4` are complete.
 - Apple worker-backend comparisons are now routine and reproducible via the
   dedicated backend comparison runner and `make apple-backend-compare`.
 - The current `PR 4` slice added per-root DDS phase timing fields for the leaf
@@ -257,7 +258,7 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 
 ### PR 5 checklist
 
-- [x] `PR 1` through `PR 4` are complete for the current scoped plan.
+- [x] `PR 1` through `PR 4` are complete.
 - [x] Close the remaining Stage-4 / PR4 evidence-refresh tasks by:
   - re-running the focused instrumented lane and summarizing the updated DDS
     leaf-path timings,
@@ -281,15 +282,24 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 ### Current recommendation
 
 Do **not** treat `PR 5` as an implementation PR yet. Treat it as a gated
-decision point. `PR 1`–`PR 4` are complete, and the current scoped Stage-5
-preserved-fallback cycle is also complete. The next concrete work should
-therefore be:
+decision point. `PR 1`–`PR 4` are complete, Stage 4 is complete, and the
+current Stage-5 preserved-fallback cycle is also complete. The next concrete
+work should therefore be:
 
 1. keep the accepted retained Stage-5 endpoint as the baseline,
 2. only reopen `Bucket B` work if a fresh DDS-side hypothesis is proposed and
    measured from that baseline,
 3. and only consider a true portability sacrifice if that new lower-cost work
    still does not deliver enough gain.
+
+### Next step (`2026-05-05`)
+
+The next step is to keep the accepted Stage-5 retained endpoint as the baseline
+and leave `PR 5` unopened unless a concrete `Bucket C` portability tradeoff is
+named and justified.
+
+This PR plan now adopts that step explicitly: there is no remaining Stage-4
+work, and there is no unfinished PR4 carry-over.
 
 ## Recommended order
 
@@ -306,7 +316,7 @@ This repository change set implements:
 - **PR 1**
 - **PR 2**
 - **PR 3**
-- **PR 4** (current scoped Stage 4 + Stage 5 work complete)
+- **PR 4** (Stage 4 complete; current Stage-5 preserved-fallback evaluation complete)
 
 The repository now includes a dedicated backend-comparison runner and Makefile
 entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with

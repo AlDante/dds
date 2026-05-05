@@ -43,7 +43,8 @@ So in short:
 - **PR 1** implements **Stage 2**
 - **PR 2** implements **Stage 3**
 - **PR 3** implements the routine-comparison part of **Stage 4**
-- **PR 4** completes the current scoped **Stage 4** and **Stage 5** work
+- **PR 4** completes **Stage 4** and the current **Stage 5** preserved-
+  fallback evaluation
 - **PR 5** is the concrete decision point for **Stage 6**, only if a real
   portability tradeoff is later needed
 
@@ -342,8 +343,8 @@ If measurements show that alpha-mu remains dominated by:
 
 then further DDS threading changes should wait.
 
-**Current status (`2026-05-05`):** Stage 4 is now closed for the current scoped
-plan. The focused `instrumented-check` lane was re-run successfully with:
+**Current status (`2026-05-05`):** Stage 4 is complete. Nothing remains in
+Stage 4. The focused `instrumented-check` lane was re-run successfully with:
 
 - `test/build-instrumented/regression_api ../hands/list10.txt` in `527.28 s`,
 - `test/build-instrumented/play_analysis_benchmark` in `2.90 s`.
@@ -382,8 +383,8 @@ If stages 1 to 4 show that alpha-mu still needs more speed and the next real bot
 
 These changes should remain behind generic fallbacks where reasonably possible.
 
-**Current status (`2026-05-05`):** Stage 5 is now closed for the current scoped
-plan. The preserved-fallback DDS candidates were evaluated with the same Apple
+**Current status (`2026-05-05`):** Stage 5 is complete for the current plan.
+The preserved-fallback DDS candidates were evaluated with the same Apple
 workload family used to close Stage 4, and the repo now records a single
 accepted endpoint:
 
@@ -437,6 +438,17 @@ The remaining immediate work is now:
 - [ ] only if a future workload still requires more gain after a newly proposed
   lower-cost option is measured, open an explicit Stage 6 / `PR 5`
   portability-tradeoff decision.
+
+### Next step (`2026-05-05`)
+
+The next step is **not** more Stage-4 work.
+
+The next step is to keep the accepted Stage-5 retained endpoint as the baseline
+and leave `PR 5` unopened unless a concrete `Bucket C` portability tradeoff is
+named and justified.
+
+This document now adopts that step explicitly: Stage 4 is complete, Stage 5 is
+complete, and only the later Stage 6 / `PR 5` gate remains open.
 
 ## Signals to watch for during implementation
 
