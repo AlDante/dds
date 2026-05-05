@@ -13,6 +13,7 @@ The profiling ladder (see `docs/performance-log.md`) established that:
 3. The **M1 Max `ABsearch` path** (branch hints, prefetch, inlined helpers) delivered `-20.7%` wall time on `list9` depth 2.
 4. The **`8.4` packed `moveType`** and **`8.5` `pos` hot-field reorder** showed mixed/neutral results in isolation but were not harmful under the profiling build.
 5. The dominant hot path remains `ABsearch* → MakeNext → Make/Undo → QuickTricks → SolveBoardInternal`.
+6. The refreshed `2026-05-05` focused `DDS_ALPHA_MU_STATS` lane closed Stage 4 / `PR 4`: across `2991` emitted root lines, aggregate DDS phase share was `77.90% ab_us`, `8.09% undo_us`, `6.24% movegen_us`, and `3.40% qt_us`; `SolveBoardInternal` and `SolveSameBoard` accounted for `99.77%` of measured phase time while `AnalyseLaterBoard` remained negligible.
 
 The focused `DDS_ALPHA_MU_STATS` lane also clarified one instrumentation concern:
 the remaining `ALPHA_MU root ...` text is not evidence of a second legacy
@@ -20,7 +21,10 @@ alpha-mu-only emitter. It is the historical prefix emitted by the single shared
 exact-root reporting helper in `src/SolverIF.cpp`, which is exercised by the
 instrumented DDS contexts `SolveBoardInternal`, `SolveSameBoard`, and
 `AnalyseLaterBoard`. That means the current evidence still favors the lower-risk
-`Bucket B` backlog below over any immediate `PR 5` portability sacrifice.
+`Bucket B` backlog below over any immediate `PR 5` portability sacrifice, and it
+also makes the post-Stage-4 target clearer: preserved-fallback work should be
+judged first by whether it reduces the still-dominant `ABsearch` bucket and then
+by whether it reduces the secondary `undo`, `movegen`, and `QuickTricks` costs.
 
 ---
 

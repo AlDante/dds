@@ -35,7 +35,8 @@ to PRs in a strict mechanical sense, but the intended relationship is:
   - corresponds directly to **PR 2**
 - **Stage 4** — measure whether `DDS` backend selection matters for alpha-mu leaf work
   - corresponds primarily to **PR 3** and the measurement-first slice of
-    **PR 4**
+    **PR 4**; most of this work is in place, but the final evidence-refresh
+    pass is still open
 - **Stage 5** — consider Apple-specific `DDS` changes with generic fallback preserved
   - corresponds to the current measurement-first slice of **PR 4** and any later
     preserved-fallback `Bucket B` follow-on work
@@ -48,7 +49,8 @@ So in short:
 - **PR 2** implements **Stage 3**
 - **PR 3** implements the routine-comparison part of **Stage 4**
 - **PR 4** implements the current measurement-first / preserved-fallback slice of
-  **Stage 4** and **Stage 5**
+  **Stage 4** and **Stage 5**, with a small amount of Stage-4 follow-up
+  evidence gathering still remaining
 - **PR 5** is the concrete decision point for **Stage 6**
 
 Across all of them, **Stage 1** remains an always-on requirement rather than a
@@ -144,7 +146,8 @@ Make worker-backend comparisons routine and reproducible.
 
 **Related staged-plan items:** the measurement-first and preserved-fallback
 portion of `Stage 4` and `Stage 5`, with `Stage 1` parity checks remaining in
-force.
+force. The implementation slice is in place, but the final Stage-4 evidence
+refresh still remains to be run and summarized.
 
 ### Goal
 
@@ -180,15 +183,15 @@ Every such PR must state:
 4. the generic fallback or backend impact,
 5. and the correctness/parity checks that still remain in force.
 
-### Current readiness assessment (`2026-05-04`)
+### Current readiness assessment (`2026-05-05`)
 
 The repository is now at the point where `PR 5` can be evaluated explicitly, but
-it is **not yet justified** by the current evidence.
+it is **still not justified** by the refreshed evidence.
 
-To make status unambiguous: `PR 1`, `PR 2`, `PR 3`, and the currently scoped
-measurement-first slice of `PR 4` are complete. The remaining open items in this
-document belong to `PR 5` evaluation and to any later optional follow-on
-`Bucket B` optimisation work, not to unfinished `PR 1`–`PR 4` implementation.
+To make status unambiguous: `PR 1` through `PR 4` are complete for the current
+scoped plan. The final Stage-4 evidence-refresh pass has now been re-run and
+summarized, so the remaining open items belong to `PR 5` evaluation and to any
+later optional follow-on `Bucket B` optimisation work.
 
 - `PR 1` through `PR 4` are complete for the current scoped plan.
 - Apple worker-backend comparisons are now routine and reproducible via the
@@ -205,6 +208,27 @@ document belong to `PR 5` evaluation and to any later optional follow-on
   `SolveBoardInternal`, `SolveSameBoard`, and `AnalyseLaterBoard`; the prefix is
   being kept intentionally for benchmark-parser and log-schema compatibility,
   not because a second legacy alpha-mu-only emitter still exists.
+- The refreshed focused lane completed successfully with:
+  - `test/build-instrumented/regression_api ../hands/list10.txt` in `527.28 s`,
+  - `test/build-instrumented/play_analysis_benchmark` in `2.90 s`.
+- The refreshed logs emitted `2991` root lines in total:
+  - `SolveBoardInternal`: `390`,
+  - `SolveSameBoard`: `990`,
+  - `AnalyseLaterBoard`: `1611`.
+- The refreshed aggregate DDS phase shares are now explicit:
+  - `ab_us`: `77.90%`,
+  - `undo_us`: `8.09%`,
+  - `movegen_us`: `6.24%`,
+  - `qt_us`: `3.40%`,
+  - `lookup_us`: `2.27%`,
+  - `lt_us`: `1.37%`,
+  - `build_us`: `0.73%`.
+- `SolveBoardInternal` and `SolveSameBoard` together account for `99.77%` of the
+  measured phase total in the refreshed focused lane, while
+  `AnalyseLaterBoard` remains negligible at `0.23%`.
+- The refreshed evidence still places the next material bottleneck inside
+  `DDS`, specifically in the DDS leaf path dominated by `ab_us`, with
+  `undo_us`, `movegen_us`, and `qt_us` as the next secondary DDS buckets.
 - The optimisation backlog is now clearer, and the next plausible DDS-side work
   items (`-flto`, NEON helper cleanup in `ABsearch_m1max.cpp`, worker QoS, and
   the `QuickTricks` refactor) all still fit **Bucket B**: Apple-specific or
@@ -218,13 +242,16 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 ### PR 5 checklist
 
 - [x] `PR 1` through `PR 4` are complete for the current scoped plan.
+- [x] Close the remaining Stage-4 / PR4 evidence-refresh tasks by:
+  - re-running the focused instrumented lane and summarizing the updated DDS
+    leaf-path timings,
+  - confirming whether the refreshed evidence still places the next material
+    bottleneck inside `DDS` rather than outside it.
 - [x] Generic-vs-specialized parity checks remain part of the Apple-silicon plan.
 - [x] Reproducible backend-comparison tooling exists for `stl` vs `gcd` alpha-mu runs.
 - [x] Focused DDS leaf-path instrumentation exists for the exact alpha-mu leaf contexts.
 - [x] The focused instrumented regression lane has been reduced to `hands/list10.txt`.
 - [x] Finish tracing and either remove or explicitly justify the remaining legacy `ALPHA_MU root` emitter in the instrumented output.
-- [ ] Re-run the focused instrumented lane and summarize the updated phase timings for the remaining hot leaf contexts.
-- [ ] Confirm that the next material bottleneck is still inside `DDS`, not in alpha-mu board scheduling, front/world work, or reporting overhead.
 - [ ] Name the exact proposed `Bucket C` portability tradeoff rather than a general class of possible optimisations.
 - [ ] Quantify the expected gain of that exact tradeoff on the representative Apple workload.
 - [ ] State the portability or maintainability cost being accepted.
@@ -236,14 +263,17 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 ### Current recommendation
 
 Do **not** treat `PR 5` as an implementation PR yet. Treat it as a gated
-decision point. `PR 1`–`PR 4` do not need further completion work for the
-current plan. The next concrete work should instead be:
+decision point. `PR 1`–`PR 4` are complete, the Stage-4 / PR4 evidence refresh
+is now closed, and the refreshed evidence still points to DDS-internal leaf work
+rather than to alpha-mu scheduling/front overhead. The next concrete work should
+therefore be:
 
-1. finish the focused instrumentation cleanup,
-2. collect the updated DDS leaf-path timing evidence,
-3. and then start with the highest-confidence preserved-fallback work from
-   `docs/optimisation-plan.md` before considering any true portability
-   sacrifice.
+1. start with the highest-confidence preserved-fallback work from
+   `docs/optimisation-plan.md`,
+2. measure those `Bucket B` candidates against the same Apple workload and the
+   existing correctness/parity gates,
+3. and only consider a true portability sacrifice if those lower-cost options do
+   not deliver enough gain.
 
 ## Recommended order
 
@@ -260,7 +290,8 @@ This repository change set implements:
 - **PR 1**
 - **PR 2**
 - **PR 3**
-- **PR 4** (measurement-first slice, complete for the current stage)
+- **PR 4** (measurement-first / preserved-fallback slice complete, including the
+  final Stage-4 evidence refresh)
 
 The repository now includes a dedicated backend-comparison runner and Makefile
 entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with
@@ -270,8 +301,9 @@ tuning can be driven by measured `ab_us`, `qt_us`, `lt_us`, `movegen_us`,
 `lookup_us`, `build_us`, and `undo_us` data instead of another speculative
 micro-change.
 
-The remaining unchecked items above are therefore not hidden `PR 1`–`PR 4`
-carry-over tasks. They are the explicit prerequisites for opening a true `PR 5`
-portability-tradeoff decision, plus any optional later optimisation work that
-continues to preserve the generic fallback.
+The remaining unchecked items above therefore split into two groups:
+
+- later optional Stage-5 preserved-fallback optimisation work that continues to
+  preserve the generic fallback,
+- and the later Stage-6 / `PR 5` portability-tradeoff prerequisites.
 

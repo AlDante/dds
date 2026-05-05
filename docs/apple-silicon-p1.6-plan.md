@@ -259,19 +259,20 @@ open:
   abstraction.
 - [x] **Stage 3** is complete: an Apple-only `GCD` alpha-mu worker backend has
   been added and kept comparable against the `stl` baseline.
-- [x] **Stage 4** is complete for the current scoped plan: measurement-first
-  instrumentation and focused regression lanes are in place so DDS leaf-path
-  costs can be inspected directly.
+- [x] **Stage 4** is complete: the focused instrumented lane has been re-run and
+  the refreshed evidence still places the next material bottleneck inside
+  `DDS`, specifically in the DDS leaf path dominated by `ab_us` with secondary
+  `undo_us`, `movegen_us`, and `qt_us` buckets.
 - [x] **Initial Stage 5 groundwork** is complete for the current stage: the
   repository now has the Apple-specific DDS instrumentation needed to guide
   preserved-fallback tuning without yet making any portability sacrifice.
-- [ ] **Remaining work is not earlier-stage carry-over work.** The open items
+- [x] **Remaining work is not earlier-stage carry-over work.** The open items
   now belong to either:
   - optional further **Stage 5** preserved-fallback optimisation work, or
   - a future **Stage 6** portability-tradeoff decision if lower-cost options do
 	not deliver enough gain.
 
-In other words: the staged foundation is in place, and the next decisions are
+In other words: the staged foundation is in place. The next decisions are now
 about which measured follow-on optimisation to pursue, not about finishing the
 basic `P1.6` structure.
 
@@ -341,6 +342,33 @@ If measurements show that alpha-mu remains dominated by:
 
 then further DDS threading changes should wait.
 
+**Current status (`2026-05-05`):** Stage 4 is now closed for the current scoped
+plan. The focused `instrumented-check` lane was re-run successfully with:
+
+- `test/build-instrumented/regression_api ../hands/list10.txt` in `527.28 s`,
+- `test/build-instrumented/play_analysis_benchmark` in `2.90 s`.
+
+The refreshed logs emitted `2991` root lines in total:
+
+- `SolveBoardInternal`: `390`,
+- `SolveSameBoard`: `990`,
+- `AnalyseLaterBoard`: `1611`.
+
+Across that refreshed focused lane, the aggregate DDS phase shares were:
+
+- `ab_us`: `77.90%`,
+- `undo_us`: `8.09%`,
+- `movegen_us`: `6.24%`,
+- `qt_us`: `3.40%`,
+- `lookup_us`: `2.27%`,
+- `lt_us`: `1.37%`,
+- `build_us`: `0.73%`.
+
+`SolveBoardInternal` and `SolveSameBoard` together accounted for `99.77%` of
+the measured phase total, while `AnalyseLaterBoard` remained negligible at
+`0.23%`. So the refreshed evidence still points to a DDS-internal leaf-work
+bottleneck rather than to alpha-mu scheduling, bridge/front work, or reporting.
+
 **Portability impact:** none.
 
 ### Stage 5 — Only then consider Apple-specific DDS changes motivated by alpha-mu
@@ -388,12 +416,8 @@ scope:
 
 The remaining immediate work is now:
 
-- [ ] re-run the focused instrumented lane and summarize the updated DDS
-  leaf-path timing evidence,
-- [ ] confirm whether the next material bottleneck is still inside `DDS`
-  rather than in alpha-mu board scheduling, bridge/front work, or reporting,
-- [ ] if the bottleneck is still inside `DDS`, start with the highest-confidence
-  preserved-fallback work from `docs/optimisation-plan.md`,
+- [ ] start with the highest-confidence preserved-fallback work from
+  `docs/optimisation-plan.md`,
 - [ ] only if lower-cost preserved-fallback work is insufficient, open an
   explicit Stage 6 / `PR 5` portability-tradeoff decision.
 

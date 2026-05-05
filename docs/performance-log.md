@@ -12,6 +12,66 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-05 00:00:00 — Stage 4 / PR 4 evidence refresh on commit `c97abd8` (dirty)
+
+- Captured logs:
+  - `test/build/instrumented_regression_api_stage4.log`
+  - `test/build/instrumented_regression_api_stage4.time`
+  - `test/build/instrumented_play_analysis_stage4.log`
+  - `test/build/instrumented_play_analysis_stage4.time`
+- Platform: Apple-Silicon macOS host
+- Result: both focused instrumented checks completed with exit status `0`
+
+| Command | Status | Wall clock | Notes |
+| --- | --- | ---: | --- |
+| `test/build-instrumented/regression_api ../hands/list10.txt` | pass | `527.28 s` | Focused Stage-4 rerun against the shortened `list10` lane; output ended with `regression_api: OK`. |
+| `test/build-instrumented/play_analysis_benchmark` | pass | `2.90 s` | Instrumented play-analysis confirmation; output completed with status `0`. |
+
+### Root-line coverage by file
+
+| Log | Total root lines | `SolveBoardInternal` | `SolveSameBoard` | `AnalyseLaterBoard` |
+| --- | ---: | ---: | ---: | ---: |
+| `instrumented_regression_api_stage4.log` | `2884` | `387` | `990` | `1507` |
+| `instrumented_play_analysis_stage4.log` | `107` | `3` | `0` | `104` |
+| Combined | `2991` | `390` | `990` | `1611` |
+
+### Aggregate DDS phase shares from the refreshed focused lane
+
+The phase totals below are summed across all emitted root lines, so they are most
+useful as a relative hotspot breakdown rather than as a wall-clock accounting.
+
+| Phase | Total | Share |
+| --- | ---: | ---: |
+| `ab_us` | `1232688707 us` | `77.90%` |
+| `undo_us` | `128016819 us` | `8.09%` |
+| `movegen_us` | `98792259 us` | `6.24%` |
+| `qt_us` | `53824201 us` | `3.40%` |
+| `lookup_us` | `35972580 us` | `2.27%` |
+| `lt_us` | `21685739 us` | `1.37%` |
+| `build_us` | `11493366 us` | `0.73%` |
+
+### Context-level summary
+
+| Context | Root lines | Share of measured phase time | Dominant internal phase mix |
+| --- | ---: | ---: | --- |
+| `SolveBoardInternal` | `390` | `72.00%` | `ab_us 76.79%`, `undo_us 8.49%`, `movegen_us 6.56%`, `qt_us 3.61%` |
+| `SolveSameBoard` | `990` | `27.77%` | `ab_us 80.61%`, `undo_us 7.11%`, `movegen_us 5.47%`, `qt_us 2.89%` |
+| `AnalyseLaterBoard` | `1611` | `0.23%` | Mostly zero-cost or near-zero exact hits; no material leaf hotspot signal |
+
+### Stage 4 conclusion
+
+- The refreshed focused lane confirms that the remaining material cost is still
+  inside `DDS`, not in alpha-mu board scheduling, bridge/front work, or report
+  formatting.
+- `SolveBoardInternal` and `SolveSameBoard` account for `99.77%` of the measured
+  phase total in the focused lane, while `AnalyseLaterBoard` remains negligible.
+- Within those DDS leaf contexts, `ab_us` remains the dominant hotspot by a wide
+  margin, with `undo_us`, `movegen_us`, and `qt_us` as the next secondary DDS
+  buckets.
+- That closes the remaining Stage-4 evidence-refresh task and leaves the next
+  work squarely in preserved-fallback `Stage 5` / `Bucket B` optimisation, not
+  in a portability-sacrifice `PR 5`.
+
 ## 2026-04-23 23:07:38 — Workstream 1 DDS baseline revalidated on commit `12c5f5d` (dirty)
 
 - Primary current-commit output bundle: `test/build/alpha_mu_stats/20260423-230442`
