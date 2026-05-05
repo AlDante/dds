@@ -68,9 +68,11 @@ useful as a relative hotspot breakdown rather than as a wall-clock accounting.
 - Within those DDS leaf contexts, `ab_us` remains the dominant hotspot by a wide
   margin, with `undo_us`, `movegen_us`, and `qt_us` as the next secondary DDS
   buckets.
-- That closes the remaining Stage-4 evidence-refresh task and leaves the next
-  work squarely in preserved-fallback `Stage 5` / `Bucket B` optimisation, not
-  in a portability-sacrifice `PR 5`.
+- That closes the remaining Stage-4 evidence-refresh task. Read together with
+  the later clean-slate recovery entries below, the current scoped preserved-
+  fallback `Stage 5` cycle is also now closed: the accepted retained endpoint is
+  the existing baseline plus compact `moveType`, and no portability-sacrifice
+  `PR 5` is justified.
 
 ## 2026-04-23 23:07:38 — Workstream 1 DDS baseline revalidated on commit `12c5f5d` (dirty)
 
@@ -777,17 +779,19 @@ to offset the memory savings.
 |--------|-------------------|----------------------|----------------------|
 | 8.1 Hot/cold ThreadData | +2.2% cycles | **No** | Debatable |
 | 8.5 pos field reorder | +0.9% cycles | **No** | Debatable |
-| 8.4 Packed moveType | +1.2% cycles | **No** | Debatable (saves memory) |
+| 8.4 Packed moveType | +1.2% cycles in this ladder; later clean-slate rebuild narrowed it to a neutral retained change | Conditional | Yes (compact struct) |
 | DepthLocal helpers | +10.6% cycles (combined) | **No** | **No** |
 | Phase 1 NEON | −1% vs predecessor | Neutral | Yes (explicit intent) |
 | Phase 2 CLZ | +5.8% cycles | **No** | **No** |
 | Modernisation | ~0% | Neutral | Yes |
-| QuickTricks context-struct | ~0% | Neutral | Yes (−166 lines) |
+| QuickTricks context-struct | superseded below: clean-slate rebuild later measured `+2.6%` instructions | **No** | **No** |
 
-**Recommended action**: revert `src/` to `170e566` (the fastest measured code) and
-selectively re-apply only code-quality changes that are proven performance-neutral
-(modernisation, QuickTricks context-struct). Any future optimisation attempts must be
-validated with the serial-mode PMU benchmark before committing.
+**Recommended action at this point in the log**: revert `src/` to `170e566`
+(the fastest measured code) before re-applying anything selectively. The later
+clean-slate rebuild below refined that recommendation further and closed the
+current Stage-5 preserved-fallback cycle with only the compact `moveType`
+change retained. Any future optimisation attempts must be validated with the
+serial-mode PMU benchmark before committing.
 
 ## 2026-04-20 — Clean-slate rebuild: packed moveType + QuickTricks refactor evaluation
 

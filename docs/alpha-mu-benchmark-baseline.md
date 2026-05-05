@@ -120,6 +120,10 @@ The packed `moveType` is performance-neutral on wall/CPU time but reduces both
 instruction count and store misses, confirming the smaller struct size saves
 memory bandwidth.
 
+This retained set is also the closed Stage-5 / preserved-fallback endpoint for
+the current Apple-Silicon `P1.6` plan: no broader DDS portability sacrifice is
+currently justified.
+
 ## Measurement methodology
 
 ### For A/B comparisons

@@ -34,12 +34,11 @@ to PRs in a strict mechanical sense, but the intended relationship is:
 - **Stage 3** — add an Apple-only alpha-mu `GCD` board scheduler
   - corresponds directly to **PR 2**
 - **Stage 4** — measure whether `DDS` backend selection matters for alpha-mu leaf work
-  - corresponds primarily to **PR 3** and the measurement-first slice of
-    **PR 4**; most of this work is in place, but the final evidence-refresh
-    pass is still open
+  - corresponds directly to the completed measurement-first scope of **PR 4**
 - **Stage 5** — consider Apple-specific `DDS` changes with generic fallback preserved
-  - corresponds to the current measurement-first slice of **PR 4** and any later
-    preserved-fallback `Bucket B` follow-on work
+  - corresponds to the completed preserved-fallback scope of **PR 4** for the
+    current plan; any later `Bucket B` work would be a fresh follow-on cycle,
+    not unfinished PR4 carry-over
 - **Stage 6** — explicit escalation path if `DDS` portability must be sacrificed
   - corresponds directly to **PR 5**
 
@@ -48,10 +47,9 @@ So in short:
 - **PR 1** implements **Stage 2**
 - **PR 2** implements **Stage 3**
 - **PR 3** implements the routine-comparison part of **Stage 4**
-- **PR 4** implements the current measurement-first / preserved-fallback slice of
-  **Stage 4** and **Stage 5**, with a small amount of Stage-4 follow-up
-  evidence gathering still remaining
-- **PR 5** is the concrete decision point for **Stage 6**
+- **PR 4** completes the current scoped **Stage 4** and **Stage 5** work
+- **PR 5** is the concrete decision point for **Stage 6**, only if a real
+  portability tradeoff is later needed
 
 Across all of them, **Stage 1** remains an always-on requirement rather than a
 one-time deliverable.
@@ -144,10 +142,9 @@ Make worker-backend comparisons routine and reproducible.
 
 ## PR 4 — Apple-specific DDS improvements with generic fallback preserved
 
-**Related staged-plan items:** the measurement-first and preserved-fallback
-portion of `Stage 4` and `Stage 5`, with `Stage 1` parity checks remaining in
-force. The implementation slice is in place, but the final Stage-4 evidence
-refresh still remains to be run and summarized.
+**Related staged-plan items:** the completed measurement-first and preserved-
+fallback portions of `Stage 4` and `Stage 5`, with `Stage 1` parity checks
+remaining in force.
 
 ### Goal
 
@@ -163,6 +160,23 @@ Pursue deeper Apple-only DDS work only if alpha-mu measurement shows that board 
 ### Gate
 
 This PR should proceed only if measurement shows that the remaining alpha-mu bottleneck is substantially inside DDS rather than in alpha-mu board scheduling or alpha-mu bridge/front logic.
+
+### Current outcome (`2026-05-05`)
+
+`PR 4` is complete for the current scoped plan.
+
+- The Stage-4 evidence refresh was re-run and still placed the dominant
+  remaining cost inside DDS leaf work.
+- The preserved-fallback DDS candidates were then evaluated without weakening
+  the generic path.
+- The accepted retained result is narrow and explicit: keep the existing
+  `DDS_TARGET_APPLE_M1_MAX` specialization and the compact `moveType` layout,
+  while leaving the other measured Stage-5 candidates out because they were
+  neutral or regressive on the representative Apple workload.
+
+So there is no unfinished Stage-4 or Stage-5 carry-over inside `PR 4`; the next
+decision point is `PR 5` / `Stage 6`, and only if a concrete portability
+tradeoff is later proposed.
 
 ## PR 5 — Explicit portability tradeoff decision, if needed
 
@@ -190,8 +204,10 @@ it is **still not justified** by the refreshed evidence.
 
 To make status unambiguous: `PR 1` through `PR 4` are complete for the current
 scoped plan. The final Stage-4 evidence-refresh pass has now been re-run and
-summarized, so the remaining open items belong to `PR 5` evaluation and to any
-later optional follow-on `Bucket B` optimisation work.
+summarized, and the current preserved-fallback Stage-5 cycle is also closed, so
+the remaining open items now belong to `PR 5` evaluation only. Any future
+`Bucket B` optimisation would be a fresh follow-on cycle, not unfinished PR4
+carry-over.
 
 - `PR 1` through `PR 4` are complete for the current scoped plan.
 - Apple worker-backend comparisons are now routine and reproducible via the
@@ -229,10 +245,10 @@ later optional follow-on `Bucket B` optimisation work.
 - The refreshed evidence still places the next material bottleneck inside
   `DDS`, specifically in the DDS leaf path dominated by `ab_us`, with
   `undo_us`, `movegen_us`, and `qt_us` as the next secondary DDS buckets.
-- The optimisation backlog is now clearer, and the next plausible DDS-side work
-  items (`-flto`, NEON helper cleanup in `ABsearch_m1max.cpp`, worker QoS, and
-  the `QuickTricks` refactor) all still fit **Bucket B**: Apple-specific or
-  performance-oriented DDS work with the generic fallback preserved.
+- The optimisation backlog is now clearer, and the current preserved-fallback
+  DDS-side cycle is already closed: the retained endpoint is the accepted
+  baseline plus compact `moveType`, while the other measured candidates were not
+  carried forward.
 
 So the current state still supports the original policy: keep the generic path
 alive, use the measurement-first tooling to locate the actual remaining leaf hot
@@ -252,28 +268,28 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 - [x] Focused DDS leaf-path instrumentation exists for the exact alpha-mu leaf contexts.
 - [x] The focused instrumented regression lane has been reduced to `hands/list10.txt`.
 - [x] Finish tracing and either remove or explicitly justify the remaining legacy `ALPHA_MU root` emitter in the instrumented output.
+- [x] Show that the lower-cost preserved-fallback candidates were measured and
+  narrow the retained set to the accepted endpoint.
 - [ ] Name the exact proposed `Bucket C` portability tradeoff rather than a general class of possible optimisations.
 - [ ] Quantify the expected gain of that exact tradeoff on the representative Apple workload.
 - [ ] State the portability or maintainability cost being accepted.
 - [ ] State which generic fallback, backend, or portable path would be weakened, bypassed, or left behind.
-- [ ] Show that lower-cost `Bucket A` / `Bucket B` options were either exhausted, measured, or intentionally deferred with reasons.
+- [x] Show that lower-cost `Bucket A` / `Bucket B` options were either exhausted, measured, or intentionally deferred with reasons.
 - [ ] Preserve the existing correctness and parity gates for the chosen change (`regression_api`, `dtest`, `play_analysis_benchmark`, and backend semantic-stability checks where relevant).
 - [ ] Record the final tradeoff decision plainly in the PR description and follow-up docs.
 
 ### Current recommendation
 
 Do **not** treat `PR 5` as an implementation PR yet. Treat it as a gated
-decision point. `PR 1`–`PR 4` are complete, the Stage-4 / PR4 evidence refresh
-is now closed, and the refreshed evidence still points to DDS-internal leaf work
-rather than to alpha-mu scheduling/front overhead. The next concrete work should
+decision point. `PR 1`–`PR 4` are complete, and the current scoped Stage-5
+preserved-fallback cycle is also complete. The next concrete work should
 therefore be:
 
-1. start with the highest-confidence preserved-fallback work from
-   `docs/optimisation-plan.md`,
-2. measure those `Bucket B` candidates against the same Apple workload and the
-   existing correctness/parity gates,
-3. and only consider a true portability sacrifice if those lower-cost options do
-   not deliver enough gain.
+1. keep the accepted retained Stage-5 endpoint as the baseline,
+2. only reopen `Bucket B` work if a fresh DDS-side hypothesis is proposed and
+   measured from that baseline,
+3. and only consider a true portability sacrifice if that new lower-cost work
+   still does not deliver enough gain.
 
 ## Recommended order
 
@@ -290,8 +306,7 @@ This repository change set implements:
 - **PR 1**
 - **PR 2**
 - **PR 3**
-- **PR 4** (measurement-first / preserved-fallback slice complete, including the
-  final Stage-4 evidence refresh)
+- **PR 4** (current scoped Stage 4 + Stage 5 work complete)
 
 The repository now includes a dedicated backend-comparison runner and Makefile
 entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with
@@ -301,9 +316,7 @@ tuning can be driven by measured `ab_us`, `qt_us`, `lt_us`, `movegen_us`,
 `lookup_us`, `build_us`, and `undo_us` data instead of another speculative
 micro-change.
 
-The remaining unchecked items above therefore split into two groups:
-
-- later optional Stage-5 preserved-fallback optimisation work that continues to
-  preserve the generic fallback,
-- and the later Stage-6 / `PR 5` portability-tradeoff prerequisites.
+The remaining unchecked items above therefore now belong only to the later
+Stage-6 / `PR 5` portability-tradeoff prerequisites. Any future `Bucket B`
+optimisation would be a fresh follow-on cycle, not unfinished PR4 work.
 

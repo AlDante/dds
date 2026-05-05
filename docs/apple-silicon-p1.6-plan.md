@@ -30,11 +30,11 @@ as follows:
 - **Stage 3** — add an Apple-only alpha-mu `GCD` board scheduler
   - corresponds directly to **PR 2**
 - **Stage 4** — measure whether `DDS` backend selection matters for alpha-mu leaf work
-  - corresponds primarily to **PR 3** and the measurement-first slice of
-    **PR 4**
+  - corresponds directly to the completed measurement-first scope of **PR 4**
 - **Stage 5** — consider Apple-specific `DDS` changes with generic fallback preserved
-  - corresponds to the current preserved-fallback slice of **PR 4** and any
-    later optional `Bucket B` follow-on optimisation work
+  - corresponds to the completed preserved-fallback scope of **PR 4** for the
+    current plan; any later `Bucket B` work would be a fresh follow-on cycle,
+    not unfinished carry-over from this one
 - **Stage 6** — explicit escalation path if `DDS` portability must be sacrificed
   - corresponds directly to **PR 5**
 
@@ -43,9 +43,9 @@ So in short:
 - **PR 1** implements **Stage 2**
 - **PR 2** implements **Stage 3**
 - **PR 3** implements the routine-comparison part of **Stage 4**
-- **PR 4** implements the current measurement-first / preserved-fallback slice of
-  **Stage 4** and **Stage 5**
-- **PR 5** is the concrete decision point for **Stage 6**
+- **PR 4** completes the current scoped **Stage 4** and **Stage 5** work
+- **PR 5** is the concrete decision point for **Stage 6**, only if a real
+  portability tradeoff is later needed
 
 It is written with three constraints in mind:
 
@@ -263,18 +263,18 @@ open:
   the refreshed evidence still places the next material bottleneck inside
   `DDS`, specifically in the DDS leaf path dominated by `ab_us` with secondary
   `undo_us`, `movegen_us`, and `qt_us` buckets.
-- [x] **Initial Stage 5 groundwork** is complete for the current stage: the
-  repository now has the Apple-specific DDS instrumentation needed to guide
-  preserved-fallback tuning without yet making any portability sacrifice.
-- [x] **Remaining work is not earlier-stage carry-over work.** The open items
-  now belong to either:
-  - optional further **Stage 5** preserved-fallback optimisation work, or
-  - a future **Stage 6** portability-tradeoff decision if lower-cost options do
-	not deliver enough gain.
+- [x] **Stage 5** is complete for the current scoped plan: the preserved-
+  fallback DDS candidates were measured against the serial CPU-time and PMU
+  baselines, the generic fallback remained intact throughout, and the retained
+  result is now explicit in `docs/performance-log.md` and
+  `docs/alpha-mu-benchmark-baseline.md`.
+- [x] **No remaining work is earlier-stage carry-over work.** The only open
+  path now is a future **Stage 6** portability-tradeoff decision if a newly
+  proposed lower-cost `Bucket A` / `Bucket B` option still proves insufficient.
 
 In other words: the staged foundation is in place. The next decisions are now
-about which measured follow-on optimisation to pursue, not about finishing the
-basic `P1.6` structure.
+about whether to open a fresh, newly justified follow-on optimisation cycle,
+not about finishing the basic `P1.6` structure.
 
 ### Stage 0 — Document the current truth
 
@@ -382,6 +382,22 @@ If stages 1 to 4 show that alpha-mu still needs more speed and the next real bot
 
 These changes should remain behind generic fallbacks where reasonably possible.
 
+**Current status (`2026-05-05`):** Stage 5 is now closed for the current scoped
+plan. The preserved-fallback DDS candidates were evaluated with the same Apple
+workload family used to close Stage 4, and the repo now records a single
+accepted endpoint:
+
+- keep the existing `DDS_TARGET_APPLE_M1_MAX` search specialization,
+- keep the compact `moveType` layout (`sizeof(moveType) == 8`),
+- keep the generic fallback intact,
+- and do **not** carry forward the tested candidates that failed to beat the
+  accepted baseline (`ThreadData` hot/cold split, `pos` hot-field reorder,
+  `DepthLocal`, NEON helper rewrite, `highestRank` CLZ replacement, and the
+  `QuickTricks` context-struct refactor).
+
+So Stage 5 is complete as a measured preserved-fallback evaluation, and there
+is still no justification for opening the Stage 6 portability-sacrifice path.
+
 **Portability impact:** low to moderate.
 
 ### Stage 6 — Explicit escalation path if DDS portability must be sacrificed
@@ -416,10 +432,11 @@ scope:
 
 The remaining immediate work is now:
 
-- [ ] start with the highest-confidence preserved-fallback work from
-  `docs/optimisation-plan.md`,
-- [ ] only if lower-cost preserved-fallback work is insufficient, open an
-  explicit Stage 6 / `PR 5` portability-tradeoff decision.
+- [x] complete the current preserved-fallback DDS evaluation and keep only the
+  measured wins,
+- [ ] only if a future workload still requires more gain after a newly proposed
+  lower-cost option is measured, open an explicit Stage 6 / `PR 5`
+  portability-tradeoff decision.
 
 ## Signals to watch for during implementation
 
@@ -448,7 +465,7 @@ The following outcomes should be treated as explicit warning signals.
 - [x] the docs explicitly describe the current backend reality on macOS,
 - [x] alpha-mu has an explicit place to host Apple-specific board scheduling,
 - [x] Apple `GCD` has been evaluated where it actually matters for alpha-mu,
-- [ ] any future portability sacrifice in DDS is recorded as an intentional
-  tradeoff rather than an accidental side effect if such a sacrifice is ever
-  chosen.
+- [x] any future portability sacrifice in DDS is now isolated behind an explicit
+  Stage 6 / `PR 5` decision gate rather than being allowed to drift in as an
+  accidental side effect.
 
