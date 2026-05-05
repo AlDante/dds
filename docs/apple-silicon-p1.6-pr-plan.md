@@ -4,13 +4,60 @@
 
 This document turns `docs/apple-silicon-p1.6-plan.md` into a PR-sized execution sequence.
 
+It is the execution-level companion to the higher-level staged plan in
+`docs/apple-silicon-p1.6-plan.md`:
+
+- `docs/apple-silicon-p1.6-plan.md` defines the architectural intent,
+  portability policy, and staged rollout.
+- `docs/apple-silicon-p1.6-pr-plan.md` turns those stages into reviewable,
+  status-tracked PR-sized slices.
+
 The guiding rule is:
 
 - keep `DDS` generic-vs-specialized parity intact,
 - keep `alpha-mu` free to add Apple-specific execution layers,
 - and defer any real `DDS` portability sacrifice until measurement shows that the alpha-mu bottleneck is truly inside `DDS`.
 
+## Stage-to-PR mapping
+
+The high-level stages in `docs/apple-silicon-p1.6-plan.md` do not map one-to-one
+to PRs in a strict mechanical sense, but the intended relationship is:
+
+- **Stage 0** — document the current truth
+  - covered by the plan and doc updates that establish the current macOS backend
+    reality and the `alpha-mu` / `DDS` boundary used by the later PRs
+- **Stage 1** — keep parity checks for generic vs M1-specialized `DDS`
+  - remains a standing constraint across **PR 1** through **PR 5** rather than a
+    single isolated PR
+- **Stage 2** — add an alpha-mu worker-backend abstraction
+  - corresponds directly to **PR 1**
+- **Stage 3** — add an Apple-only alpha-mu `GCD` board scheduler
+  - corresponds directly to **PR 2**
+- **Stage 4** — measure whether `DDS` backend selection matters for alpha-mu leaf work
+  - corresponds primarily to **PR 3** and the measurement-first slice of
+    **PR 4**
+- **Stage 5** — consider Apple-specific `DDS` changes with generic fallback preserved
+  - corresponds to the current measurement-first slice of **PR 4** and any later
+    preserved-fallback `Bucket B` follow-on work
+- **Stage 6** — explicit escalation path if `DDS` portability must be sacrificed
+  - corresponds directly to **PR 5**
+
+So in short:
+
+- **PR 1** implements **Stage 2**
+- **PR 2** implements **Stage 3**
+- **PR 3** implements the routine-comparison part of **Stage 4**
+- **PR 4** implements the current measurement-first / preserved-fallback slice of
+  **Stage 4** and **Stage 5**
+- **PR 5** is the concrete decision point for **Stage 6**
+
+Across all of them, **Stage 1** remains an always-on requirement rather than a
+one-time deliverable.
+
 ## PR 1 — Explicit alpha-mu worker-backend abstraction
+
+**Related staged-plan items:** `Stage 2` directly, with `Stage 1` parity checks
+remaining in force.
 
 ### Goal
 
@@ -42,6 +89,9 @@ Make the board-worker backend an explicit alpha-mu concept without changing the 
 
 ## PR 2 — Apple-only alpha-mu `GCD` board scheduler
 
+**Related staged-plan items:** `Stage 3` directly, with `Stage 1` parity checks
+remaining in force.
+
 ### Goal
 
 Add a new Apple-only board-worker backend for alpha-mu using Grand Central Dispatch.
@@ -70,6 +120,9 @@ Add a new Apple-only board-worker backend for alpha-mu using Grand Central Dispa
 
 ## PR 3 — Benchmark and instrumentation gate for Apple worker backends
 
+**Related staged-plan items:** the routine-comparison portion of `Stage 4`, with
+`Stage 1` parity checks remaining in force.
+
 ### Goal
 
 Make worker-backend comparisons routine and reproducible.
@@ -89,6 +142,10 @@ Make worker-backend comparisons routine and reproducible.
 
 ## PR 4 — Apple-specific DDS improvements with generic fallback preserved
 
+**Related staged-plan items:** the measurement-first and preserved-fallback
+portion of `Stage 4` and `Stage 5`, with `Stage 1` parity checks remaining in
+force.
+
 ### Goal
 
 Pursue deeper Apple-only DDS work only if alpha-mu measurement shows that board scheduling is no longer the main limiter.
@@ -105,6 +162,9 @@ Pursue deeper Apple-only DDS work only if alpha-mu measurement shows that board 
 This PR should proceed only if measurement shows that the remaining alpha-mu bottleneck is substantially inside DDS rather than in alpha-mu board scheduling or alpha-mu bridge/front logic.
 
 ## PR 5 — Explicit portability tradeoff decision, if needed
+
+**Related staged-plan items:** `Stage 6`, reached only after the lower-cost
+`Stage 5` preserved-fallback options have been evaluated.
 
 ### Goal
 
@@ -125,7 +185,12 @@ Every such PR must state:
 The repository is now at the point where `PR 5` can be evaluated explicitly, but
 it is **not yet justified** by the current evidence.
 
-- `PR 1` through `PR 4` are functionally in place for the current scoped plan.
+To make status unambiguous: `PR 1`, `PR 2`, `PR 3`, and the currently scoped
+measurement-first slice of `PR 4` are complete. The remaining open items in this
+document belong to `PR 5` evaluation and to any later optional follow-on
+`Bucket B` optimisation work, not to unfinished `PR 1`–`PR 4` implementation.
+
+- `PR 1` through `PR 4` are complete for the current scoped plan.
 - Apple worker-backend comparisons are now routine and reproducible via the
   dedicated backend comparison runner and `make apple-backend-compare`.
 - The current `PR 4` slice added per-root DDS phase timing fields for the leaf
@@ -152,7 +217,7 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 
 ### PR 5 checklist
 
-- [x] `PR 1` through `PR 4` groundwork is in place.
+- [x] `PR 1` through `PR 4` are complete for the current scoped plan.
 - [x] Generic-vs-specialized parity checks remain part of the Apple-silicon plan.
 - [x] Reproducible backend-comparison tooling exists for `stl` vs `gcd` alpha-mu runs.
 - [x] Focused DDS leaf-path instrumentation exists for the exact alpha-mu leaf contexts.
@@ -171,7 +236,8 @@ spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
 ### Current recommendation
 
 Do **not** treat `PR 5` as an implementation PR yet. Treat it as a gated
-decision point. The next concrete work should still be:
+decision point. `PR 1`–`PR 4` do not need further completion work for the
+current plan. The next concrete work should instead be:
 
 1. finish the focused instrumentation cleanup,
 2. collect the updated DDS leaf-path timing evidence,
@@ -194,7 +260,7 @@ This repository change set implements:
 - **PR 1**
 - **PR 2**
 - **PR 3**
-- **PR 4** (measurement-first slice)
+- **PR 4** (measurement-first slice, complete for the current stage)
 
 The repository now includes a dedicated backend-comparison runner and Makefile
 entry point for repeated `stl` vs `gcd` alpha-mu benchmark comparisons with
@@ -203,4 +269,9 @@ export for the exact leaf contexts alpha-mu actually uses, so future Apple DDS
 tuning can be driven by measured `ab_us`, `qt_us`, `lt_us`, `movegen_us`,
 `lookup_us`, `build_us`, and `undo_us` data instead of another speculative
 micro-change.
+
+The remaining unchecked items above are therefore not hidden `PR 1`–`PR 4`
+carry-over tasks. They are the explicit prerequisites for opening a true `PR 5`
+portability-tradeoff decision, plus any optional later optimisation work that
+continues to preserve the generic fallback.
 

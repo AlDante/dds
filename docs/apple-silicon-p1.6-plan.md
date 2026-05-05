@@ -7,6 +7,46 @@ This note turns audit item `P1.6` into a concrete engineering plan for this repo
 For the PR-sized execution sequence derived from this plan, see
 `docs/apple-silicon-p1.6-pr-plan.md`.
 
+The intended relationship between the two documents is:
+
+- `docs/apple-silicon-p1.6-plan.md` is the higher-level strategy and staged
+  architecture document.
+- `docs/apple-silicon-p1.6-pr-plan.md` is the execution-level companion that
+  turns those stages into reviewable, status-tracked PR slices.
+
+## Stage-to-PR relationship
+
+The stages in this document map to the PR plan in `docs/apple-silicon-p1.6-pr-plan.md`
+as follows:
+
+- **Stage 0** — document the current truth
+  - covered by the doc and planning updates that establish the current macOS
+    backend reality and the `alpha-mu` / `DDS` boundary for the later work
+- **Stage 1** — keep parity checks for generic vs M1-specialized `DDS`
+  - remains a standing requirement across **PR 1** through **PR 5** rather than
+    a single isolated PR
+- **Stage 2** — add an alpha-mu worker-backend abstraction
+  - corresponds directly to **PR 1**
+- **Stage 3** — add an Apple-only alpha-mu `GCD` board scheduler
+  - corresponds directly to **PR 2**
+- **Stage 4** — measure whether `DDS` backend selection matters for alpha-mu leaf work
+  - corresponds primarily to **PR 3** and the measurement-first slice of
+    **PR 4**
+- **Stage 5** — consider Apple-specific `DDS` changes with generic fallback preserved
+  - corresponds to the current preserved-fallback slice of **PR 4** and any
+    later optional `Bucket B` follow-on optimisation work
+- **Stage 6** — explicit escalation path if `DDS` portability must be sacrificed
+  - corresponds directly to **PR 5**
+
+So in short:
+
+- **PR 1** implements **Stage 2**
+- **PR 2** implements **Stage 3**
+- **PR 3** implements the routine-comparison part of **Stage 4**
+- **PR 4** implements the current measurement-first / preserved-fallback slice of
+  **Stage 4** and **Stage 5**
+- **PR 5** is the concrete decision point for **Stage 6**
+
 It is written with three constraints in mind:
 
 1. `DDS` is historically portable and should remain usable across multiple platforms where practical.
@@ -205,6 +245,36 @@ Those ramifications are real, but they are still **smaller** than re-architectin
 
 ## Recommended staged plan
 
+## Current implementation status (`2026-05-05`)
+
+To keep this document explicit about what is finished versus what is still
+open:
+
+- [x] **Stage 0** is complete: the docs now record the current backend reality
+  on macOS, including the separation between `DDS_TARGET_APPLE_M1_MAX` and
+  backend selection.
+- [x] **Stage 1** is complete for the current plan: generic-vs-specialized
+  parity remains an explicit Apple-Silicon gate.
+- [x] **Stage 2** is complete: alpha-mu now has an explicit worker-backend
+  abstraction.
+- [x] **Stage 3** is complete: an Apple-only `GCD` alpha-mu worker backend has
+  been added and kept comparable against the `stl` baseline.
+- [x] **Stage 4** is complete for the current scoped plan: measurement-first
+  instrumentation and focused regression lanes are in place so DDS leaf-path
+  costs can be inspected directly.
+- [x] **Initial Stage 5 groundwork** is complete for the current stage: the
+  repository now has the Apple-specific DDS instrumentation needed to guide
+  preserved-fallback tuning without yet making any portability sacrifice.
+- [ ] **Remaining work is not earlier-stage carry-over work.** The open items
+  now belong to either:
+  - optional further **Stage 5** preserved-fallback optimisation work, or
+  - a future **Stage 6** portability-tradeoff decision if lower-cost options do
+	not deliver enough gain.
+
+In other words: the staged foundation is in place, and the next decisions are
+about which measured follow-on optimisation to pursue, not about finishing the
+basic `P1.6` structure.
+
 ### Stage 0 — Document the current truth
 
 Record and preserve these facts:
@@ -303,14 +373,29 @@ That choice is allowed by project goals, but it should be treated as a conscious
 
 ## Recommendation on immediate next work
 
-The recommended immediate `P1.6` plan is:
+The original immediate `P1.6` sequence has now been completed for the current
+scope:
 
-1. keep `DDS` generic-vs-specialized parity and benchmark comparison as a permanent Apple-Silicon gate,
-2. do **not** start by rewriting DDS threading,
-3. add an explicit alpha-mu worker-backend abstraction,
-4. prototype an Apple-only GCD backend for alpha-mu board-parallel work,
-5. benchmark `std::thread` vs `GCD` in alpha-mu before making further DDS portability tradeoffs,
-6. only if the measured bottleneck remains inside DDS should further Apple-specific DDS work proceed.
+- [x] keep `DDS` generic-vs-specialized parity and benchmark comparison as a
+  permanent Apple-Silicon gate,
+- [x] do **not** start by rewriting DDS threading,
+- [x] add an explicit alpha-mu worker-backend abstraction,
+- [x] prototype an Apple-only GCD backend for alpha-mu board-parallel work,
+- [x] benchmark `std::thread` vs `GCD` in alpha-mu before making further DDS
+  portability tradeoffs,
+- [x] add the current measurement-first DDS instrumentation slice so leaf-path
+  costs can be inspected before considering deeper DDS changes.
+
+The remaining immediate work is now:
+
+- [ ] re-run the focused instrumented lane and summarize the updated DDS
+  leaf-path timing evidence,
+- [ ] confirm whether the next material bottleneck is still inside `DDS`
+  rather than in alpha-mu board scheduling, bridge/front work, or reporting,
+- [ ] if the bottleneck is still inside `DDS`, start with the highest-confidence
+  preserved-fallback work from `docs/optimisation-plan.md`,
+- [ ] only if lower-cost preserved-fallback work is insufficient, open an
+  explicit Stage 6 / `PR 5` portability-tradeoff decision.
 
 ## Signals to watch for during implementation
 
@@ -334,9 +419,12 @@ The following outcomes should be treated as explicit warning signals.
 
 `P1.6` should be considered well-implemented when:
 
-- Apple-Silicon DDS specialization remains parity-tested against generic DDS,
-- the docs explicitly describe the current backend reality on macOS,
-- alpha-mu has an explicit place to host Apple-specific board scheduling,
-- Apple `GCD` has been evaluated where it actually matters for alpha-mu,
-- and any future portability sacrifice in DDS is recorded as an intentional tradeoff rather than an accidental side effect.
+- [x] Apple-Silicon DDS specialization remains parity-tested against generic
+  DDS,
+- [x] the docs explicitly describe the current backend reality on macOS,
+- [x] alpha-mu has an explicit place to host Apple-specific board scheduling,
+- [x] Apple `GCD` has been evaluated where it actually matters for alpha-mu,
+- [ ] any future portability sacrifice in DDS is recorded as an intentional
+  tradeoff rather than an accidental side effect if such a sacrifice is ever
+  chosen.
 
