@@ -14,6 +14,14 @@ The profiling ladder (see `docs/performance-log.md`) established that:
 4. The **`8.4` packed `moveType`** and **`8.5` `pos` hot-field reorder** showed mixed/neutral results in isolation but were not harmful under the profiling build.
 5. The dominant hot path remains `ABsearch* → MakeNext → Make/Undo → QuickTricks → SolveBoardInternal`.
 
+The focused `DDS_ALPHA_MU_STATS` lane also clarified one instrumentation concern:
+the remaining `ALPHA_MU root ...` text is not evidence of a second legacy
+alpha-mu-only emitter. It is the historical prefix emitted by the single shared
+exact-root reporting helper in `src/SolverIF.cpp`, which is exercised by the
+instrumented DDS contexts `SolveBoardInternal`, `SolveSameBoard`, and
+`AnalyseLaterBoard`. That means the current evidence still favors the lower-risk
+`Bucket B` backlog below over any immediate `PR 5` portability sacrifice.
+
 ---
 
 ## Prioritised Action Items

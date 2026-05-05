@@ -132,6 +132,10 @@ static void ReportRootSearchStats(
 {
   ostringstream oss;
 
+  // Keep the historical prefix for benchmark/parser compatibility.
+  // This is the single DDS root-search emitter used by the focused
+  // instrumentation contexts (`SolveBoardInternal`, `SolveSameBoard`, and
+  // `AnalyseLaterBoard`), not a separate legacy alpha-mu-specific path.
   oss << "ALPHA_MU root"
       << " context=" << RootSearchContextName(context)
       << " probes=" << probes

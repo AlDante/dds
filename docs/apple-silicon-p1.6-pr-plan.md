@@ -120,6 +120,65 @@ Every such PR must state:
 4. the generic fallback or backend impact,
 5. and the correctness/parity checks that still remain in force.
 
+### Current readiness assessment (`2026-05-04`)
+
+The repository is now at the point where `PR 5` can be evaluated explicitly, but
+it is **not yet justified** by the current evidence.
+
+- `PR 1` through `PR 4` are functionally in place for the current scoped plan.
+- Apple worker-backend comparisons are now routine and reproducible via the
+  dedicated backend comparison runner and `make apple-backend-compare`.
+- The current `PR 4` slice added per-root DDS phase timing fields for the leaf
+  contexts alpha-mu actually exercises: `ab_us`, `qt_us`, `lt_us`,
+  `movegen_us`, `lookup_us`, `build_us`, and `undo_us`.
+- The focused instrumented lane has been shortened so `make instrumented-check`
+  now exercises only the explicit `hands/list10.txt` regression input and no
+  longer pulls in the long-running `thomas1` / `thomas2` cases.
+- The remaining `ALPHA_MU root` text in the instrumented output has now been
+  traced to the single `ReportRootSearchStats()` emitter in `src/SolverIF.cpp`.
+  That emitter is shared by the DDS exact-root search contexts
+  `SolveBoardInternal`, `SolveSameBoard`, and `AnalyseLaterBoard`; the prefix is
+  being kept intentionally for benchmark-parser and log-schema compatibility,
+  not because a second legacy alpha-mu-only emitter still exists.
+- The optimisation backlog is now clearer, and the next plausible DDS-side work
+  items (`-flto`, NEON helper cleanup in `ABsearch_m1max.cpp`, worker QoS, and
+  the `QuickTricks` refactor) all still fit **Bucket B**: Apple-specific or
+  performance-oriented DDS work with the generic fallback preserved.
+
+So the current state still supports the original policy: keep the generic path
+alive, use the measurement-first tooling to locate the actual remaining leaf hot
+spots, and do **not** open a real portability-sacrifice `PR 5` until a specific
+`Bucket C` change is shown to beat the lower-cost alternatives.
+
+### PR 5 checklist
+
+- [x] `PR 1` through `PR 4` groundwork is in place.
+- [x] Generic-vs-specialized parity checks remain part of the Apple-silicon plan.
+- [x] Reproducible backend-comparison tooling exists for `stl` vs `gcd` alpha-mu runs.
+- [x] Focused DDS leaf-path instrumentation exists for the exact alpha-mu leaf contexts.
+- [x] The focused instrumented regression lane has been reduced to `hands/list10.txt`.
+- [x] Finish tracing and either remove or explicitly justify the remaining legacy `ALPHA_MU root` emitter in the instrumented output.
+- [ ] Re-run the focused instrumented lane and summarize the updated phase timings for the remaining hot leaf contexts.
+- [ ] Confirm that the next material bottleneck is still inside `DDS`, not in alpha-mu board scheduling, front/world work, or reporting overhead.
+- [ ] Name the exact proposed `Bucket C` portability tradeoff rather than a general class of possible optimisations.
+- [ ] Quantify the expected gain of that exact tradeoff on the representative Apple workload.
+- [ ] State the portability or maintainability cost being accepted.
+- [ ] State which generic fallback, backend, or portable path would be weakened, bypassed, or left behind.
+- [ ] Show that lower-cost `Bucket A` / `Bucket B` options were either exhausted, measured, or intentionally deferred with reasons.
+- [ ] Preserve the existing correctness and parity gates for the chosen change (`regression_api`, `dtest`, `play_analysis_benchmark`, and backend semantic-stability checks where relevant).
+- [ ] Record the final tradeoff decision plainly in the PR description and follow-up docs.
+
+### Current recommendation
+
+Do **not** treat `PR 5` as an implementation PR yet. Treat it as a gated
+decision point. The next concrete work should still be:
+
+1. finish the focused instrumentation cleanup,
+2. collect the updated DDS leaf-path timing evidence,
+3. and then start with the highest-confidence preserved-fallback work from
+   `docs/optimisation-plan.md` before considering any true portability
+   sacrifice.
+
 ## Recommended order
 
 1. PR 1 — explicit alpha-mu worker-backend abstraction

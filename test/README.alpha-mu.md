@@ -3,6 +3,7 @@
 This runner executes the current alpha-mu measurement cycle against the DDS test harnesses.
 
 It works with the compile-time-gated root instrumentation in `src/SolverIF.cpp` enabled by `DDS_ALPHA_MU_STATS`.
+The `ALPHA_MU root ...` prefix is historical and retained for parser/log compatibility, but the emitter itself is the shared DDS exact-root instrumentation used by `SolveBoardInternal`, `SolveSameBoard`, and `AnalyseLaterBoard`.
 
 ## Files
 
