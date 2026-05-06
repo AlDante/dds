@@ -15,6 +15,9 @@ from typing import Any
 
 PHASE_TIME_FIELDS = [
     "ab_us",
+    "make_us",
+    "eval_us",
+    "nextmove_us",
     "qt_us",
     "lt_us",
     "movegen_us",
@@ -23,11 +26,19 @@ PHASE_TIME_FIELDS = [
     "undo_us",
 ]
 
-LEGACY_PHASE_TIME_FIELDS = {
-    "make_us",
-    "eval_us",
-    "nextmove_us",
-}
+AB_SUBPHASE_TIME_FIELDS = [
+    "ab_terminal_us",
+    "ab_childloop_us",
+    "ab_cutoff_us",
+    "ab_recurse_setup_us",
+    "ab_node_setup_us",
+    "ab_loop_control_us",
+    "ab_post_child_us",
+    "ab_tt_prep_us",
+    "ab_other_us",
+]
+
+LEGACY_PHASE_TIME_FIELDS: set[str] = set()
 
 
 DEFAULT_WORKLOADS = [
@@ -145,7 +156,9 @@ def parse_root_lines(output: str) -> list[dict[str, Any]]:
         unexpected_phase_fields = sorted(
             field_name
             for field_name in fields
-            if field_name.endswith("_us") and field_name not in PHASE_TIME_FIELDS
+            if field_name.endswith("_us")
+            and field_name not in PHASE_TIME_FIELDS
+            and field_name not in AB_SUBPHASE_TIME_FIELDS
         )
         if unexpected_phase_fields:
             unexpected_text = ", ".join(unexpected_phase_fields)
@@ -155,6 +168,11 @@ def parse_root_lines(output: str) -> list[dict[str, Any]]:
         if missing_phase_fields:
             missing_text = ", ".join(missing_phase_fields)
             raise ValueError(f"ALPHA_MU root line missed required phase fields: {missing_text}: {line}")
+
+        missing_ab_subphase_fields = [field_name for field_name in AB_SUBPHASE_TIME_FIELDS if field_name not in fields]
+        if missing_ab_subphase_fields:
+            missing_text = ", ".join(missing_ab_subphase_fields)
+            raise ValueError(f"ALPHA_MU root line missed required AB subphase fields: {missing_text}: {line}")
 
         bounds = fields.get("initial_bounds", "[0,0]")
         bounds_text = bounds.strip("[]")
@@ -169,6 +187,8 @@ def parse_root_lines(output: str) -> list[dict[str, Any]]:
             "guess_relation": fields.get("guess_relation", "unknown"),
         }
         for field_name in PHASE_TIME_FIELDS:
+            entry[field_name] = int(fields[field_name])
+        for field_name in AB_SUBPHASE_TIME_FIELDS:
             entry[field_name] = int(fields[field_name])
         entries.append(entry)
     return entries
@@ -202,6 +222,11 @@ def aggregate_root_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
             "final_score_counts": dict(sorted(score_counts.items())),
         }
         for field_name in PHASE_TIME_FIELDS:
+            phase_values = [float(entry[field_name]) for entry in context_entries if field_name in entry]
+            if phase_values:
+                context_summary[f"avg_{field_name}"] = average(phase_values)
+                context_summary[f"max_{field_name}"] = max(phase_values)
+        for field_name in AB_SUBPHASE_TIME_FIELDS:
             phase_values = [float(entry[field_name]) for entry in context_entries if field_name in entry]
             if phase_values:
                 context_summary[f"avg_{field_name}"] = average(phase_values)
@@ -316,6 +341,16 @@ def markdown_summary(summary: dict[str, Any]) -> str:
                     )
             if phase_lines:
                 lines.append(f"- Phase timings (us): `{'; '.join(phase_lines)}`")
+            ab_subphase_lines = []
+            for field_name in AB_SUBPHASE_TIME_FIELDS:
+                avg_key = f"avg_{field_name}"
+                max_key = f"max_{field_name}"
+                if avg_key in context_summary:
+                    ab_subphase_lines.append(
+                        f"{field_name}: avg={context_summary[avg_key]:.1f} max={context_summary[max_key]:.0f}"
+                    )
+            if ab_subphase_lines:
+                lines.append(f"- AB subphase timings (us): `{'; '.join(ab_subphase_lines)}`")
             lines.append("")
 
     lines.append("## Notes")

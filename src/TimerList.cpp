@@ -43,6 +43,14 @@ void TimerList::Reset()
   timerGroups[TIMER_NO_MOVEGEN].SetNames("MoveGen");
   timerGroups[TIMER_NO_LOOKUP].SetNames("Lookup");
   timerGroups[TIMER_NO_BUILD].SetNames("Build");
+  timerGroups[TIMER_NO_AB_TERMINAL].SetNames("ABTerm");
+  timerGroups[TIMER_NO_AB_CHILDLOOP].SetNames("ABChild");
+  timerGroups[TIMER_NO_AB_CUTOFF].SetNames("ABCut");
+  timerGroups[TIMER_NO_AB_RECURSE_SETUP].SetNames("ABRecurse");
+  timerGroups[TIMER_NO_AB_NODE_SETUP].SetNames("ABNode");
+  timerGroups[TIMER_NO_AB_LOOP_CONTROL].SetNames("ABLoop");
+  timerGroups[TIMER_NO_AB_POST_CHILD].SetNames("ABPost");
+  timerGroups[TIMER_NO_AB_TT_PREP].SetNames("ABTT");
 }
 
 
@@ -84,7 +92,7 @@ TimerListSummary TimerList::Summary() const
   TimerGroup ABGroup;
   ABGroup = timerGroups[TIMER_NO_AB];
   ABGroup.Differentiate();
-  for (unsigned g = 1; g < TIMER_NO_SIZE; g++)
+  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
     ABGroup -= timerGroups[g];
 
   summary.abUserMicros = ABGroup.UserTimeMicroseconds();
@@ -97,6 +105,24 @@ TimerListSummary TimerList::Summary() const
   summary.moveGenUserMicros = timerGroups[TIMER_NO_MOVEGEN].UserTimeMicroseconds();
   summary.lookupUserMicros = timerGroups[TIMER_NO_LOOKUP].UserTimeMicroseconds();
   summary.buildUserMicros = timerGroups[TIMER_NO_BUILD].UserTimeMicroseconds();
+  summary.abTerminalUserMicros = timerGroups[TIMER_NO_AB_TERMINAL].UserTimeMicroseconds();
+  summary.abChildLoopUserMicros = timerGroups[TIMER_NO_AB_CHILDLOOP].UserTimeMicroseconds();
+  summary.abCutoffUserMicros = timerGroups[TIMER_NO_AB_CUTOFF].UserTimeMicroseconds();
+  summary.abRecurseSetupUserMicros = timerGroups[TIMER_NO_AB_RECURSE_SETUP].UserTimeMicroseconds();
+  summary.abNodeSetupUserMicros = timerGroups[TIMER_NO_AB_NODE_SETUP].UserTimeMicroseconds();
+  summary.abLoopControlUserMicros = timerGroups[TIMER_NO_AB_LOOP_CONTROL].UserTimeMicroseconds();
+  summary.abPostChildUserMicros = timerGroups[TIMER_NO_AB_POST_CHILD].UserTimeMicroseconds();
+  summary.abTTPrepUserMicros = timerGroups[TIMER_NO_AB_TT_PREP].UserTimeMicroseconds();
+  summary.abOtherUserMicros =
+    summary.abUserMicros -
+    summary.abTerminalUserMicros -
+    summary.abChildLoopUserMicros -
+    summary.abCutoffUserMicros -
+    summary.abRecurseSetupUserMicros -
+    summary.abNodeSetupUserMicros -
+    summary.abLoopControlUserMicros -
+    summary.abPostChildUserMicros -
+    summary.abTTPrepUserMicros;
   return summary;
 }
 
@@ -115,7 +141,7 @@ void TimerList::PrintStats(ofstream& fout) const
   TimerGroup ABGroup;
   ABGroup = timerGroups[0];
   ABGroup.Differentiate();
-  for (unsigned g = 1; g < TIMER_NO_SIZE; g++)
+  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
     ABGroup -= timerGroups[g];
 
   Timer ABTotal;
@@ -124,7 +150,7 @@ void TimerList::PrintStats(ofstream& fout) const
   ABTotal.SetName("Sum");
 
   Timer sumTotal = ABTotal;
-  for (unsigned g = 1; g < TIMER_NO_SIZE; g++)
+  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
   {
     Timer t;
     timerGroups[g].Sum(t);
@@ -133,7 +159,7 @@ void TimerList::PrintStats(ofstream& fout) const
 
   fout << timerGroups[0].Header();
   fout << ABGroup.SumLine(sumTotal);
-  for (unsigned g = 1; g < TIMER_NO_SIZE; g++)
+  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
     fout << timerGroups[g].SumLine(sumTotal);
   fout << timerGroups[0].DashLine();
   fout << sumTotal.SumLine(sumTotal) << endl;
@@ -144,6 +170,27 @@ void TimerList::PrintStats(ofstream& fout) const
     fout << ABGroup.TimerLines(ABTotal);
     fout << ABGroup.DashLine();
     fout << ABTotal.SumLine(ABTotal) << endl;
+  }
+
+  Timer ABSubphaseTotal;
+  for (unsigned g = TIMER_NO_AB_TERMINAL; g < TIMER_NO_SIZE; g++)
+  {
+    Timer t;
+    timerGroups[g].Sum(t);
+    ABSubphaseTotal += t;
+  }
+
+  if (ABSubphaseTotal.Used())
+  {
+    fout << timerGroups[0].Header();
+    for (unsigned g = TIMER_NO_AB_TERMINAL; g < TIMER_NO_SIZE; g++)
+      fout << timerGroups[g].SumLine(ABTotal);
+
+    Timer ABOther = ABTotal;
+    ABOther -= ABSubphaseTotal;
+    fout << ABOther.SumLine(ABTotal, "ABOther");
+    fout << timerGroups[0].DashLine();
+    fout << ABTotal.SumLine(ABTotal, "ABTotal") << endl;
   }
 
 #ifdef DDS_TIMING_DETAILS

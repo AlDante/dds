@@ -74,7 +74,15 @@ enum ABTimerType
   TIMER_NO_MOVEGEN = 7,
   TIMER_NO_LOOKUP = 8,
   TIMER_NO_BUILD = 9,
-  TIMER_NO_SIZE = 10
+  TIMER_NO_AB_TERMINAL = 10,
+  TIMER_NO_AB_CHILDLOOP = 11,
+  TIMER_NO_AB_CUTOFF = 12,
+  TIMER_NO_AB_RECURSE_SETUP = 13,
+  TIMER_NO_AB_NODE_SETUP = 14,
+  TIMER_NO_AB_LOOP_CONTROL = 15,
+  TIMER_NO_AB_POST_CHILD = 16,
+  TIMER_NO_AB_TT_PREP = 17,
+  TIMER_NO_SIZE = 18
 };
 
 
@@ -90,6 +98,15 @@ struct TimerListSummary
   long moveGenUserMicros;
   long lookupUserMicros;
   long buildUserMicros;
+  long abTerminalUserMicros;
+  long abChildLoopUserMicros;
+  long abCutoffUserMicros;
+  long abRecurseSetupUserMicros;
+  long abNodeSetupUserMicros;
+  long abLoopControlUserMicros;
+  long abPostChildUserMicros;
+  long abTTPrepUserMicros;
+  long abOtherUserMicros;
 
   TimerListSummary() :
     abUserMicros(0),
@@ -101,7 +118,16 @@ struct TimerListSummary
     laterTricksUserMicros(0),
     moveGenUserMicros(0),
     lookupUserMicros(0),
-    buildUserMicros(0)
+    buildUserMicros(0),
+    abTerminalUserMicros(0),
+    abChildLoopUserMicros(0),
+    abCutoffUserMicros(0),
+    abRecurseSetupUserMicros(0),
+    abNodeSetupUserMicros(0),
+    abLoopControlUserMicros(0),
+    abPostChildUserMicros(0),
+    abTTPrepUserMicros(0),
+    abOtherUserMicros(0)
   {
   }
 
@@ -118,6 +144,15 @@ struct TimerListSummary
     delta.moveGenUserMicros = moveGenUserMicros - other.moveGenUserMicros;
     delta.lookupUserMicros = lookupUserMicros - other.lookupUserMicros;
     delta.buildUserMicros = buildUserMicros - other.buildUserMicros;
+    delta.abTerminalUserMicros = abTerminalUserMicros - other.abTerminalUserMicros;
+    delta.abChildLoopUserMicros = abChildLoopUserMicros - other.abChildLoopUserMicros;
+    delta.abCutoffUserMicros = abCutoffUserMicros - other.abCutoffUserMicros;
+    delta.abRecurseSetupUserMicros = abRecurseSetupUserMicros - other.abRecurseSetupUserMicros;
+    delta.abNodeSetupUserMicros = abNodeSetupUserMicros - other.abNodeSetupUserMicros;
+    delta.abLoopControlUserMicros = abLoopControlUserMicros - other.abLoopControlUserMicros;
+    delta.abPostChildUserMicros = abPostChildUserMicros - other.abPostChildUserMicros;
+    delta.abTTPrepUserMicros = abTTPrepUserMicros - other.abTTPrepUserMicros;
+    delta.abOtherUserMicros = abOtherUserMicros - other.abOtherUserMicros;
     return delta;
   }
 };
