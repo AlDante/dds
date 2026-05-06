@@ -12,7 +12,7 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
-## 2026-05-06 00:00:00 — Residual `ab_us` split snapshot on commit `c97abd8` (dirty)
+## 2026-05-06 00:00:00 — Corrected residual `ab_us` split snapshot on commit `c97abd8` (dirty)
 
 - Captured logs:
   - `test/build/ab_subphase_regression_api_list1.log`
@@ -21,24 +21,24 @@ _If an entry includes `Graph outliers`, those workload values remain recorded be
   - `test/build/ab_subphase_play_analysis.stderr`
   - `test/build/aggregate_ab_snapshot.py`
 - Platform: Apple-Silicon macOS host
-- Result: `play_analysis_benchmark` completed with exit status `0`; the heavier
-  `list10` regression lane became too slow under the expanded instrumentation for
-  a clean full-session capture, so the recorded aggregate below uses the clean
-  complete-line snapshot from `regression_api ../hands/list1.txt` plus the full
-  play-analysis log.
+- Result: after the AB instrumentation cleanup pass, both focused commands were
+  rerun successfully. The heavier `list10` regression lane remained too slow
+  under the expanded instrumentation for a clean full-session capture, so the
+  recorded aggregate below uses the finished `regression_api ../hands/list1.txt`
+  rerun plus the refreshed full play-analysis log.
 
 | Command | Status | Notes |
 | --- | --- | --- |
-| `test/build-instrumented/regression_api ../hands/list1.txt` | snapshot | Clean complete-line sample used for aggregation; produced `1223` complete root lines before the run was stopped. |
-| `test/build-instrumented/play_analysis_benchmark` | pass | Completed with `play_analysis_benchmark: hand 3 OK`. |
+| `test/build-instrumented/regression_api ../hands/list1.txt` | pass | Finished cleanly in the focused rerun; produced `1223` complete root lines for aggregation. |
+| `test/build-instrumented/play_analysis_benchmark` | pass | Refreshed after the cleanup pass; produced `107` complete root lines for aggregation. |
 
 ### Root-line coverage by file
 
 | Log | Complete root lines | `SolveBoardInternal` | `SolveSameBoard` | `AnalyseLaterBoard` |
 | --- | ---: | ---: | ---: | ---: |
-| `ab_subphase_regression_api_list1.log` | `1116` | `143` | `360` | `613` |
-| `ab_subphase_play_analysis.log` | `107` | `0` | `0` | `107` |
-| Combined snapshot | `1223` | `143` | `360` | `720` |
+| `ab_subphase_regression_api_list1.log` | `1223` | `143` | `360` | `720` |
+| `ab_subphase_play_analysis.log` | `107` | `3` | `0` | `104` |
+| Combined snapshot | `1330` | `146` | `360` | `824` |
 
 ### Aggregate DDS phase shares from the residual-AB snapshot
 
@@ -48,53 +48,59 @@ wall-clock accounting.
 
 | Phase | Total | Share |
 | --- | ---: | ---: |
-| `ab_us` | `401416672 us` | `90.03%` |
-| `make_us` | `25028154 us` | `5.61%` |
-| `undo_us` | `5239425 us` | `1.18%` |
-| `movegen_us` | `4645413 us` | `1.04%` |
-| `lookup_us` | `2817178 us` | `0.63%` |
-| `nextmove_us` | `2761575 us` | `0.62%` |
-| `qt_us` | `2315084 us` | `0.52%` |
-| `lt_us` | `889457 us` | `0.20%` |
-| `build_us` | `718779 us` | `0.16%` |
-| `eval_us` | `14844 us` | `0.00%` |
+| `ab_us` | `670461281 us` | `92.13%` |
+| `make_us` | `32381611 us` | `4.45%` |
+| `undo_us` | `6800595 us` | `0.93%` |
+| `movegen_us` | `5962693 us` | `0.82%` |
+| `nextmove_us` | `3549788 us` | `0.49%` |
+| `lookup_us` | `3505415 us` | `0.48%` |
+| `qt_us` | `3019330 us` | `0.41%` |
+| `lt_us` | `1192725 us` | `0.16%` |
+| `build_us` | `839129 us` | `0.12%` |
+| `eval_us` | `16487 us` | `0.00%` |
 
 ### AB residual split from the snapshot
 
 | AB diagnostic field | Total | Share of `ab_us` |
 | --- | ---: | ---: |
-| `ab_terminal_us` | `4155580 us` | `1.04%` |
-| `ab_childloop_us` | `7786832 us` | `1.94%` |
-| `ab_cutoff_us` | `4408111 us` | `1.10%` |
-| `ab_recurse_setup_us` | `1671650 us` | `0.42%` |
-| `ab_node_setup_us` | `4042837 us` | `1.01%` |
-| `ab_loop_control_us` | `10844895 us` | `2.70%` |
-| `ab_post_child_us` | `5283480 us` | `1.32%` |
-| `ab_tt_prep_us` | `2550403 us` | `0.64%` |
-| `ab_other_us` | `360672884 us` | `89.85%` |
+| `ab_terminal_us` | `12820004 us` | `1.91%` |
+| `ab_childloop_us` | `9798245 us` | `1.46%` |
+| `ab_cutoff_us` | `7062954 us` | `1.05%` |
+| `ab_recurse_setup_us` | `2068775 us` | `0.31%` |
+| `ab_node_setup_us` | `5181353 us` | `0.77%` |
+| `ab_loop_control_us` | `13985745 us` | `2.09%` |
+| `ab_post_child_us` | `6637068 us` | `0.99%` |
+| `ab_tt_prep_us` | `3269931 us` | `0.49%` |
+| `ab_setup_us` | `25008575 us` | `3.73%` |
+| `ab_terminal_control_us` | `17963028 us` | `2.68%` |
+| `ab_iteration_control_us` | `204718199 us` | `30.53%` |
+| `ab_store_prep_us` | `2685133 us` | `0.40%` |
+| `ab_other_us` | `407266342 us` | `60.74%` |
 
 ### Context-level AB summary
 
 | Context | Complete root lines | Share of measured phase time | AB diagnostic mix |
 | --- | ---: | ---: | --- |
-| `SolveBoardInternal` | `143` | `65.89%` | `ab_other_us 87.72%`, `ab_loop_control_us 3.31%`, `ab_childloop_us 2.37%`, `ab_post_child_us 1.62%` |
-| `SolveSameBoard` | `360` | `33.09%` | `ab_other_us 93.65%`, `ab_loop_control_us 1.61%`, `ab_childloop_us 1.18%`, `ab_terminal_us 0.88%` |
-| `AnalyseLaterBoard` | `720` | `1.02%` | `ab_other_us 99.18%`; all named AB sub-buckets remain negligible in this context |
+| `SolveBoardInternal` | `146` | `68.94%` | `ab_other_us 58.18%`, `ab_iteration_control_us 32.03%`, `ab_setup_us 4.33%`, `ab_terminal_control_us 3.11%` |
+| `SolveSameBoard` | `360` | `30.09%` | `ab_other_us 66.02%`, `ab_iteration_control_us 27.43%`, `ab_setup_us 2.49%`, `ab_terminal_us 2.00%` |
+| `AnalyseLaterBoard` | `824` | `0.97%` | `ab_other_us 73.63%`, `ab_iteration_control_us 23.78%`; all other named AB buckets remain small in this context |
 
 ### Residual-AB conclusion
 
-- The first deeper split of `ab_other_us` confirms that the named boundary
-  buckets remain secondary; the dominant residual still sits inside
-  `ab_other_us`.
-- The largest newly named bucket is `ab_loop_control_us`, but even that only
-  reaches `2.70%` of `ab_us` in the combined snapshot.
-- `SolveBoardInternal` and `SolveSameBoard` still contain essentially all of the
-  material signal, and both keep the large majority of AB time in the residual
-  untimed core (`87.72%` and `93.65%` respectively).
-- So this pass improves diagnostic visibility, but it does not change the main
-  optimization conclusion: the next meaningful search for cost should target the
-  still-dominant straight-line AB body represented by `ab_other_us`, not further
-  subdivision of already-small helper-boundary buckets.
+- After the cleanup pass, the coarse residual partition is materially more
+  informative than the earlier distorted snapshot: `ab_iteration_control_us`
+  now accounts for `30.53%` of `ab_us`, while `ab_other_us` falls to `60.74%`.
+- `ab_other_us` remains the single largest AB bucket, but it is no longer an
+  overwhelming ~90% residual. The corrected split now exposes two primary
+  coarse targets: the remaining residual body and the iteration/control portion
+  around the recursive child-processing loop.
+- `SolveBoardInternal` and `SolveSameBoard` still contain effectively all of the
+  material signal (`99.03%` of measured phase time combined), and both show the
+  same shape: a still-dominant `ab_other_us` bucket plus a now-substantial
+  `ab_iteration_control_us` bucket.
+- So the corrected next step is narrower than before: prioritize analysis of
+  the still-largest `ab_other_us` core, but treat `ab_iteration_control_us` as a
+  first-class follow-on hotspot rather than as background noise.
 
 ## 2026-05-05 00:00:00 — Stage 4 / PR 4 evidence refresh on commit `c97abd8` (dirty)
 
