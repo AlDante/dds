@@ -35,6 +35,10 @@ AB_SUBPHASE_TIME_FIELDS = [
     "ab_loop_control_us",
     "ab_post_child_us",
     "ab_tt_prep_us",
+    "ab_setup_us",
+    "ab_terminal_control_us",
+    "ab_iteration_control_us",
+    "ab_store_prep_us",
     "ab_other_us",
 ]
 

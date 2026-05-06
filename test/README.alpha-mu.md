@@ -24,7 +24,7 @@ The `ALPHA_MU root ...` prefix is historical and retained for parser/log compati
 3. runs representative workloads,
 4. captures raw logs,
 5. parses `ALPHA_MU root ...` lines,
-6. aggregates per-context DDS root-phase timing fields `ab_us`, `make_us`, `eval_us`, `nextmove_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, `build_us`, and `undo_us`, plus AB-internal diagnostic fields `ab_terminal_us`, `ab_childloop_us`, `ab_cutoff_us`, `ab_recurse_setup_us`, `ab_node_setup_us`, `ab_loop_control_us`, `ab_post_child_us`, `ab_tt_prep_us`, and the residual `ab_other_us` so the AB split remains complete,
+6. aggregates per-context DDS root-phase timing fields `ab_us`, `make_us`, `eval_us`, `nextmove_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, `build_us`, and `undo_us`, plus AB-internal diagnostic fields `ab_terminal_us`, `ab_childloop_us`, `ab_cutoff_us`, `ab_recurse_setup_us`, `ab_node_setup_us`, `ab_loop_control_us`, `ab_post_child_us`, `ab_tt_prep_us`, the coarser residual-split fields `ab_setup_us`, `ab_terminal_control_us`, `ab_iteration_control_us`, `ab_store_prep_us`, and the residual `ab_other_us` so the AB split remains complete,
 7. writes `summary.json` and `summary.md`,
 8. restores a normal non-instrumented library build by default.
 
@@ -102,7 +102,7 @@ python3 test/alpha_mu_benchmark.py --output-dir /tmp/dds-alpha-mu-run
 ## Notes
 
 - The runner sets `DYLD_LIBRARY_PATH` so the test binaries resolve `../src/build/libdds.so` on macOS.
-- `ab_us` remains the full exclusive AB bucket; the `ab_*` diagnostic fields further partition that bucket rather than replacing it.
+- `ab_us` remains the full exclusive AB bucket; the coarse residual fields `ab_setup_us`, `ab_terminal_control_us`, `ab_iteration_control_us`, `ab_store_prep_us`, and `ab_other_us` form the current top-level AB partition, while the finer `ab_node_setup_us`, `ab_loop_control_us`, `ab_post_child_us`, and `ab_tt_prep_us` fields are overlapping diagnostics kept for additional local detail.
 - If `AnalyseLaterBoard` does not appear in the summary, the next improvement should be to add a dedicated play-analysis workload.
 - The workflow is measurement-only; it does not alter deep search semantics.
 

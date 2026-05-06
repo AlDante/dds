@@ -129,6 +129,10 @@ static void AppendRootPhaseTimingFields(
       << " ab_loop_control_us=" << timerSummary.abLoopControlUserMicros
       << " ab_post_child_us=" << timerSummary.abPostChildUserMicros
       << " ab_tt_prep_us=" << timerSummary.abTTPrepUserMicros
+      << " ab_setup_us=" << timerSummary.abSetupUserMicros
+      << " ab_terminal_control_us=" << timerSummary.abTerminalControlUserMicros
+      << " ab_iteration_control_us=" << timerSummary.abIterationControlUserMicros
+      << " ab_store_prep_us=" << timerSummary.abStorePrepUserMicros
       << " ab_other_us=" << timerSummary.abOtherUserMicros;
 }
 

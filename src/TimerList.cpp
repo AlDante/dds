@@ -51,6 +51,10 @@ void TimerList::Reset()
   timerGroups[TIMER_NO_AB_LOOP_CONTROL].SetNames("ABLoop");
   timerGroups[TIMER_NO_AB_POST_CHILD].SetNames("ABPost");
   timerGroups[TIMER_NO_AB_TT_PREP].SetNames("ABTT");
+  timerGroups[TIMER_NO_AB_SETUP].SetNames("ABSetup");
+  timerGroups[TIMER_NO_AB_TERMINAL_CONTROL].SetNames("ABTermCtl");
+  timerGroups[TIMER_NO_AB_ITERATION_CONTROL].SetNames("ABIterCtl");
+  timerGroups[TIMER_NO_AB_STORE_PREP].SetNames("ABStore");
 }
 
 
@@ -113,16 +117,17 @@ TimerListSummary TimerList::Summary() const
   summary.abLoopControlUserMicros = timerGroups[TIMER_NO_AB_LOOP_CONTROL].UserTimeMicroseconds();
   summary.abPostChildUserMicros = timerGroups[TIMER_NO_AB_POST_CHILD].UserTimeMicroseconds();
   summary.abTTPrepUserMicros = timerGroups[TIMER_NO_AB_TT_PREP].UserTimeMicroseconds();
+  summary.abSetupUserMicros = timerGroups[TIMER_NO_AB_SETUP].UserTimeMicroseconds();
+  summary.abTerminalControlUserMicros = timerGroups[TIMER_NO_AB_TERMINAL_CONTROL].UserTimeMicroseconds();
+  summary.abIterationControlUserMicros = timerGroups[TIMER_NO_AB_ITERATION_CONTROL].UserTimeMicroseconds();
+  summary.abStorePrepUserMicros = timerGroups[TIMER_NO_AB_STORE_PREP].UserTimeMicroseconds();
   summary.abOtherUserMicros =
     summary.abUserMicros -
     summary.abTerminalUserMicros -
-    summary.abChildLoopUserMicros -
-    summary.abCutoffUserMicros -
-    summary.abRecurseSetupUserMicros -
-    summary.abNodeSetupUserMicros -
-    summary.abLoopControlUserMicros -
-    summary.abPostChildUserMicros -
-    summary.abTTPrepUserMicros;
+    summary.abSetupUserMicros -
+    summary.abTerminalControlUserMicros -
+    summary.abIterationControlUserMicros -
+    summary.abStorePrepUserMicros;
   return summary;
 }
 

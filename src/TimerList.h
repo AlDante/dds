@@ -82,7 +82,11 @@ enum ABTimerType
   TIMER_NO_AB_LOOP_CONTROL = 15,
   TIMER_NO_AB_POST_CHILD = 16,
   TIMER_NO_AB_TT_PREP = 17,
-  TIMER_NO_SIZE = 18
+  TIMER_NO_AB_SETUP = 18,
+  TIMER_NO_AB_TERMINAL_CONTROL = 19,
+  TIMER_NO_AB_ITERATION_CONTROL = 20,
+  TIMER_NO_AB_STORE_PREP = 21,
+  TIMER_NO_SIZE = 22
 };
 
 
@@ -106,6 +110,10 @@ struct TimerListSummary
   long abLoopControlUserMicros;
   long abPostChildUserMicros;
   long abTTPrepUserMicros;
+  long abSetupUserMicros;
+  long abTerminalControlUserMicros;
+  long abIterationControlUserMicros;
+  long abStorePrepUserMicros;
   long abOtherUserMicros;
 
   TimerListSummary() :
@@ -127,6 +135,10 @@ struct TimerListSummary
     abLoopControlUserMicros(0),
     abPostChildUserMicros(0),
     abTTPrepUserMicros(0),
+    abSetupUserMicros(0),
+    abTerminalControlUserMicros(0),
+    abIterationControlUserMicros(0),
+    abStorePrepUserMicros(0),
     abOtherUserMicros(0)
   {
   }
@@ -152,6 +164,10 @@ struct TimerListSummary
     delta.abLoopControlUserMicros = abLoopControlUserMicros - other.abLoopControlUserMicros;
     delta.abPostChildUserMicros = abPostChildUserMicros - other.abPostChildUserMicros;
     delta.abTTPrepUserMicros = abTTPrepUserMicros - other.abTTPrepUserMicros;
+    delta.abSetupUserMicros = abSetupUserMicros - other.abSetupUserMicros;
+    delta.abTerminalControlUserMicros = abTerminalControlUserMicros - other.abTerminalControlUserMicros;
+    delta.abIterationControlUserMicros = abIterationControlUserMicros - other.abIterationControlUserMicros;
+    delta.abStorePrepUserMicros = abStorePrepUserMicros - other.abStorePrepUserMicros;
     delta.abOtherUserMicros = abOtherUserMicros - other.abOtherUserMicros;
     return delta;
   }

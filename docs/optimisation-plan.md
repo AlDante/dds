@@ -26,6 +26,13 @@ The performance log and clean-slate rebuild history (see
    `77.90% ab_us`, `8.09% undo_us`, `6.24% movegen_us`, and `3.40% qt_us`;
    `SolveBoardInternal` and `SolveSameBoard` accounted for `99.77%` of measured
    phase time while `AnalyseLaterBoard` remained negligible.
+7. The follow-on `2026-05-06` residual-`ab_us` split confirmed that even after
+   adding `ab_terminal_us`, `ab_childloop_us`, `ab_cutoff_us`,
+   `ab_recurse_setup_us`, `ab_node_setup_us`, `ab_loop_control_us`,
+   `ab_post_child_us`, and `ab_tt_prep_us`, the named AB boundary buckets still
+   explain only a small minority of exclusive AB time; in the recorded snapshot,
+   `ab_other_us` remained `89.85%` of `ab_us` overall, `87.72%` in
+   `SolveBoardInternal`, and `93.65%` in `SolveSameBoard`.
 
 The focused `DDS_ALPHA_MU_STATS` lane also clarified one instrumentation concern:
 the remaining `ALPHA_MU root ...` text is not evidence of a second legacy
@@ -80,6 +87,10 @@ Only re-open DDS optimisation work if all of the following are true:
    `PR 5` tradeoff is explicitly approved,
 4. it passes the existing correctness gates (`regression_api`, `dtest`,
    `play_analysis_benchmark`, and the alpha-mu semantic checks where relevant).
+
+For AB-specific follow-on instrumentation, this now means new work should go
+after the still-dominant straight-line AB body represented by `ab_other_us`,
+not finer subdivision of already-small helper-boundary buckets.
 
 ## Notes carried forward
 
