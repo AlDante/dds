@@ -235,13 +235,9 @@ bool ABsearch(
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
   TIMER_START(TIMER_NO_AB_SETUP, depth);
-  TIMER_START(TIMER_NO_AB_SETUP, depth);
-  TIMER_START(TIMER_NO_AB_SETUP, depth);
   TIMER_START(TIMER_NO_AB_NODE_SETUP, depth);
   DDSM1ZeroWinRanks(posPoint, depth);
   TIMER_END(TIMER_NO_AB_NODE_SETUP, depth);
-  TIMER_END(TIMER_NO_AB_SETUP, depth);
-  TIMER_END(TIMER_NO_AB_SETUP, depth);
   TIMER_END(TIMER_NO_AB_SETUP, depth);
 
   while (1)
@@ -850,9 +846,11 @@ bool ABsearch2(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  TIMER_START(TIMER_NO_AB_SETUP, depth);
   TIMER_START(TIMER_NO_AB_NODE_SETUP, depth);
   DDSM1ZeroWinRanks(posPoint, depth);
   TIMER_END(TIMER_NO_AB_NODE_SETUP, depth);
+  TIMER_END(TIMER_NO_AB_SETUP, depth);
 
   while (1)
   {
@@ -955,9 +953,11 @@ bool ABsearch3(
 
   TIMER_END(TIMER_NO_MOVEGEN, depth);
 
+  TIMER_START(TIMER_NO_AB_SETUP, depth);
   TIMER_START(TIMER_NO_AB_NODE_SETUP, depth);
   DDSM1ZeroWinRanks(posPoint, depth);
   TIMER_END(TIMER_NO_AB_NODE_SETUP, depth);
+  TIMER_END(TIMER_NO_AB_SETUP, depth);
 
   while (1)
   {

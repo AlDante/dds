@@ -493,8 +493,10 @@ bool ABsearch0(
 #ifdef DDS_MOVES
       thrp->moves.RegisterHit(tricks, 0);
 #endif
+      TIMER_END(TIMER_NO_AB_CUTOFF, depth);
       goto ABexit;
     }
+    TIMER_END(TIMER_NO_AB_CUTOFF, depth);
     for (int ss = 0; ss < DDS_SUITS; ss++)
       posPoint->winRanks[depth][ss] |=
         posPoint->winRanks[depth - 1][ss];
