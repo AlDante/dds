@@ -15,30 +15,11 @@ from typing import Any
 
 PHASE_TIME_FIELDS = [
     "ab_us",
-    "make_us",
-    "eval_us",
-    "nextmove_us",
-    "qt_us",
-    "lt_us",
-    "movegen_us",
-    "lookup_us",
-    "build_us",
-    "undo_us",
 ]
 
 AB_SUBPHASE_TIME_FIELDS = [
-    "ab_terminal_us",
-    "ab_childloop_us",
-    "ab_cutoff_us",
-    "ab_recurse_setup_us",
-    "ab_node_setup_us",
-    "ab_loop_control_us",
-    "ab_post_child_us",
-    "ab_tt_prep_us",
-    "ab_setup_us",
-    "ab_terminal_control_us",
+    "ab_frontend_us",
     "ab_iteration_control_us",
-    "ab_store_prep_us",
     "ab_other_us",
 ]
 

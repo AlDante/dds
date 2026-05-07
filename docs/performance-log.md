@@ -12,6 +12,124 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-07 00:15:00 — Coarse `ab_frontend_us` split after timer pruning on commit `c97abd8` (dirty)
+
+- Captured logs:
+  - `test/build/ab_subphase_regression_api_list1.log`
+  - `test/build/ab_subphase_regression_api_list1.stderr`
+  - `test/build/ab_subphase_play_analysis.log`
+  - `test/build/ab_subphase_play_analysis.stderr`
+  - `test/build/aggregate_ab_snapshot.py`
+- Platform: Apple-Silicon macOS host
+- Result: after adding one new low-overhead `ab_frontend_us` bucket for
+  pre-loop node setup plus terminal/pruning work, both focused commands reran
+  successfully and the same `list1 + play_analysis` snapshot shape was preserved.
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `test/build-instrumented/regression_api ../hands/list1.txt` | pass | Finished cleanly; produced `1223` complete root lines for aggregation. |
+| `test/build-instrumented/play_analysis_benchmark` | pass | Finished cleanly; produced `107` complete root lines for aggregation. |
+
+### Root-line coverage by file
+
+| Log | Complete root lines | `SolveBoardInternal` | `SolveSameBoard` | `AnalyseLaterBoard` |
+| --- | ---: | ---: | ---: | ---: |
+| `ab_subphase_regression_api_list1.log` | `1223` | `143` | `360` | `720` |
+| `ab_subphase_play_analysis.log` | `107` | `3` | `0` | `104` |
+| Combined snapshot | `1330` | `146` | `360` | `824` |
+
+### Aggregate DDS phase shares
+
+| Phase | Total | Share |
+| --- | ---: | ---: |
+| `ab_us` | `252523217 us` | `100.00%` |
+
+### AB split from the snapshot
+
+| AB field | Total | Share of `ab_us` |
+| --- | ---: | ---: |
+| `ab_frontend_us` | `13618880 us` | `5.39%` |
+| `ab_iteration_control_us` | `30938660 us` | `12.25%` |
+| `ab_other_us` | `207965677 us` | `82.36%` |
+
+### Context-level AB summary
+
+| Context | Complete root lines | Share of measured phase time | AB mix |
+| --- | ---: | ---: | --- |
+| `SolveBoardInternal` | `146` | `70.74%` | `ab_other_us 79.53%`, `ab_iteration_control_us 14.34%`, `ab_frontend_us 6.13%` |
+| `SolveSameBoard` | `360` | `28.46%` | `ab_other_us 88.93%`, `ab_iteration_control_us 7.39%`, `ab_frontend_us 3.68%` |
+| `AnalyseLaterBoard` | `824` | `0.80%` | `ab_other_us 98.71%`; `ab_frontend_us 0.81%` and `ab_iteration_control_us 0.48%` remain tiny |
+
+### Conclusion
+
+- The new `ab_frontend_us` bucket is large enough to survive the low-overhead
+  rerun (`5.39%` overall), so the residual is no longer just a two-way split.
+- Even after carving out both frontend and iteration-control work,
+  `ab_other_us` still dominates at `82.36%` of `ab_us` overall.
+- `SolveBoardInternal` is the only context where the new frontend bucket clears
+  `5%`; in `SolveSameBoard` and `AnalyseLaterBoard`, the remaining residual body
+  still overwhelmingly dominates.
+- So the added split is informative, but it does not change the main diagnosis:
+  most remaining exclusive AB time still sits in the straight-line residual body
+  rather than in pre-loop setup or in explicit iteration control.
+
+## 2026-05-07 00:00:00 — Pruned retained AB timing schema snapshot on commit `c97abd8` (dirty)
+
+- Captured logs:
+  - `test/build/ab_subphase_regression_api_list1.log`
+  - `test/build/ab_subphase_regression_api_list1.stderr`
+  - `test/build/ab_subphase_play_analysis.log`
+  - `test/build/ab_subphase_play_analysis.stderr`
+  - `test/build/aggregate_ab_snapshot.py`
+- Platform: Apple-Silicon macOS host
+- Result: after pruning `NEXTMOVE` and all timer groups below the current `5%`
+  cutoff, both focused commands reran successfully on the same `list1 +
+  play_analysis` snapshot shape.
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `test/build-instrumented/regression_api ../hands/list1.txt` | pass | Finished cleanly; produced `1223` complete root lines for aggregation. |
+| `test/build-instrumented/play_analysis_benchmark` | pass | Finished cleanly; produced `107` complete root lines for aggregation. |
+
+### Root-line coverage by file
+
+| Log | Complete root lines | `SolveBoardInternal` | `SolveSameBoard` | `AnalyseLaterBoard` |
+| --- | ---: | ---: | ---: | ---: |
+| `ab_subphase_regression_api_list1.log` | `1223` | `143` | `360` | `720` |
+| `ab_subphase_play_analysis.log` | `107` | `3` | `0` | `104` |
+| Combined snapshot | `1330` | `146` | `360` | `824` |
+
+### Aggregate DDS phase shares
+
+| Phase | Total | Share |
+| --- | ---: | ---: |
+| `ab_us` | `128416402 us` | `100.00%` |
+
+### AB split from the snapshot
+
+| AB field | Total | Share of `ab_us` |
+| --- | ---: | ---: |
+| `ab_iteration_control_us` | `12644787 us` | `9.85%` |
+| `ab_other_us` | `115771615 us` | `90.15%` |
+
+### Context-level AB summary
+
+| Context | Complete root lines | Share of measured phase time | AB mix |
+| --- | ---: | ---: | --- |
+| `SolveBoardInternal` | `146` | `66.19%` | `ab_other_us 88.19%`, `ab_iteration_control_us 11.81%` |
+| `SolveSameBoard` | `360` | `32.49%` | `ab_other_us 93.80%`, `ab_iteration_control_us 6.20%` |
+| `AnalyseLaterBoard` | `824` | `1.32%` | `ab_other_us 98.68%`; `ab_iteration_control_us` falls to `1.32%` |
+
+### Conclusion
+
+- Pruning the low-value timers showed that the earlier `30.53%`
+  `ab_iteration_control_us` result was largely instrumentation artifact.
+- With the nested helper-boundary timers removed, `ab_iteration_control_us`
+  dropped to `9.85%` overall.
+- That rerun therefore weakened the case for optimizing explicit loop-control
+  bookkeeping directly and pushed attention back toward the broad residual body
+  represented by `ab_other_us`.
+
 ## 2026-05-06 00:00:00 — Corrected residual `ab_us` split snapshot on commit `c97abd8` (dirty)
 
 - Captured logs:

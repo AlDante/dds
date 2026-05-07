@@ -4,6 +4,7 @@
     <option name="enabledOnReformat" value="true" />
     <option name="enabledOnSave" value="true" />
     <option name="pathToExecutable" value="/Library/Frameworks/Python.framework/Versions/3.12/bin/black" />
+    <option name="sdkName" value="Python 3.14 (dds)" />
   </component>
   <component name="CMakePythonSetting">
     <option name="pythonIntegrationState" value="YES" />

@@ -34,27 +34,8 @@ void TimerList::Reset()
   timerGroups.resize(TIMER_NO_SIZE);
 
   timerGroups[TIMER_NO_AB].SetNames("AB");
-  timerGroups[TIMER_NO_MAKE].SetNames("Make");
-  timerGroups[TIMER_NO_UNDO].SetNames("Undo");
-  timerGroups[TIMER_NO_EVALUATE].SetNames("Evaluate");
-  timerGroups[TIMER_NO_NEXTMOVE].SetNames("NextMove");
-  timerGroups[TIMER_NO_QT].SetNames("QuickTricks");
-  timerGroups[TIMER_NO_LT].SetNames("LaterTricks");
-  timerGroups[TIMER_NO_MOVEGEN].SetNames("MoveGen");
-  timerGroups[TIMER_NO_LOOKUP].SetNames("Lookup");
-  timerGroups[TIMER_NO_BUILD].SetNames("Build");
-  timerGroups[TIMER_NO_AB_TERMINAL].SetNames("ABTerm");
-  timerGroups[TIMER_NO_AB_CHILDLOOP].SetNames("ABChild");
-  timerGroups[TIMER_NO_AB_CUTOFF].SetNames("ABCut");
-  timerGroups[TIMER_NO_AB_RECURSE_SETUP].SetNames("ABRecurse");
-  timerGroups[TIMER_NO_AB_NODE_SETUP].SetNames("ABNode");
-  timerGroups[TIMER_NO_AB_LOOP_CONTROL].SetNames("ABLoop");
-  timerGroups[TIMER_NO_AB_POST_CHILD].SetNames("ABPost");
-  timerGroups[TIMER_NO_AB_TT_PREP].SetNames("ABTT");
-  timerGroups[TIMER_NO_AB_SETUP].SetNames("ABSetup");
-  timerGroups[TIMER_NO_AB_TERMINAL_CONTROL].SetNames("ABTermCtl");
+  timerGroups[TIMER_NO_AB_FRONTEND].SetNames("ABFront");
   timerGroups[TIMER_NO_AB_ITERATION_CONTROL].SetNames("ABIterCtl");
-  timerGroups[TIMER_NO_AB_STORE_PREP].SetNames("ABStore");
 }
 
 
@@ -96,38 +77,14 @@ TimerListSummary TimerList::Summary() const
   TimerGroup ABGroup;
   ABGroup = timerGroups[TIMER_NO_AB];
   ABGroup.Differentiate();
-  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
-    ABGroup -= timerGroups[g];
 
   summary.abUserMicros = ABGroup.UserTimeMicroseconds();
-  summary.makeUserMicros = timerGroups[TIMER_NO_MAKE].UserTimeMicroseconds();
-  summary.undoUserMicros = timerGroups[TIMER_NO_UNDO].UserTimeMicroseconds();
-  summary.evaluateUserMicros = timerGroups[TIMER_NO_EVALUATE].UserTimeMicroseconds();
-  summary.nextMoveUserMicros = timerGroups[TIMER_NO_NEXTMOVE].UserTimeMicroseconds();
-  summary.quickTricksUserMicros = timerGroups[TIMER_NO_QT].UserTimeMicroseconds();
-  summary.laterTricksUserMicros = timerGroups[TIMER_NO_LT].UserTimeMicroseconds();
-  summary.moveGenUserMicros = timerGroups[TIMER_NO_MOVEGEN].UserTimeMicroseconds();
-  summary.lookupUserMicros = timerGroups[TIMER_NO_LOOKUP].UserTimeMicroseconds();
-  summary.buildUserMicros = timerGroups[TIMER_NO_BUILD].UserTimeMicroseconds();
-  summary.abTerminalUserMicros = timerGroups[TIMER_NO_AB_TERMINAL].UserTimeMicroseconds();
-  summary.abChildLoopUserMicros = timerGroups[TIMER_NO_AB_CHILDLOOP].UserTimeMicroseconds();
-  summary.abCutoffUserMicros = timerGroups[TIMER_NO_AB_CUTOFF].UserTimeMicroseconds();
-  summary.abRecurseSetupUserMicros = timerGroups[TIMER_NO_AB_RECURSE_SETUP].UserTimeMicroseconds();
-  summary.abNodeSetupUserMicros = timerGroups[TIMER_NO_AB_NODE_SETUP].UserTimeMicroseconds();
-  summary.abLoopControlUserMicros = timerGroups[TIMER_NO_AB_LOOP_CONTROL].UserTimeMicroseconds();
-  summary.abPostChildUserMicros = timerGroups[TIMER_NO_AB_POST_CHILD].UserTimeMicroseconds();
-  summary.abTTPrepUserMicros = timerGroups[TIMER_NO_AB_TT_PREP].UserTimeMicroseconds();
-  summary.abSetupUserMicros = timerGroups[TIMER_NO_AB_SETUP].UserTimeMicroseconds();
-  summary.abTerminalControlUserMicros = timerGroups[TIMER_NO_AB_TERMINAL_CONTROL].UserTimeMicroseconds();
+  summary.abFrontendUserMicros = timerGroups[TIMER_NO_AB_FRONTEND].UserTimeMicroseconds();
   summary.abIterationControlUserMicros = timerGroups[TIMER_NO_AB_ITERATION_CONTROL].UserTimeMicroseconds();
-  summary.abStorePrepUserMicros = timerGroups[TIMER_NO_AB_STORE_PREP].UserTimeMicroseconds();
   summary.abOtherUserMicros =
     summary.abUserMicros -
-    summary.abTerminalUserMicros -
-    summary.abSetupUserMicros -
-    summary.abTerminalControlUserMicros -
-    summary.abIterationControlUserMicros -
-    summary.abStorePrepUserMicros;
+    summary.abFrontendUserMicros -
+    summary.abIterationControlUserMicros;
   return summary;
 }
 
@@ -146,28 +103,16 @@ void TimerList::PrintStats(ofstream& fout) const
   TimerGroup ABGroup;
   ABGroup = timerGroups[0];
   ABGroup.Differentiate();
-  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
-    ABGroup -= timerGroups[g];
 
   Timer ABTotal;
   ABGroup.SetNames("AB");
   ABGroup.Sum(ABTotal);
   ABTotal.SetName("Sum");
 
-  Timer sumTotal = ABTotal;
-  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
-  {
-    Timer t;
-    timerGroups[g].Sum(t);
-    sumTotal += t;
-  }
-
   fout << timerGroups[0].Header();
-  fout << ABGroup.SumLine(sumTotal);
-  for (unsigned g = TIMER_NO_MAKE; g <= TIMER_NO_BUILD; g++)
-    fout << timerGroups[g].SumLine(sumTotal);
+  fout << ABGroup.SumLine(ABTotal);
   fout << timerGroups[0].DashLine();
-  fout << sumTotal.SumLine(sumTotal) << endl;
+  fout << ABTotal.SumLine(ABTotal) << endl;
 
   if (ABGroup.Used())
   {
@@ -178,7 +123,7 @@ void TimerList::PrintStats(ofstream& fout) const
   }
 
   Timer ABSubphaseTotal;
-  for (unsigned g = TIMER_NO_AB_TERMINAL; g < TIMER_NO_SIZE; g++)
+  for (unsigned g = TIMER_NO_AB_FRONTEND; g < TIMER_NO_SIZE; g++)
   {
     Timer t;
     timerGroups[g].Sum(t);
@@ -188,7 +133,7 @@ void TimerList::PrintStats(ofstream& fout) const
   if (ABSubphaseTotal.Used())
   {
     fout << timerGroups[0].Header();
-    for (unsigned g = TIMER_NO_AB_TERMINAL; g < TIMER_NO_SIZE; g++)
+    for (unsigned g = TIMER_NO_AB_FRONTEND; g < TIMER_NO_SIZE; g++)
       fout << timerGroups[g].SumLine(ABTotal);
 
     Timer ABOther = ABTotal;

@@ -112,27 +112,8 @@ static void AppendRootPhaseTimingFields(
   const TimerListSummary& timerSummary)
 {
   oss << " ab_us=" << timerSummary.abUserMicros
-      << " make_us=" << timerSummary.makeUserMicros
-      << " eval_us=" << timerSummary.evaluateUserMicros
-      << " nextmove_us=" << timerSummary.nextMoveUserMicros
-      << " qt_us=" << timerSummary.quickTricksUserMicros
-      << " lt_us=" << timerSummary.laterTricksUserMicros
-      << " movegen_us=" << timerSummary.moveGenUserMicros
-      << " lookup_us=" << timerSummary.lookupUserMicros
-      << " build_us=" << timerSummary.buildUserMicros
-      << " undo_us=" << timerSummary.undoUserMicros
-      << " ab_terminal_us=" << timerSummary.abTerminalUserMicros
-      << " ab_childloop_us=" << timerSummary.abChildLoopUserMicros
-      << " ab_cutoff_us=" << timerSummary.abCutoffUserMicros
-      << " ab_recurse_setup_us=" << timerSummary.abRecurseSetupUserMicros
-      << " ab_node_setup_us=" << timerSummary.abNodeSetupUserMicros
-      << " ab_loop_control_us=" << timerSummary.abLoopControlUserMicros
-      << " ab_post_child_us=" << timerSummary.abPostChildUserMicros
-      << " ab_tt_prep_us=" << timerSummary.abTTPrepUserMicros
-      << " ab_setup_us=" << timerSummary.abSetupUserMicros
-      << " ab_terminal_control_us=" << timerSummary.abTerminalControlUserMicros
+      << " ab_frontend_us=" << timerSummary.abFrontendUserMicros
       << " ab_iteration_control_us=" << timerSummary.abIterationControlUserMicros
-      << " ab_store_prep_us=" << timerSummary.abStorePrepUserMicros
       << " ab_other_us=" << timerSummary.abOtherUserMicros;
 }
 

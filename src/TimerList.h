@@ -65,80 +65,43 @@ using namespace std;
 enum ABTimerType
 {
   TIMER_NO_AB = 0,
-  TIMER_NO_MAKE = 1,
-  TIMER_NO_UNDO = 2,
-  TIMER_NO_EVALUATE = 3,
-  TIMER_NO_NEXTMOVE = 4,
-  TIMER_NO_QT = 5,
-  TIMER_NO_LT = 6,
-  TIMER_NO_MOVEGEN = 7,
-  TIMER_NO_LOOKUP = 8,
-  TIMER_NO_BUILD = 9,
-  TIMER_NO_AB_TERMINAL = 10,
-  TIMER_NO_AB_CHILDLOOP = 11,
-  TIMER_NO_AB_CUTOFF = 12,
-  TIMER_NO_AB_RECURSE_SETUP = 13,
-  TIMER_NO_AB_NODE_SETUP = 14,
-  TIMER_NO_AB_LOOP_CONTROL = 15,
-  TIMER_NO_AB_POST_CHILD = 16,
-  TIMER_NO_AB_TT_PREP = 17,
-  TIMER_NO_AB_SETUP = 18,
-  TIMER_NO_AB_TERMINAL_CONTROL = 19,
-  TIMER_NO_AB_ITERATION_CONTROL = 20,
-  TIMER_NO_AB_STORE_PREP = 21,
-  TIMER_NO_SIZE = 22
+  TIMER_NO_AB_FRONTEND = 1,
+  TIMER_NO_AB_ITERATION_CONTROL = 2,
+  TIMER_NO_MAKE = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_UNDO = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_EVALUATE = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_NEXTMOVE = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_QT = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_LT = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_MOVEGEN = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_LOOKUP = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_BUILD = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_AB_TERMINAL = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_AB_CHILDLOOP = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_AB_CUTOFF = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_AB_RECURSE_SETUP = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_AB_NODE_SETUP = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_AB_LOOP_CONTROL = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_AB_POST_CHILD = TIMER_NO_AB_ITERATION_CONTROL,
+  TIMER_NO_AB_TT_PREP = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_AB_SETUP = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_AB_TERMINAL_CONTROL = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_AB_STORE_PREP = TIMER_NO_AB_FRONTEND,
+  TIMER_NO_SIZE = 3
 };
 
 
 struct TimerListSummary
 {
   long abUserMicros;
-  long makeUserMicros;
-  long undoUserMicros;
-  long evaluateUserMicros;
-  long nextMoveUserMicros;
-  long quickTricksUserMicros;
-  long laterTricksUserMicros;
-  long moveGenUserMicros;
-  long lookupUserMicros;
-  long buildUserMicros;
-  long abTerminalUserMicros;
-  long abChildLoopUserMicros;
-  long abCutoffUserMicros;
-  long abRecurseSetupUserMicros;
-  long abNodeSetupUserMicros;
-  long abLoopControlUserMicros;
-  long abPostChildUserMicros;
-  long abTTPrepUserMicros;
-  long abSetupUserMicros;
-  long abTerminalControlUserMicros;
+  long abFrontendUserMicros;
   long abIterationControlUserMicros;
-  long abStorePrepUserMicros;
   long abOtherUserMicros;
 
   TimerListSummary() :
     abUserMicros(0),
-    makeUserMicros(0),
-    undoUserMicros(0),
-    evaluateUserMicros(0),
-    nextMoveUserMicros(0),
-    quickTricksUserMicros(0),
-    laterTricksUserMicros(0),
-    moveGenUserMicros(0),
-    lookupUserMicros(0),
-    buildUserMicros(0),
-    abTerminalUserMicros(0),
-    abChildLoopUserMicros(0),
-    abCutoffUserMicros(0),
-    abRecurseSetupUserMicros(0),
-    abNodeSetupUserMicros(0),
-    abLoopControlUserMicros(0),
-    abPostChildUserMicros(0),
-    abTTPrepUserMicros(0),
-    abSetupUserMicros(0),
-    abTerminalControlUserMicros(0),
+    abFrontendUserMicros(0),
     abIterationControlUserMicros(0),
-    abStorePrepUserMicros(0),
     abOtherUserMicros(0)
   {
   }
@@ -147,27 +110,8 @@ struct TimerListSummary
   {
     TimerListSummary delta;
     delta.abUserMicros = abUserMicros - other.abUserMicros;
-    delta.makeUserMicros = makeUserMicros - other.makeUserMicros;
-    delta.undoUserMicros = undoUserMicros - other.undoUserMicros;
-    delta.evaluateUserMicros = evaluateUserMicros - other.evaluateUserMicros;
-    delta.nextMoveUserMicros = nextMoveUserMicros - other.nextMoveUserMicros;
-    delta.quickTricksUserMicros = quickTricksUserMicros - other.quickTricksUserMicros;
-    delta.laterTricksUserMicros = laterTricksUserMicros - other.laterTricksUserMicros;
-    delta.moveGenUserMicros = moveGenUserMicros - other.moveGenUserMicros;
-    delta.lookupUserMicros = lookupUserMicros - other.lookupUserMicros;
-    delta.buildUserMicros = buildUserMicros - other.buildUserMicros;
-    delta.abTerminalUserMicros = abTerminalUserMicros - other.abTerminalUserMicros;
-    delta.abChildLoopUserMicros = abChildLoopUserMicros - other.abChildLoopUserMicros;
-    delta.abCutoffUserMicros = abCutoffUserMicros - other.abCutoffUserMicros;
-    delta.abRecurseSetupUserMicros = abRecurseSetupUserMicros - other.abRecurseSetupUserMicros;
-    delta.abNodeSetupUserMicros = abNodeSetupUserMicros - other.abNodeSetupUserMicros;
-    delta.abLoopControlUserMicros = abLoopControlUserMicros - other.abLoopControlUserMicros;
-    delta.abPostChildUserMicros = abPostChildUserMicros - other.abPostChildUserMicros;
-    delta.abTTPrepUserMicros = abTTPrepUserMicros - other.abTTPrepUserMicros;
-    delta.abSetupUserMicros = abSetupUserMicros - other.abSetupUserMicros;
-    delta.abTerminalControlUserMicros = abTerminalControlUserMicros - other.abTerminalControlUserMicros;
+    delta.abFrontendUserMicros = abFrontendUserMicros - other.abFrontendUserMicros;
     delta.abIterationControlUserMicros = abIterationControlUserMicros - other.abIterationControlUserMicros;
-    delta.abStorePrepUserMicros = abStorePrepUserMicros - other.abStorePrepUserMicros;
     delta.abOtherUserMicros = abOtherUserMicros - other.abOtherUserMicros;
     return delta;
   }
