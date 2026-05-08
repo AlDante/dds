@@ -167,3 +167,11 @@ Raw per-run logs and machine-readable summaries are written to:
 
 For deeper alpha-mu benchmarks outside the standardized suite, see the recorded serial baseline in `docs/performance-log.md` dated `2026-04-18 08:46:32`, which captures the `hands/list10.txt` depth-3 pre-parallelisation run and its strong board-to-board timing skew. Board-parallel runs recorded through `test/run_alpha_mu_benchmark.py` also preserve the reported parallel mode and worker counts in their log and status outputs.
 
+For direct micro-kernel comparisons outside the standardized suite, see the
+`Moves` sorter benchmark entry in `docs/performance-log.md` dated
+`2026-05-08 12:09:01`. That entry records a deterministic
+`CLOCK_THREAD_CPUTIME_ID` comparison between `Moves::MergeSort` and the exact-
+order diagnostic `Moves::CycleSort`, including the later `std::swap` reruns;
+all measured runs kept `CycleSort` at roughly `+104%` to `+113%` slower than
+the historical compare-swap network on the Apple-Silicon host.
+

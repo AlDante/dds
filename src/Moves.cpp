@@ -10,6 +10,12 @@
 
 #include <iomanip>
 #include <sstream>
+#include <cstdlib>
+#include <cstdint>
+
+#include <utility>
+#include <algorithm>
+
 
 #include "Moves.h"
 #include "debug.h"
@@ -35,6 +41,50 @@ const MGtype RegisterList[16] =
   MG_COMB_NOTVOID3, MG_COMB_NOTVOID3,
   MG_NT_VOID3, MG_TRUMP_VOID3
 };
+
+
+namespace
+{
+  enum MoveSortImplementation
+  {
+    MOVE_SORT_IMPLEMENTATION_MERGE = 0,
+    MOVE_SORT_IMPLEMENTATION_CYCLE = 1
+  };
+
+  inline bool MoveSortBefore(
+    const moveType& lhs,
+    const unsigned char lhsOrder,
+    const moveType& rhs,
+    const unsigned char rhsOrder)
+  {
+    return (lhs.weight > rhs.weight ||
+      (lhs.weight == rhs.weight && lhsOrder < rhsOrder));
+  }
+
+  MoveSortImplementation MovesSelectedSortImplementation()
+  {
+    /*
+      Benchmark-only selector used to compare the historical compare-swap
+      network against alternative exact-order implementations without changing
+      the default solver behavior.  Any unrecognized value falls back to the
+      production baseline.
+    */
+    static const MoveSortImplementation impl = []()
+    {
+      const char * env = std::getenv("DDS_MOVES_SORT_IMPL");
+      if (env == nullptr)
+        return MOVE_SORT_IMPLEMENTATION_MERGE;
+
+      const string mode(env);
+      if (mode == "cycle")
+        return MOVE_SORT_IMPLEMENTATION_CYCLE;
+      else
+        return MOVE_SORT_IMPLEMENTATION_MERGE;
+    }();
+
+    return impl;
+  }
+}
 
 
 Moves::Moves()
@@ -219,7 +269,7 @@ int Moves::MoveGen0(
   list.current = 0;
   list.last = numMoves - 1;
   if (numMoves != 1)
-    Moves::MergeSort();
+    Moves::SortMoves();
   return numMoves;
 }
 
@@ -286,7 +336,7 @@ int Moves::MoveGen123(
 
     (this->*WeightList[findex])(tpos);
 
-    Moves::MergeSort();
+    Moves::SortMoves();
     return numMoves;
   }
 
@@ -329,7 +379,7 @@ int Moves::MoveGen123(
   list.current = 0;
   list.last = numMoves - 1;
   if (numMoves != 1)
-    Moves::MergeSort();
+    Moves::SortMoves();
   return numMoves;
 }
 
@@ -1981,15 +2031,41 @@ void Moves::Sort(
 {
   numMoves = moveList[tricks][relHand].last + 1;
   mply = moveList[tricks][relHand].move;
-  Moves::MergeSort();
+  Moves::SortMoves();
+}
+
+
+void Moves::SortMoves()
+{
+  if (MovesSelectedSortImplementation() == MOVE_SORT_IMPLEMENTATION_CYCLE)
+    Moves::CycleSort(mply, numMoves);
+  else
+    Moves::MergeSort(mply, numMoves);
 }
 
 
 #define CMP_SWAP(i, j) if (mply[i].weight < mply[j].weight) \
-  { tmp = mply[i]; mply[i] = mply[j]; mply[j] = tmp; }
+  { std::swap(mply[i], mply[j]); }
 
-void Moves::MergeSort()
+
+inline void cas(int& a, int& b) {
+  int temp = a;
+  a = std::min(temp, b);
+  b = std::max(temp, b);
+}
+
+
+void Moves::MergeSort(
+  moveType * mply,
+  int numMoves)
 {
+  /*
+    DDS almost always sorts lists of size 2..12.  For those sizes we keep the
+    historical hand-written compare network because it minimizes branches and
+    preserves the exact move ordering that the rest of the search expects.  The
+    default branch only exists as a defensive fallback outside the normal DDS
+    range.
+  */
   moveType tmp;
 
   switch (numMoves)
@@ -2232,6 +2308,307 @@ void Moves::MergeSort()
   }
 
   return;
+}
+
+
+void Moves::CycleSort(
+  moveType * mply,
+  int numMoves)
+{
+  if (numMoves < 2)
+    return;
+
+  /*
+    This diagnostic alternative is intentionally exact-order compatible with the
+    compare network above.  It first runs the same compare sequence over a tiny
+    index array to determine the final permutation, then applies that
+    permutation to the move array with cycle moves.  The approach is useful for
+    experiments because it keeps semantics identical while changing only the
+    data motion strategy.
+  */
+  unsigned char order[12];
+  for (int i = 0; i < numMoves; i++)
+    order[i] = static_cast<unsigned char>(i);
+
+#define IDX_CMP_SWAP(i, j) \
+  if (mply[order[i]].weight < mply[order[j]].weight) \
+  { \
+    std::swap(order[i], order[j]); \
+  }
+
+  switch (numMoves)
+  {
+    case 12:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(4, 5);
+      IDX_CMP_SWAP(6, 7);
+      IDX_CMP_SWAP(8, 9);
+      IDX_CMP_SWAP(10, 11);
+
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(5, 7);
+      IDX_CMP_SWAP(9, 11);
+
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(4, 6);
+      IDX_CMP_SWAP(8, 10);
+
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(9, 10);
+
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(6, 10);
+      IDX_CMP_SWAP(5, 9);
+      IDX_CMP_SWAP(2, 6);
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(6, 10);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(7, 11);
+      IDX_CMP_SWAP(3, 7);
+      IDX_CMP_SWAP(4, 8);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(7, 11);
+      IDX_CMP_SWAP(1, 4);
+      IDX_CMP_SWAP(7, 10);
+      IDX_CMP_SWAP(3, 8);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(8, 9);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(7, 9);
+      IDX_CMP_SWAP(3, 5);
+      IDX_CMP_SWAP(6, 8);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(7, 8);
+      break;
+    case 11:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(4, 5);
+      IDX_CMP_SWAP(6, 7);
+      IDX_CMP_SWAP(8, 9);
+
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(5, 7);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(4, 6);
+      IDX_CMP_SWAP(8, 10);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(9, 10);
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(6, 10);
+      IDX_CMP_SWAP(5, 9);
+      IDX_CMP_SWAP(2, 6);
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(6, 10);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(3, 7);
+      IDX_CMP_SWAP(4, 8);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(1, 4);
+      IDX_CMP_SWAP(7, 10);
+      IDX_CMP_SWAP(3, 8);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(8, 9);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(7, 9);
+      IDX_CMP_SWAP(3, 5);
+      IDX_CMP_SWAP(6, 8);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(7, 8);
+      break;
+    case 10:
+      IDX_CMP_SWAP(1, 8);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(5, 9);
+      IDX_CMP_SWAP(2, 6);
+      IDX_CMP_SWAP(3, 7);
+      IDX_CMP_SWAP(0, 3);
+      IDX_CMP_SWAP(6, 9);
+      IDX_CMP_SWAP(2, 5);
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(3, 6);
+      IDX_CMP_SWAP(8, 9);
+      IDX_CMP_SWAP(4, 7);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(4, 8);
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(7, 9);
+
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(7, 8);
+
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(6, 8);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(5, 7);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(6, 7);
+      IDX_CMP_SWAP(3, 5);
+      IDX_CMP_SWAP(4, 6);
+      IDX_CMP_SWAP(4, 5);
+      break;
+    case 9:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(6, 7);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(4, 5);
+      IDX_CMP_SWAP(7, 8);
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(6, 7);
+      IDX_CMP_SWAP(0, 3);
+      IDX_CMP_SWAP(3, 6);
+      IDX_CMP_SWAP(0, 3);
+      IDX_CMP_SWAP(1, 4);
+      IDX_CMP_SWAP(4, 7);
+      IDX_CMP_SWAP(1, 4);
+      IDX_CMP_SWAP(2, 5);
+      IDX_CMP_SWAP(5, 8);
+      IDX_CMP_SWAP(2, 5);
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(5, 7);
+      IDX_CMP_SWAP(2, 6);
+      IDX_CMP_SWAP(4, 6);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(5, 6);
+      break;
+    case 8:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(4, 5);
+      IDX_CMP_SWAP(6, 7);
+
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(4, 6);
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(5, 7);
+
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(1, 5);
+
+      IDX_CMP_SWAP(2, 6);
+      IDX_CMP_SWAP(3, 7);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(3, 5);
+
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(5, 6);
+      break;
+    case 7:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(4, 5);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(4, 6);
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(5, 6);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(2, 6);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(3, 5);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(3, 4);
+      IDX_CMP_SWAP(5, 6);
+      break;
+    case 6:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(4, 5);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(1, 5);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(3, 5);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(3, 4);
+      break;
+    case 5:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(0, 4);
+      IDX_CMP_SWAP(2, 4);
+      IDX_CMP_SWAP(1, 2);
+      IDX_CMP_SWAP(3, 4);
+      break;
+    case 4:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(2, 3);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(1, 3);
+      IDX_CMP_SWAP(1, 2);
+      break;
+    case 3:
+      IDX_CMP_SWAP(0, 1);
+      IDX_CMP_SWAP(0, 2);
+      IDX_CMP_SWAP(1, 2);
+      break;
+    case 2:
+      IDX_CMP_SWAP(0, 1);
+      break;
+    default:
+      for (int i = 1; i < numMoves; i++)
+      {
+        const unsigned char tmp = order[i];
+        int j = i;
+        for (; j && mply[tmp].weight > mply[order[j - 1]].weight; --j)
+          order[j] = order[j - 1];
+        order[j] = tmp;
+      }
+  }
+
+#undef IDX_CMP_SWAP
+
+  unsigned char dest[12];
+  for (int i = 0; i < numMoves; i++)
+    dest[order[i]] = static_cast<unsigned char>(i);
+
+  bool done[12] = { false };
+  for (int start = 0; start < numMoves; start++)
+  {
+    if (done[start] || dest[start] == start)
+    {
+      done[start] = true;
+      continue;
+    }
+
+    moveType item = mply[start];
+    int src = start;
+
+    while (true)
+    {
+      done[src] = true;
+      const int next = dest[src];
+      if (next == start)
+      {
+        mply[next] = item;
+        break;
+      }
+
+      moveType displaced = mply[next];
+      mply[next] = item;
+      item = displaced;
+      src = next;
+    }
+  }
 }
 
 

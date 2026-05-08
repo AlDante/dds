@@ -12,6 +12,67 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-08 12:09:01 — Direct `Moves` sorter benchmark (`MergeSort` vs `CycleSort`) on commit `c265b52` (dirty)
+
+- Captured artifacts:
+  - `test/build/moves_sort_benchmark.latest.txt`
+  - `test/build/alpha_mu_stats/20260508-114740-moves-sort-benchmark/moves_sort_benchmark.txt`
+  - `test/build/alpha_mu_stats/20260508-120901-moves-sort-benchmark-std-swap/rerun_1.txt`
+  - `test/build/alpha_mu_stats/20260508-120901-moves-sort-benchmark-std-swap/rerun_2.txt`
+  - `test/build/alpha_mu_stats/20260508-120901-moves-sort-benchmark-std-swap/previous_latest_snapshot.txt`
+- Platform: Apple-Silicon macOS host
+- Goal: compare the existing fixed-network `Moves::MergeSort` against a new
+  exact-order `Moves::CycleSort` alternative using the most direct reliable
+  method possible for this micro-kernel: deterministic same-process
+  `CLOCK_THREAD_CPUTIME_ID` measurements on a fixed replay corpus, with exact
+  output equivalence checked before timing.
+- Corpus and method:
+  - `225280` deterministic sort samples (`5` patterns × `11` sizes × `4096`
+    samples/case)
+  - sizes `2..12`
+  - patterns: `random_wide`, `random_dup_heavy`, `already_desc`,
+    `reverse_asc`, `almost_desc`
+  - `9` measured rounds after `1` warmup round
+  - `32` corpus passes per round
+- Result: `CycleSort` matched `MergeSort` exactly on the full corpus, but it
+  was materially slower in direct CPU-time measurement. Replacing the manual
+  compare-swap macro bodies with `std::swap` and rerunning the benchmark twice
+  did not change that conclusion.
+
+### Initial direct comparison
+
+| Implementation | Median total CPU (s) | Median net sort CPU (s) | Relative vs `MergeSort` net |
+| --- | ---: | ---: | ---: |
+| Copy baseline | `0.069285` | `0.000000` | -- |
+| `MergeSort` | `0.230247` | `0.159765` | baseline |
+| `CycleSort` | `0.396606` | `0.326081` | `+104.10%` |
+
+### `std::swap` reruns
+
+After replacing `CMP_SWAP` / `IDX_CMP_SWAP` with `std::swap`, two immediate
+reruns produced:
+
+| Artifact | Copy baseline (s) | `MergeSort` net sort CPU (s) | `CycleSort` net sort CPU (s) | Relative vs `MergeSort` net |
+| --- | ---: | ---: | ---: | ---: |
+| `rerun_1.txt` | `0.068884` | `0.155554` | `0.328040` | `+110.88%` |
+| `rerun_2.txt` | `0.068653` | `0.155830` | `0.326514` | `+109.53%` |
+| refreshed `moves_sort_benchmark.latest.txt` | `0.069577` | `0.154973` | `0.330109` | `+113.01%` |
+
+### Conclusion
+
+- The new `CycleSort` implementation is functionally correct as a drop-in
+  ordering replacement for `MergeSort`, but it is **not** a performance win on
+  this Apple-Silicon host.
+- The `std::swap` reruns tightened that conclusion: the slowdown stayed very
+  stable at roughly `+110%` to `+113%`, so the earlier result was not a fluke
+  of the first measurement pass.
+- The benchmark says the current fixed compare-swap network remains the better
+  small-`N` sorter for this workload; `CycleSort` should remain a benchmarked
+  alternative rather than becoming the default M1 path.
+- So the next Apple-specific work should stay focused on the already-identified
+  search-path hotspots (`ABsearch0` / `ABsearch3`, `Make3`, TT/quick-trick
+  front-end work), not on replacing the existing `Moves::MergeSort` kernel.
+
 ## 2026-05-08 07:23:36 — Focused `ABsearch*` diagnostic timer snapshot on commit `c265b52` (dirty)
 
 - Captured artifacts:
