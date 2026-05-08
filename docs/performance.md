@@ -107,12 +107,18 @@ python3 test/run_alpha_mu_benchmark.py --hand-file hands/list10.txt --depth 3 --
 ```
 
 For DDS-side leaf-path instrumentation that now includes per-context root timing
-fields `ab_us`, `qt_us`, `lt_us`, `movegen_us`, `lookup_us`, `build_us`, and
-`undo_us`, use:
+fields `ab_us`, `ab_frontend_us`, `ab_iteration_control_us`, `ab_other_us`, and
+the per-`ABsearch*` diagnostic split `ab_search_us`, `ab_search0_us`,
+`ab_search1_us`, `ab_search2_us`, and `ab_search3_us`, use:
 
 ```zsh
 python3 test/alpha_mu_benchmark.py
 ```
+
+Those per-`ABsearch*` fields are complementary structural diagnostics based on
+local `ABsearch*` timing with recursive child calls paused. They are useful for
+comparing search-function weight, but they are not expected to sum exactly to
+the historical differentiated `ab_us` estimate.
 
 For board-parallel throughput experiments, pass the parallel settings explicitly, for example:
 

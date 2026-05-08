@@ -114,7 +114,12 @@ static void AppendRootPhaseTimingFields(
   oss << " ab_us=" << timerSummary.abUserMicros
       << " ab_frontend_us=" << timerSummary.abFrontendUserMicros
       << " ab_iteration_control_us=" << timerSummary.abIterationControlUserMicros
-      << " ab_other_us=" << timerSummary.abOtherUserMicros;
+      << " ab_other_us=" << timerSummary.abOtherUserMicros
+      << " ab_search_us=" << timerSummary.abSearchUserMicros
+      << " ab_search0_us=" << timerSummary.abSearch0UserMicros
+      << " ab_search1_us=" << timerSummary.abSearch1UserMicros
+      << " ab_search2_us=" << timerSummary.abSearch2UserMicros
+      << " ab_search3_us=" << timerSummary.abSearch3UserMicros;
 }
 
 

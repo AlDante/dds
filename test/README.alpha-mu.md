@@ -24,7 +24,7 @@ The `ALPHA_MU root ...` prefix is historical and retained for parser/log compati
 3. runs representative workloads,
 4. captures raw logs,
 5. parses `ALPHA_MU root ...` lines,
-6. aggregates the retained DDS root timing field `ab_us` plus the retained coarse AB split `ab_frontend_us`, `ab_iteration_control_us`, and residual `ab_other_us`,
+6. aggregates the retained DDS root timing field `ab_us`, the retained coarse AB split `ab_frontend_us`, `ab_iteration_control_us`, and residual `ab_other_us`, and the exclusive per-function diagnostic split `ab_search_us`, `ab_search0_us`, `ab_search1_us`, `ab_search2_us`, and `ab_search3_us`,
 7. writes `summary.json` and `summary.md`,
 8. restores a normal non-instrumented library build by default.
 
@@ -103,6 +103,7 @@ python3 test/alpha_mu_benchmark.py --output-dir /tmp/dds-alpha-mu-run
 
 - The runner sets `DYLD_LIBRARY_PATH` so the test binaries resolve `../src/build/libdds.so` on macOS.
 - `ab_us` remains the full exclusive AB bucket; after pruning timers below the current 5% cutoff, the retained coarse split is `ab_frontend_us` (pre-loop setup and terminal/pruning work), `ab_iteration_control_us`, and the residual `ab_other_us`.
+- The per-function diagnostic fields `ab_search_us`, `ab_search0_us`, `ab_search1_us`, `ab_search2_us`, and `ab_search3_us` are exclusive local `ABsearch*` timings that pause around recursive child calls. They are a complementary structural view of where local search-body time lands by function; because `ab_us` remains the historical differentiated AB estimator, do not expect these diagnostic fields to sum exactly to `ab_us`.
 - If `AnalyseLaterBoard` does not appear in the summary, the next improvement should be to add a dedicated play-analysis workload.
 - The workflow is measurement-only; it does not alter deep search semantics.
 

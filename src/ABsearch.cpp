@@ -81,6 +81,8 @@ bool ABsearch(
   thrp->nodes++;
 #endif
 
+  TIMER_START(TIMER_NO_AB_SEARCH, depth);
+
   TIMER_START(TIMER_NO_AB_FRONTEND, depth);
   for (int ss = 0; ss < DDS_SUITS; ss++)
     thrp->lowestWin[depth][ss] = 0;
@@ -113,9 +115,11 @@ bool ABsearch(
     Make0(posPoint, depth, mply);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
 
+    TIMER_END(TIMER_NO_AB_SEARCH, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch1(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH, depth);
 
     Undo1(posPoint, depth, * mply);
 
@@ -147,6 +151,7 @@ ABexit:
   thrp->ABStats.PrintStats(thrp->fileABstats.GetStream());
 #endif
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH, depth);
 
   return value;
 }
@@ -171,6 +176,8 @@ bool ABsearch0(
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
 #endif
+
+  TIMER_START(TIMER_NO_AB_SEARCH0, depth);
 
   TIMER_START(TIMER_NO_AB_FRONTEND, depth);
   for (int ss = 0; ss < DDS_SUITS; ss++)
@@ -214,6 +221,7 @@ bool ABsearch0(
 
       AB_COUNT(AB_MAIN_LOOKUP, scoreFlag, depth);
       TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return scoreFlag;
     }
   }
@@ -222,12 +230,14 @@ bool ABsearch0(
   {
     AB_COUNT(AB_TARGET_REACHED, true, depth);
     TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     return true;
   }
   else if (posPoint->tricksMAX + tricks + 1 < target)
   {
     AB_COUNT(AB_TARGET_REACHED, false, depth);
     TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     return false;
   }
   else if (depth == 0) /* Maximum depth? */
@@ -241,6 +251,7 @@ bool ABsearch0(
 
     AB_COUNT(AB_DEPTH_ZERO, value, depth);
     TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     return value;
   }
 
@@ -254,6 +265,7 @@ bool ABsearch0(
     {
       AB_COUNT(AB_QUICKTRICKS, 1, depth);
       TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return (qtricks == 0 ? false : true);
     }
 
@@ -264,6 +276,7 @@ bool ABsearch0(
       // Is 1 right here?!
       AB_COUNT(AB_LATERTRICKS, true, depth);
       TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return false;
     }
   }
@@ -273,6 +286,7 @@ bool ABsearch0(
     {
       AB_COUNT(AB_QUICKTRICKS, false, depth);
       TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return (qtricks == 0 ? true : false);
     }
 
@@ -282,6 +296,7 @@ bool ABsearch0(
     {
       AB_COUNT(AB_LATERTRICKS, false, depth);
       TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return true;
     }
   }
@@ -324,6 +339,7 @@ bool ABsearch0(
 
       AB_COUNT(AB_MAIN_LOOKUP, scoreFlag, depth);
       TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return scoreFlag;
     }
   }
@@ -361,9 +377,11 @@ bool ABsearch0(
     Make0(posPoint, depth, mply);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
 
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch1(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH0, depth);
 
     Undo1(posPoint, depth, * mply);
 
@@ -443,6 +461,7 @@ ABexit:
   TIMER_START(TIMER_NO_AB_ITERATION_CONTROL, depth);
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH0, depth);
   return value;
 }
 
@@ -463,6 +482,8 @@ bool ABsearch1(
   thrp->nodes++;
 #endif
 
+  TIMER_START(TIMER_NO_AB_SEARCH1, depth);
+
   TIMER_START(TIMER_NO_AB_FRONTEND, depth);
   int res = QuickTricksSecondHand(* posPoint, hand, depth, target,
      trump, * thrp);
@@ -470,6 +491,7 @@ bool ABsearch1(
   {
     AB_COUNT(AB_QUICKTRICKS_2ND, true, depth);
     TIMER_END(TIMER_NO_AB_FRONTEND, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH1, depth);
     return success;
   }
 
@@ -500,9 +522,11 @@ bool ABsearch1(
     Make1(posPoint, depth, mply);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
 
+    TIMER_END(TIMER_NO_AB_SEARCH1, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch2(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH1, depth);
 
     Undo2(posPoint, depth, * mply);
 
@@ -530,6 +554,7 @@ ABexit:
   TIMER_START(TIMER_NO_AB_ITERATION_CONTROL, depth);
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH1, depth);
   return value;
 }
 
@@ -548,6 +573,8 @@ bool ABsearch2(
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
 #endif
+
+  TIMER_START(TIMER_NO_AB_SEARCH2, depth);
 
   TIMER_START(TIMER_NO_AB_FRONTEND, depth);
   for (int ss = 0; ss < DDS_SUITS; ss++)
@@ -578,9 +605,11 @@ bool ABsearch2(
 #endif
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
 
+    TIMER_END(TIMER_NO_AB_SEARCH2, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch3(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH2, depth);
 
     Undo3(posPoint, depth, * mply);
 
@@ -609,6 +638,7 @@ ABexit:
   TIMER_START(TIMER_NO_AB_ITERATION_CONTROL, depth);
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH2, depth);
   return value;
 }
 
@@ -630,6 +660,8 @@ bool ABsearch3(
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
 #endif
+
+  TIMER_START(TIMER_NO_AB_SEARCH3, depth);
 
   TIMER_START(TIMER_NO_AB_FRONTEND, depth);
   for (int ss = 0; ss < DDS_SUITS; ss++)
@@ -665,9 +697,11 @@ bool ABsearch3(
       posPoint->tricksMAX++;
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
 
+    TIMER_END(TIMER_NO_AB_SEARCH3, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch0(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH3, depth);
 
     Undo0(posPoint, depth, * mply, thrp);
 
@@ -698,6 +732,7 @@ ABexit:
   TIMER_START(TIMER_NO_AB_ITERATION_CONTROL, depth);
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH3, depth);
   return value;
 }
 #endif

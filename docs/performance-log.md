@@ -12,6 +12,169 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-08 07:23:36 — Focused `ABsearch*` diagnostic timer snapshot on commit `c265b52` (dirty)
+
+- Captured artifacts:
+  - `test/build/alpha_mu_stats/20260508-072336-absearch-diagnostics/regression_api_list1.log`
+  - `test/build/alpha_mu_stats/20260508-072336-absearch-diagnostics/regression_api_list1.stderr`
+  - `test/build/alpha_mu_stats/20260508-072336-absearch-diagnostics/diagnostic_summary.md`
+  - `test/build/alpha_mu_stats/20260508-072336-absearch-diagnostics/diagnostic_summary.json`
+- Platform: Apple-Silicon macOS host
+- Goal: add the suggested structural per-`ABsearch*` diagnostic timers and use a
+  low-overhead focused rerun to see which recursive search function now carries
+  the largest local share.
+- Result: the focused instrumented rerun of `regression_api ../hands/list1.txt`
+  completed cleanly and produced `1223` root lines. The new diagnostics show a
+  stable ranking across contexts: `ABsearch0` is the largest local slice,
+  followed by `ABsearch3`, `ABsearch2`, and `ABsearch1`, while the wrapper
+  `ABsearch` entry itself remains negligible.
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `test/build/regression_api ../hands/list1.txt` | pass | Finished cleanly with the instrumented build; produced `1223` complete root lines covering all three emitted contexts. |
+
+### Root-line coverage by context
+
+| Log | Complete root lines | `SolveBoardInternal` | `SolveSameBoard` | `AnalyseLaterBoard` |
+| --- | ---: | ---: | ---: | ---: |
+| `regression_api_list1.log` | `1223` | `143` | `360` | `720` |
+
+### Aggregate diagnostic function shares
+
+The new per-`ABsearch*` fields are complementary local-function diagnostics with
+recursive child calls paused. They are compared against the historical
+differentiated `ab_us` estimate below, so they are useful as a ranking signal
+rather than as an exact additive partition.
+
+| Diagnostic field | Total | Share of `ab_us` |
+| --- | ---: | ---: |
+| `ab_search_us` | `177943 us` | `0.03%` |
+| `ab_search0_us` | `165448851 us` | `26.98%` |
+| `ab_search1_us` | `100661715 us` | `16.42%` |
+| `ab_search2_us` | `123271259 us` | `20.10%` |
+| `ab_search3_us` | `131089740 us` | `21.38%` |
+
+### Coarse AB snapshot for the same rerun
+
+| AB field | Total | Share of `ab_us` |
+| --- | ---: | ---: |
+| `ab_frontend_us` | `26292092 us` | `4.29%` |
+| `ab_iteration_control_us` | `51652810 us` | `8.42%` |
+| `ab_other_us` | `535277476 us` | `87.29%` |
+
+### Context-level diagnostic mix
+
+| Context | Complete root lines | Avg `ab_us` | Diagnostic mix |
+| --- | ---: | ---: | --- |
+| `SolveBoardInternal` | `143` | `2686943.2 us` | `ab_search0_us 27.16%`, `ab_search3_us 21.37%`, `ab_search2_us 19.94%`, `ab_search1_us 16.70%`, `ab_search_us 0.01%` |
+| `SolveSameBoard` | `360` | `613257.5 us` | `ab_search0_us 26.67%`, `ab_search3_us 21.33%`, `ab_search2_us 20.29%`, `ab_search1_us 15.90%`, `ab_search_us 0.06%` |
+| `AnalyseLaterBoard` | `720` | `11412.2 us` | `ab_search0_us 26.85%`, `ab_search3_us 22.84%`, `ab_search2_us 22.52%`, `ab_search1_us 16.61%`, `ab_search_us 0.00%` |
+
+### Conclusion
+
+- The new structural timers validate the earlier `sample`-based suggestion:
+  `ABsearch0` is indeed the largest local search-function hotspot.
+- `ABsearch3` and `ABsearch2` also carry meaningful local weight, so any
+  follow-on optimization should avoid overfitting only to the lead-hand path.
+- The wrapper `ABsearch` entry is negligible in the measured rerun, so future
+  refinement work should stay focused on `ABsearch0`–`ABsearch3` rather than on
+  the root wrapper.
+
+## 2026-05-07 22:20:00 — macOS `sample` hotspot pass for `ABsearch*` on commit `c97abd8` (dirty)
+
+- Captured artifacts:
+  - `test/build/regression_api_list10_runtime_probe.log`
+  - `test/build/regression_api_list10_runtime_probe.time`
+  - `test/build/regression_api_list10_sampling.log`
+  - `test/build/regression_api_list10_sampling.err`
+  - `test/build/regression_api_list10_sample.txt`
+  - `test/build/regression_api_list10_sampling_2.log`
+  - `test/build/regression_api_list10_sampling_2.err`
+  - `test/build/regression_api_list10_sample_2.txt`
+- Platform: Apple-Silicon macOS host
+- Goal: use low-overhead macOS sampling to get function-level detail inside
+  `ABsearch*` without reintroducing many small recursive timers.
+- Result: two independent `sample` captures on `regression_api ../hands/list10.txt`
+  produced a stable hotspot pattern inside the recursive `ABsearch*` body.
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `test/build/regression_api ../hands/list10.txt` runtime probe | pass | `Checking ../hands/list10.txt (10 hands)`; measured `real 8.47`, `user 9.89`, `sys 0.20`. |
+| `sample <pid> 5 -file test/build/regression_api_list10_sample.txt` | pass | First 5-second live sample of the normal-build `regression_api` process. |
+| `sample <pid> 5 -file test/build/regression_api_list10_sample_2.txt` | pass | Second 5-second live sample of the same workload to check hotspot stability. |
+
+### Tooling caveat
+
+- The intended `build-profile` binaries were rebuilt successfully, but the current
+  tree hit a reproducible `bus error` when running `build-profile/dtest`,
+  `build-profile/regression_api`, and `build-profile/alpha_mu`.
+- So the usable sampling captures below were taken from the normal `build`
+  binaries instead. Symbols were still readable enough to resolve
+  `ABsearch`, `ABsearch0`, `ABsearch1`, `ABsearch2`, `ABsearch3`, and their main
+  descendants.
+- Live `sample` output is phase-biased and the line counts below are not
+  wall-clock percentages; they are only evidence for repeated hotspot presence.
+
+### Stable sampled call path
+
+Both samples showed the same dominant DDS path:
+
+- `CheckCalcAllTablesBatch`
+- `CalcAllTablesPBN`
+- `CalcAllTables`
+- `CalcChunkCommon`
+- `SolveBoardInternal`
+- `ABsearch`
+- `ABsearch1`
+- `ABsearch2`
+- `ABsearch3`
+- `ABsearch0`
+
+That is, the sampling run spent its meaningful time where expected: inside the
+exact DDS recursive `ABsearch*` solve path, not in harness startup or unrelated
+ text handling.
+
+### Repeated descendants seen under `ABsearch*`
+
+The largest repeatedly resolved descendants in the two samples were:
+
+| Descendant under sampled `ABsearch*` stacks | Sample 1 max line count | Sample 2 max line count |
+| --- | ---: | ---: |
+| `Moves::MoveGen123` | `160` | `476` |
+| `Moves::MakeNext` | `130` | `397` |
+| `TransTableL::Lookup` | `150` | `372` |
+| `QuickTricks` | `103` | `305` |
+| `Make3` | `59` | `174` |
+| `TransTableL::Add` | `53` | `153` |
+| `Moves::MoveGen0` | `46` | `133` |
+| `QuickTricksSecondHand` | `38` | `99` |
+
+### Interpretation
+
+- `ABsearch0` is the richest structurally distinct hotspot: the samples repeatedly
+  show `TransTableL::Lookup`, `QuickTricks`, `Moves::MoveGen0`, and
+  `TransTableL::Add` beneath it.
+- `ABsearch1` and `ABsearch2` look more move-generation / move-selection heavy,
+  with `Moves::MoveGen123` and `Moves::MakeNext` showing up repeatedly beneath
+  their sampled frames.
+- `ABsearch3` has a distinct fourth-hand contribution through `Make3`, which is
+  consistent with its trick-resolution and winner-update role.
+- So the residual AB body is not just generic loop/control glue: the samples say
+  it still contains real cost in move generation/ordering, TT lookup/store,
+  quick-trick pruning, and the special `Make3` path.
+
+### Follow-on optimization guidance
+
+- The next timer-based diagnostic should prefer structural splits over more tiny
+  helper-boundary timers.
+- The strongest next candidates are:
+  1. per-`ABsearch*` diagnostic timers (`ABsearch0/1/2/3`), or
+  2. a focused split inside `ABsearch0` for TT lookup/store, quick-trick work,
+     and move-generation / ordering.
+- The samples do **not** justify another broad micro-tuning pass of generic loop
+  control; they point more strongly at move ordering, TT behavior, and the
+  special fourth-hand path.
+
 ## 2026-05-07 00:15:00 — Coarse `ab_frontend_us` split after timer pruning on commit `c97abd8` (dirty)
 
 - Captured logs:

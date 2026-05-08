@@ -221,6 +221,8 @@ bool ABsearch(
   thrp->nodes++;
 #endif
 
+  TIMER_START(TIMER_NO_AB_SEARCH, depth);
+
   TIMER_START(TIMER_NO_MOVEGEN, depth);
   DDSM1ZeroLowestWin(thrp, depth);
 
@@ -268,9 +270,11 @@ bool ABsearch(
     DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_END(TIMER_NO_AB_RECURSE_SETUP, depth);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch1(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH, depth);
 
     TIMER_START(TIMER_NO_UNDO, depth);
     DDSM1Undo1(posPoint, depth, * mply);
@@ -313,6 +317,7 @@ ABexit:
 #endif
   TIMER_END(TIMER_NO_AB_LOOP_CONTROL, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH, depth);
 
   return value;
 }
@@ -331,6 +336,8 @@ bool ABsearch0(
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
 #endif
+
+  TIMER_START(TIMER_NO_AB_SEARCH0, depth);
 
   TIMER_START(TIMER_NO_AB_SETUP, depth);
   DDSM1ZeroWinRanks(posPoint, depth);
@@ -386,6 +393,7 @@ bool ABsearch0(
 
       AB_COUNT(AB_MAIN_LOOKUP, scoreFlag, depth);
       TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return scoreFlag;
     }
   }
@@ -397,6 +405,7 @@ bool ABsearch0(
     TIMER_START(TIMER_NO_AB_TERMINAL, depth);
     AB_COUNT(AB_TARGET_REACHED, true, depth);
     TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     return true;
   }
   else if (posPoint->tricksMAX + tricks + 1 < target)
@@ -405,6 +414,7 @@ bool ABsearch0(
     TIMER_START(TIMER_NO_AB_TERMINAL, depth);
     AB_COUNT(AB_TARGET_REACHED, false, depth);
     TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     return false;
   }
   else if (depth == 0)
@@ -426,6 +436,7 @@ bool ABsearch0(
     TIMER_START(TIMER_NO_AB_TERMINAL, depth);
     AB_COUNT(AB_DEPTH_ZERO, value, depth);
     TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     return value;
   }
   TIMER_END(TIMER_NO_AB_TERMINAL_CONTROL, depth);
@@ -445,6 +456,7 @@ bool ABsearch0(
       TIMER_START(TIMER_NO_AB_TERMINAL, depth);
       AB_COUNT(AB_QUICKTRICKS, 1, depth);
       TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return (qtricks == 0 ? false : true);
     }
     TIMER_END(TIMER_NO_AB_TERMINAL_CONTROL, depth);
@@ -460,6 +472,7 @@ bool ABsearch0(
       TIMER_START(TIMER_NO_AB_TERMINAL, depth);
       AB_COUNT(AB_LATERTRICKS, true, depth);
       TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return false;
     }
     TIMER_END(TIMER_NO_AB_TERMINAL_CONTROL, depth);
@@ -473,6 +486,7 @@ bool ABsearch0(
       TIMER_START(TIMER_NO_AB_TERMINAL, depth);
       AB_COUNT(AB_QUICKTRICKS, false, depth);
       TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return (qtricks == 0 ? true : false);
     }
     TIMER_END(TIMER_NO_AB_TERMINAL_CONTROL, depth);
@@ -488,6 +502,7 @@ bool ABsearch0(
       TIMER_START(TIMER_NO_AB_TERMINAL, depth);
       AB_COUNT(AB_LATERTRICKS, false, depth);
       TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return true;
     }
     TIMER_END(TIMER_NO_AB_TERMINAL_CONTROL, depth);
@@ -543,6 +558,7 @@ bool ABsearch0(
 
       AB_COUNT(AB_MAIN_LOOKUP, scoreFlag, depth);
       TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+      TIMER_END(TIMER_NO_AB_SEARCH0, depth);
       return scoreFlag;
     }
   }
@@ -598,9 +614,11 @@ bool ABsearch0(
     DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_END(TIMER_NO_AB_RECURSE_SETUP, depth);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH0, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch1(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH0, depth);
 
     TIMER_START(TIMER_NO_UNDO, depth);
     Undo1(posPoint, depth, * mply);
@@ -698,6 +716,7 @@ ABexit:
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_LOOP_CONTROL, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH0, depth);
   return value;
 }
 
@@ -718,6 +737,8 @@ bool ABsearch1(
   thrp->nodes++;
 #endif
 
+  TIMER_START(TIMER_NO_AB_SEARCH1, depth);
+
   TIMER_START(TIMER_NO_QT, depth);
   int res = QuickTricksSecondHand(* posPoint, hand, depth, target,
      trump, * thrp);
@@ -729,6 +750,7 @@ bool ABsearch1(
     TIMER_START(TIMER_NO_AB_TERMINAL, depth);
     AB_COUNT(AB_QUICKTRICKS_2ND, true, depth);
     TIMER_END(TIMER_NO_AB_TERMINAL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH1, depth);
     return success;
   }
   TIMER_END(TIMER_NO_AB_TERMINAL_CONTROL, depth);
@@ -776,9 +798,11 @@ bool ABsearch1(
     DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_END(TIMER_NO_AB_RECURSE_SETUP, depth);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH1, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch2(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH1, depth);
 
     TIMER_START(TIMER_NO_UNDO, depth);
     DDSM1Undo2(posPoint, depth, * mply);
@@ -818,6 +842,7 @@ ABexit:
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_LOOP_CONTROL, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH1, depth);
   return value;
 }
 
@@ -836,6 +861,8 @@ bool ABsearch2(
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
 #endif
+
+  TIMER_START(TIMER_NO_AB_SEARCH2, depth);
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
   DDSM1ZeroLowestWin(thrp, depth);
@@ -881,9 +908,11 @@ bool ABsearch2(
     TIMER_START(TIMER_NO_AB_RECURSE_SETUP, depth);
     DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_END(TIMER_NO_AB_RECURSE_SETUP, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH2, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch3(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH2, depth);
 
     TIMER_START(TIMER_NO_UNDO, depth);
     DDSM1Undo3(posPoint, depth, * mply);
@@ -923,6 +952,7 @@ ABexit:
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_LOOP_CONTROL, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH2, depth);
   return value;
 }
 
@@ -942,6 +972,8 @@ bool ABsearch3(
 #ifdef DDS_TOP_LEVEL
   thrp->nodes++;
 #endif
+
+  TIMER_START(TIMER_NO_AB_SEARCH3, depth);
 
   TIMER_START(TIMER_NO_MOVEGEN, depth);
   DDSM1ZeroLowestWin(thrp, depth);
@@ -992,9 +1024,11 @@ bool ABsearch3(
     DDSM1PrefetchChild(posPoint, thrp, depth - 1);
     TIMER_END(TIMER_NO_AB_RECURSE_SETUP, depth);
     TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+    TIMER_END(TIMER_NO_AB_SEARCH3, depth);
     TIMER_START(TIMER_NO_AB, depth - 1);
     value = ABsearch0(posPoint, target, depth - 1, thrp);
     TIMER_END(TIMER_NO_AB, depth - 1);
+    TIMER_START(TIMER_NO_AB_SEARCH3, depth);
 
     TIMER_START(TIMER_NO_UNDO, depth);
     DDSM1Undo0(posPoint, thrp, depth, * mply);
@@ -1038,6 +1072,7 @@ ABexit:
   AB_COUNT(AB_MOVE_LOOP, value, depth);
   TIMER_END(TIMER_NO_AB_LOOP_CONTROL, depth);
   TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
+  TIMER_END(TIMER_NO_AB_SEARCH3, depth);
   return value;
 }
 

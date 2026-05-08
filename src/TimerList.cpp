@@ -36,6 +36,11 @@ void TimerList::Reset()
   timerGroups[TIMER_NO_AB].SetNames("AB");
   timerGroups[TIMER_NO_AB_FRONTEND].SetNames("ABFront");
   timerGroups[TIMER_NO_AB_ITERATION_CONTROL].SetNames("ABIterCtl");
+  timerGroups[TIMER_NO_AB_SEARCH].SetNames("ABsearch");
+  timerGroups[TIMER_NO_AB_SEARCH0].SetNames("ABsearch0");
+  timerGroups[TIMER_NO_AB_SEARCH1].SetNames("ABsearch1");
+  timerGroups[TIMER_NO_AB_SEARCH2].SetNames("ABsearch2");
+  timerGroups[TIMER_NO_AB_SEARCH3].SetNames("ABsearch3");
 }
 
 
@@ -85,6 +90,11 @@ TimerListSummary TimerList::Summary() const
     summary.abUserMicros -
     summary.abFrontendUserMicros -
     summary.abIterationControlUserMicros;
+  summary.abSearchUserMicros = timerGroups[TIMER_NO_AB_SEARCH].UserTimeMicroseconds();
+  summary.abSearch0UserMicros = timerGroups[TIMER_NO_AB_SEARCH0].UserTimeMicroseconds();
+  summary.abSearch1UserMicros = timerGroups[TIMER_NO_AB_SEARCH1].UserTimeMicroseconds();
+  summary.abSearch2UserMicros = timerGroups[TIMER_NO_AB_SEARCH2].UserTimeMicroseconds();
+  summary.abSearch3UserMicros = timerGroups[TIMER_NO_AB_SEARCH3].UserTimeMicroseconds();
   return summary;
 }
 

@@ -67,6 +67,11 @@ enum ABTimerType
   TIMER_NO_AB = 0,
   TIMER_NO_AB_FRONTEND = 1,
   TIMER_NO_AB_ITERATION_CONTROL = 2,
+  TIMER_NO_AB_SEARCH = 3,
+  TIMER_NO_AB_SEARCH0 = 4,
+  TIMER_NO_AB_SEARCH1 = 5,
+  TIMER_NO_AB_SEARCH2 = 6,
+  TIMER_NO_AB_SEARCH3 = 7,
   TIMER_NO_MAKE = TIMER_NO_AB_ITERATION_CONTROL,
   TIMER_NO_UNDO = TIMER_NO_AB_ITERATION_CONTROL,
   TIMER_NO_EVALUATE = TIMER_NO_AB_FRONTEND,
@@ -87,7 +92,7 @@ enum ABTimerType
   TIMER_NO_AB_SETUP = TIMER_NO_AB_FRONTEND,
   TIMER_NO_AB_TERMINAL_CONTROL = TIMER_NO_AB_FRONTEND,
   TIMER_NO_AB_STORE_PREP = TIMER_NO_AB_FRONTEND,
-  TIMER_NO_SIZE = 3
+  TIMER_NO_SIZE = 8
 };
 
 
@@ -97,12 +102,22 @@ struct TimerListSummary
   long abFrontendUserMicros;
   long abIterationControlUserMicros;
   long abOtherUserMicros;
+  long abSearchUserMicros;
+  long abSearch0UserMicros;
+  long abSearch1UserMicros;
+  long abSearch2UserMicros;
+  long abSearch3UserMicros;
 
   TimerListSummary() :
     abUserMicros(0),
     abFrontendUserMicros(0),
     abIterationControlUserMicros(0),
-    abOtherUserMicros(0)
+    abOtherUserMicros(0),
+    abSearchUserMicros(0),
+    abSearch0UserMicros(0),
+    abSearch1UserMicros(0),
+    abSearch2UserMicros(0),
+    abSearch3UserMicros(0)
   {
   }
 
@@ -113,6 +128,11 @@ struct TimerListSummary
     delta.abFrontendUserMicros = abFrontendUserMicros - other.abFrontendUserMicros;
     delta.abIterationControlUserMicros = abIterationControlUserMicros - other.abIterationControlUserMicros;
     delta.abOtherUserMicros = abOtherUserMicros - other.abOtherUserMicros;
+    delta.abSearchUserMicros = abSearchUserMicros - other.abSearchUserMicros;
+    delta.abSearch0UserMicros = abSearch0UserMicros - other.abSearch0UserMicros;
+    delta.abSearch1UserMicros = abSearch1UserMicros - other.abSearch1UserMicros;
+    delta.abSearch2UserMicros = abSearch2UserMicros - other.abSearch2UserMicros;
+    delta.abSearch3UserMicros = abSearch3UserMicros - other.abSearch3UserMicros;
     return delta;
   }
 };
