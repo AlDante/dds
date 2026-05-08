@@ -81,15 +81,24 @@ struct moveGroupType
 
 extern moveGroupType groupData[8192];
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
+#pragma clang diagnostic ignored "-Wnested-anon-types"
 
-struct moveType
-{
-  short suit;
-  short rank;
-  short sequence; /* Whether or not this move is the
-                                       first in a sequence */
-  short weight; /* Weight used at sorting */
+// Problematic struct code here...
+
+// moveType is defined as a union to allow use of M1 compare and sort (CAS) instructions
+union moveType {
+  struct {
+    short suit;
+    short rank;
+    short sequence; // Whether or not this move is the first in a sequence
+    short weight;   // Signed weight used at sorting. Most significant 16 bits on little-endian M1 Max
+  };
+  int64_t raw;
 };
+#pragma clang diagnostic pop
+
 
 static_assert(sizeof(moveType) == 8, "moveType should remain compact");
 

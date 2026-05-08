@@ -2044,16 +2044,20 @@ void Moves::SortMoves()
 }
 
 
-#define CMP_SWAP(i, j) if (mply[i].weight < mply[j].weight) \
-  { std::swap(mply[i], mply[j]); }
+//#define CMP_SWAP(i, j) if (mply[i].weight < mply[j].weight) \
+//  { std::swap(mply[i], mply[j]); }
 
 
-inline void cas(int& a, int& b) {
-  int temp = a;
-  a = std::min(temp, b);
-  b = std::max(temp, b);
+// Compare and swap routine, optimised for Apple M1
+inline void cas(moveType& a, moveType& b) {
+  const int64_t val_a = a.raw;
+  const int64_t val_b = b.raw;
+  const bool cond = a.weight < b.weight;
+  a.raw = cond ? val_b : val_a;
+  b.raw = cond ? val_a : val_b;
 }
 
+#define CMP_SWAP(i, j) cas(mply[i], mply[j])
 
 void Moves::MergeSort(
   moveType * mply,

@@ -12,6 +12,65 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-08 14:44:57 — `cas()` weight-only compare / raw-payload swap experiment on commit `c265b52` (dirty)
+
+- Captured artifacts:
+  - baseline bundle: `test/build/alpha_mu_stats/20260508-144401-int64-raw-corrected-validation/`
+  - after-change bundle: `test/build/alpha_mu_stats/20260508-144457-int64-raw-corrected-validation/`
+- Goal: keep the packed `int64_t raw` swap path, but restore historical DDS tie
+  behavior by comparing only `a.weight < b.weight` inside `cas()` instead of
+  comparing the packed raw value directly.
+- Result: the weight-only compare restored the exact sorter semantics required
+  by the direct benchmark and by `regression_api`, but it also gave back a large
+  part of the raw-sort speedup seen in the packed-key variant.
+
+### Before (`raw` compare inside `cas()`)
+
+| Check | Result |
+| --- | --- |
+| `moves_sort_benchmark` | failed on equal-weight tie ordering (`sample 394`) |
+| `current_merge_only_benchmark` net sort CPU | `0.051967 s` |
+| `alpha_mu` list9 depth-2 board benchmark total | `0.010413 s` |
+| `alpha_mu` list9 depth-2 serial verify total | `0.021626 s` |
+| `dtest -f ../hands/list10.txt -s solve` | pass |
+| `regression_api` | fail (`Golden FUT mismatch`) |
+
+### After (`a.weight < b.weight`, swap `raw` payloads)
+
+| Check | Result |
+| --- | --- |
+| `moves_sort_benchmark` | pass; exact output match restored |
+| direct benchmark `MergeSort` net sort CPU | `0.147453 s` |
+| `current_merge_only_benchmark` net sort CPU | `0.074464 s` |
+| `alpha_mu` list9 depth-2 board benchmark total | `0.014397 s` |
+| `alpha_mu` list9 depth-2 serial verify total | `0.031774 s` |
+| `dtest -f ../hands/list10.txt -s solve` | pass |
+| `regression_api` | pass |
+
+### Performance impact of the change
+
+- Compared with the immediately preceding `raw`-compare variant, the
+  weight-only compare made the merge-only sorter benchmark slower from
+  `0.051967 s` to `0.074464 s` (`+43.3%`).
+- The same change also slowed the list9 depth-2 board-parallel solver benchmark
+  from `0.010413 s` to `0.014397 s` (`+38.3%`).
+- Serial alpha-mu verify time rose from `0.021626 s` to `0.031774 s`
+  (`+46.9%`).
+- Even after giving back that speed, the restored-semantics `MergeSort`
+  benchmark (`0.147453 s`) still remained faster than the original unmodified
+  `MergeSort` baseline recorded earlier (`0.159765 s`), about `7.7%` lower in
+  median net sort CPU time.
+
+### Conclusion
+
+- Comparing packed `raw` values directly is too aggressive for DDS because it
+  changes equal-weight tie ordering and breaks `regression_api`.
+- Comparing only `weight` while swapping the packed payload restores the needed
+  search semantics and correctness behavior.
+- The price of that restoration is real but not catastrophic: the current
+  weight-only `cas()` version is still somewhat faster than the original
+  unmodified `MergeSort`, just no longer dramatically faster than it.
+
 ## 2026-05-08 12:09:01 — Direct `Moves` sorter benchmark (`MergeSort` vs `CycleSort`) on commit `c265b52` (dirty)
 
 - Captured artifacts:
