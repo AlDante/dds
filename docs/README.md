@@ -32,9 +32,10 @@ The generated HTML site will be written to:
 build/html/index.html
 ```
 
-For DDS library and test-binary build variants, including `M1_MAX_BUILD`,
-profiling outputs, and `PGO_MODE=generate/use`, see the repository-level
-`INSTALL` guide together with `profiling.md`.
+For DDS library and test-binary build variants, including production builds,
+CLion setup, `M1_MAX_BUILD`, profiling outputs, and `PGO_MODE=generate/use`,
+see `build-and-clion.md`, the repository-level `INSTALL` guide, and
+`profiling.md`.
 
 ## Clean
 
@@ -60,6 +61,7 @@ The generated site includes:
 - `alpha-mu-roadmap.md` — current completion estimate and staged roadmap from the current engine-incubation state to a full post-mortem alpha-mu evaluator
 - `alpha-mu-future-roadmap.md` — deferred post-Stage-9 roadmap for optional future alpha-mu enhancements beyond the completed repository scope
 - `alpha-mu-test-set.md` — paper-derived alpha-mu test families and hand sets
+- `build-and-clion.md` — supported Makefile build flags, manual build commands, and recommended CLion configuration
 - `profiling.md` — profiling build targets, Instruments workflow, and hotspot checklist
 - `implementation-plan.md` — staged implementation roadmap
 - `action-plan.md` — concrete next-cycle execution checklist for the next engine-building iteration

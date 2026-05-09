@@ -104,12 +104,17 @@ For profiling on macOS from the repository root, use:
 
     make profile
 
+For the practical build workflow, supported compiler flags, and recommended
+CLion setup, see `docs/build-and-clion.md`.
+
 For the full toggle details, including `PGO_MODE=generate` and
 `PGO_MODE=use`, see the `INSTALL` file and `docs/profiling.md`.
 
 Docs
 ====
 The maintained documentation entry point is the `docs/` directory, which combines curated Markdown pages with a Doxygen build. Historical interface and algorithm documentation remains in `doc/`.
+
+For build instructions and IDE workflow, start with `docs/build-and-clion.md`.
 
 Bugs
 ====
