@@ -166,7 +166,7 @@ static int SearchExactScoreRoot(
   int upperbound,
   moveType * bestMoveP)
 {
-  moveType mv = {0, 0, 0, 0};
+  moveType mv = {{0, 0, 0, 0}};
 
 #ifdef DDS_ALPHA_MU_STATS
   const int initialGuess = guess;
@@ -330,7 +330,7 @@ int SolveBoardInternal(
   thrp->lookAheadPos.first[iniDepth] = dl.first;
   thrp->lookAheadPos.tricksMAX = 0;
 
-  moveType mv = {0, 0, 0, 0};
+  moveType mv = {{0, 0, 0, 0}};
 
   for (int k = 0; k <= 13; k++)
   {

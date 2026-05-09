@@ -12,6 +12,54 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-09 — `MergeSort` network reorder experiment (`case 9/10/12`) on current working tree
+
+- Captured artifacts:
+  - `test/build/moves_sort_benchmark.reordered.latest.txt`
+- Platform: Apple-Silicon macOS host
+- Goal: test whether reordering the hand-written comparator sequence in
+  `Moves::MergeSort` to expose shallower dependency layers could improve the
+  packed-`cas()` sorter without changing exact DDS move ordering.
+- Method:
+  - add an opt-in `DDS_MOVES_SORT_IMPL=reordered` path that preserves the
+    existing comparator set and falls back to the production `MergeSort`
+    schedule for all other sizes
+  - require exact byte-for-byte equivalence against `MergeSort` on the full
+    direct benchmark corpus plus exhaustive ternary-weight checks for sizes `9`,
+    `10`, and `12`
+  - benchmark with the existing deterministic
+    `CLOCK_THREAD_CPUTIME_ID` harness in `test/moves_sort_benchmark.cpp`
+
+### Correctness and regression checks
+
+| Check | Result |
+| --- | --- |
+| `moves_sort_benchmark` exact equivalence | pass (`MergeSort`, `MergeSortReordered`, and `CycleSort` all matched exactly) |
+| `DDS_MOVES_SORT_IMPL=reordered ./build/regression_api ../hands/list1.txt` | pass |
+| `DDS_MOVES_SORT_IMPL=reordered ./build/dtest -f ../hands/list10.txt -s solve` | pass |
+
+### Direct benchmark reruns
+
+Three consecutive reruns of `test/build/moves_sort_benchmark` produced:
+
+| Run | Copy baseline (s) | `MergeSort` net sort CPU (s) | `MergeSortReordered` net sort CPU (s) | Relative vs `MergeSort` net |
+| --- | ---: | ---: | ---: | ---: |
+| rerun 1 | `0.138105` | `0.146199` | `0.147695` | `+1.02%` |
+| rerun 2 | `0.136449` | `0.143968` | `0.144597` | `+0.44%` |
+| rerun 3 | `0.135365` | `0.144084` | `0.145584` | `+1.04%` |
+
+### Conclusion
+
+- The reordered network can be **exact-order equivalent**, but on this M1 Max
+  host it is **not faster** than the existing hand-written order.
+- Across three direct reruns it was consistently slightly slower, by roughly
+  `0.4%` to `1.0%` in median net sort CPU time.
+- That result suggests the current `Moves::MergeSort` schedule is already very
+  well matched to the actual `cas()` execution path, even where a shallower
+  dependency layering looks possible on paper.
+- So the right conclusion is: **keep the current production network order** and
+  do not expect meaningful gains from simple comparator reordering alone.
+
 ## 2026-05-08 14:44:57 — `cas()` weight-only compare / raw-payload swap experiment on commit `c265b52` (dirty)
 
 - Captured artifacts:

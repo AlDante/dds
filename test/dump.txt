@@ -3,38 +3,38 @@ Error code=-19
 Deal data:
 trump=S
 first=
-index1=0 index2=0 remainCards=0
+index1=0 index2=0 remainCards=9360
 index1=0 index2=1 remainCards=0
-index1=0 index2=2 remainCards=10920
-index1=0 index2=3 remainCards=21844
+index1=0 index2=2 remainCards=4392
+index1=0 index2=3 remainCards=19012
 index1=1 index2=0 remainCards=0
-index1=1 index2=1 remainCards=21844
-index1=1 index2=2 remainCards=0
-index1=1 index2=3 remainCards=10920
-index1=2 index2=0 remainCards=21844
-index1=2 index2=1 remainCards=10920
-index1=2 index2=2 remainCards=0
+index1=1 index2=1 remainCards=4392
+index1=1 index2=2 remainCards=19012
+index1=1 index2=3 remainCards=9360
+index1=2 index2=0 remainCards=4392
+index1=2 index2=1 remainCards=19012
+index1=2 index2=2 remainCards=9360
 index1=2 index2=3 remainCards=0
-index1=3 index2=0 remainCards=10920
-index1=3 index2=1 remainCards=0
-index1=3 index2=2 remainCards=21844
-index1=3 index2=3 remainCards=0
+index1=3 index2=0 remainCards=19012
+index1=3 index2=1 remainCards=9360
+index1=3 index2=2 remainCards=0
+index1=3 index2=3 remainCards=4392
 
 target=-1
 solutions=3
 mode=1
 
 
-        S --
+        S KT74
         H --
-        D KJ9753
-        C AQT8642
-S KJ9753        S --
-H --            H AQT8642
-D AQT8642       D --
-C --            C KJ9753
-        S AQT8642
-        H KJ9753
-        D --
+        D Q853
+        C AJ962
+S AJ962         S --
+H KT74          H Q853
+D --            D AJ962
+C Q853          C KT74
+        S Q853
+        H AJ962
+        D KT74
         C --
 

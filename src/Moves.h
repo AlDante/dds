@@ -402,6 +402,7 @@ class Moves
       moveType * mply,
       int numMoves);
 
+
     /*
       Diagnostic alternative to MergeSort().  It first derives the exact output
       permutation using the same compare network on indices, then applies that

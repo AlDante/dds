@@ -1317,14 +1317,14 @@ int Moves::RankForcesAce(
   int secondRHO = (g == 0 ? 0 : mp.rank[g-1]);
 
   if (secondRHO > trackp->move[1].rank)
+
   {
     // Try to force out the top as cheaply as possible.
     int k = 0;
-    while (k < numMoves && mply[k].rank > secondRHO)
-      k++;
 
     if (k)
       return k - 1;
+
   }
   else if (trackp->high[1] == 1)
   {
@@ -2313,6 +2313,7 @@ void Moves::MergeSort(
 
   return;
 }
+
 
 
 void Moves::CycleSort(
