@@ -32,6 +32,14 @@ endif
 M1_MAX_FLAGS	=
 ifeq ($(M1_MAX_BUILD),1)
 M1_MAX_FLAGS	+= -DDDS_TARGET_APPLE_M1_MAX
+M1_MAX_ARCH_FLAGS	=	-mcpu=apple-m1 -mtune=apple-m1
+M1_MAX_RELEASE_FLAGS	=	-ffast-math -fstrict-aliasing -funroll-loops -fomit-frame-pointer \
+		-ffunction-sections -fdata-sections
+M1_MAX_LINK_FLAGS	=	-Wl,-dead_strip -Wl,-dead_strip_dylibs
+else
+M1_MAX_ARCH_FLAGS	=	-mtune=generic
+M1_MAX_RELEASE_FLAGS	=
+M1_MAX_LINK_FLAGS	=
 endif
 
 THREAD_LINK	=
@@ -78,7 +86,7 @@ WARN_FLAGS	= 		\
 	-Wno-long-long		\
 	-Wno-format
 
-RELEASE_OPT_FLAGS	= -O3 -flto
+RELEASE_OPT_FLAGS	= -O3 -flto $(M1_MAX_RELEASE_FLAGS)
 PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
 
 ifeq ($(PROFILE_BUILD),1)
@@ -112,7 +120,7 @@ RPATH_DIR	?=	$(BASE_RPATH_DIR)
 EXTRA_COMPILE_FLAGS ?=
 EXTRA_LINK_FLAGS ?=
 
-COMPILE_FLAGS	= $(OPT_FLAGS) -mtune=generic \
+COMPILE_FLAGS	= $(OPT_FLAGS) $(M1_MAX_ARCH_FLAGS) \
 		$(WARN_FLAGS) -std=c++11 $(THREADING) $(M1_MAX_FLAGS) $(EXTRA_COMPILE_FLAGS)
 
 .PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu moves_sort_benchmark itest profile_binaries depend clean
@@ -124,10 +132,10 @@ DLIB 		= $(DLLBASE).lib
 OBJ_DIR		= $(BUILD_DIR)/obj
 
 LINK1_FLAGS	=
-LINK2_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) $(EXTRA_LINK_FLAGS) \
+LINK2_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) $(M1_MAX_LINK_FLAGS) $(EXTRA_LINK_FLAGS) \
 		-L$(DDS_BUILD_DIR) -l$(DLLBASE) \
 		-Wl,-rpath,$(RPATH_DIR)
-LINK3_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) $(EXTRA_LINK_FLAGS)
+LINK3_FLAGS	= $(THREAD_LINK) $(PGO_LINK_FLAGS) $(M1_MAX_LINK_FLAGS) $(EXTRA_LINK_FLAGS)
 
 # This is in addition to $(DTEST).cpp
 

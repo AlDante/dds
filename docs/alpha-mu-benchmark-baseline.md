@@ -104,10 +104,17 @@ the fastest measured DDS-side code before any data-structure experiments.
 | L1D Miss Loads | 4.635 B |
 | L1D Miss Stores | 2.866 B |
 
-### Current HEAD (after performance recovery)
+### Current HEAD (after performance recovery and toolchain retuning)
 
-After reverting unsuccessful optimization experiments, the current code retains
-only the packed `moveType` change (`int` to `short`) on top of `170e566`:
+After reverting unsuccessful source-level optimization experiments, the current
+code retains the packed `moveType` change (`int` to `short`) on top of
+`170e566`. On Apple `arm64`, the standard release build now also retains an
+aggressive M1 Max-targeted toolchain profile:
+
+- `-O3 -flto -ffast-math -fstrict-aliasing -funroll-loops`
+- `-fomit-frame-pointer -ffunction-sections -fdata-sections`
+- `-mcpu=apple-m1 -mtune=apple-m1`
+- link: `-Wl,-dead_strip -Wl,-dead_strip_dylibs`
 
 | Metric | Value | Delta vs `170e566` |
 | --- | ---: | ---: |
@@ -121,8 +128,9 @@ instruction count and store misses, confirming the smaller struct size saves
 memory bandwidth.
 
 This retained set is also the closed Stage-5 / preserved-fallback endpoint for
-the current Apple-Silicon `P1.6` plan: no broader DDS portability sacrifice is
-currently justified.
+the current Apple-Silicon `P1.6` plan: the standard Apple `arm64` build is now
+the M1 Max-optimised release build, while non-Apple and non-`arm64` builds
+still retain their own compile path.
 
 ## Measurement methodology
 
@@ -203,13 +211,16 @@ PGO remains available via `make macos_pgo_generate` / `make pgo_merge` /
 
 ## M1 Max-specific code paths
 
-The only M1 Max-specific code path retained in the release build is the
-`DDS_TARGET_APPLE_M1_MAX` conditional in `src/ABsearch_m1max.cpp`. This is
-auto-selected by the Makefile on Apple `arm64` hosts via `M1_MAX_BUILD=1`.
+The retained Apple-specific release behaviour now has two parts:
+
+1. the `DDS_TARGET_APPLE_M1_MAX` conditional in `src/ABsearch_m1max.cpp`,
+   auto-selected by the Makefile on Apple `arm64` hosts via `M1_MAX_BUILD=1`,
+2. the default Apple `arm64` release toolchain profile described above.
 
 No alpha-mu-specific M1 Max code paths were justified by measurement. The
 alpha-mu hot path is dominated by DDS leaf evaluation, so DDS-side optimization
-(the M1 Max `ABsearch` variant) provides the primary benefit automatically.
+(the M1 Max `ABsearch` variant plus the retained Apple release tuning) provides
+the primary benefit automatically.
 
 ## References
 

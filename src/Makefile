@@ -46,6 +46,14 @@ endif
 M1_MAX_FLAGS	=
 ifeq ($(M1_MAX_BUILD),1)
 M1_MAX_FLAGS	+= -DDDS_TARGET_APPLE_M1_MAX
+M1_MAX_ARCH_FLAGS	=	-mcpu=apple-m1 -mtune=apple-m1
+M1_MAX_RELEASE_FLAGS	=	-ffast-math -fstrict-aliasing -funroll-loops -fomit-frame-pointer \
+		-ffunction-sections -fdata-sections
+M1_MAX_LINK_FLAGS	=	-Wl,-dead_strip -Wl,-dead_strip_dylibs
+else
+M1_MAX_ARCH_FLAGS	=	-mtune=generic
+M1_MAX_RELEASE_FLAGS	=
+M1_MAX_LINK_FLAGS	=
 endif
 
 PGO_MODE	?=	none
@@ -95,7 +103,7 @@ WARN_FLAGS	= 		\
 	-Wno-long-long		\
 	-Wno-format
 
-RELEASE_OPT_FLAGS	= -O3 -flto
+RELEASE_OPT_FLAGS	= -O3 -flto $(M1_MAX_RELEASE_FLAGS)
 PROFILE_OPT_FLAGS	= -O2 -g -fno-omit-frame-pointer
 
 ifeq ($(PROFILE_BUILD),1)
@@ -118,7 +126,7 @@ BUILD_DIR	?=	$(BASE_BUILD_DIR)
 EXTRA_COMPILE_FLAGS ?=
 EXTRA_LINK_FLAGS ?=
 
-COMPILE_FLAGS	= -fPIC $(OPT_FLAGS) -mtune=generic -std=c++11 \
+COMPILE_FLAGS	= -fPIC $(OPT_FLAGS) $(M1_MAX_ARCH_FLAGS) -std=c++11 \
 		$(WARN_FLAGS) 	\
 		$(DDS_BEHAVIOR) $(THREAD_COMPILE) $(THREADING) $(EXTRA_COMPILE_FLAGS)
 
@@ -128,6 +136,7 @@ LINK_FLAGS	=		\
 	-shared			\
 	$(THREAD_LINK)		\
 	$(PGO_LINK_FLAGS)	\
+	$(M1_MAX_LINK_FLAGS)	\
 	-fPIC $(EXTRA_LINK_FLAGS)
 
 include $(INCL_SOURCE)

@@ -24,7 +24,9 @@ profile-clean:
 #   make perf-check    -- run correctness suite (dtest solve + regression_api)
 #   make perf-bench    -- run list9 depth-2 board-parallel benchmark (8 P-cores)
 #
-# All targets use the release build (build/) with -O3 -flto.
+# All targets use the standard release build (build/).
+# On Apple arm64, that standard build is the M1 Max-tuned release profile
+# rather than the older generic-tuned -O3 -flto configuration.
 # The benchmark uses 8 board workers to saturate the M1 Max P-cores.
 
 PERF_BOARD_WORKERS ?= 8

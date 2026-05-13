@@ -95,10 +95,12 @@ directories:
 * PGO instrumented builds write to `src/build-pgo-generate/` and `test/build-pgo-generate/`
 * PGO use builds write to `src/build-pgo-use/` and `test/build-pgo-use/`
 
-On Apple `arm64`, the Makefiles now default `M1_MAX_BUILD=1`, which enables
-the machine-specific `DDS_TARGET_APPLE_M1_MAX` path while keeping the portable
-DDS code available.  Set `M1_MAX_BUILD=0` to force the portable path for
-comparison runs.
+On Apple `arm64`, the normal standard release build is now the M1 Max-optimised
+build. The Makefiles default `M1_MAX_BUILD=1`, enable the machine-specific
+`DDS_TARGET_APPLE_M1_MAX` path, and use the Apple-targeted release toolchain
+profile for `build/` outputs while keeping the non-Apple build path available
+for other hosts. Set `M1_MAX_BUILD=0` to force the portable path for comparison
+runs.
 
 For profiling on macOS from the repository root, use:
 

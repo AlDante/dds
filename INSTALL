@@ -96,12 +96,27 @@ This adds the compile definition `DDS_TARGET_APPLE_M1_MAX`, which enables
 the separate M1 Max-specific `ABsearch` implementation while leaving the
 portable DDS implementation in place.
 
+On Apple arm64, this is also the normal standard release build: the release
+Makefiles now default to an M1 Max-targeted toolchain profile for `build/`
+outputs rather than the older generic-tuned Apple release.  In practice, the
+standard Apple arm64 release build now uses:
+
+    -O3 -flto -ffast-math -fstrict-aliasing -funroll-loops
+    -fomit-frame-pointer -ffunction-sections -fdata-sections
+    -mcpu=apple-m1 -mtune=apple-m1
+
+and release linking adds:
+
+    -Wl,-dead_strip -Wl,-dead_strip_dylibs
+
 The current `src/CMakeLists.txt` mirrors this behaviour by automatically
 adding `DDS_TARGET_APPLE_M1_MAX` on Apple arm64 builds.
 
 On non-arm64 hosts the default is:
 
     M1_MAX_BUILD=0
+
+and the release build remains on the generic non-M1 path.
 
 You can override the default explicitly when comparing the portable and
 machine-specific paths.  The library and test binaries should be built with

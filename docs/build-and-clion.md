@@ -27,6 +27,9 @@ That means the normal production build enables:
 - `DDS_THREADS_GCD`
 - `DDS_THREADS_STL`
 
+and, on this Apple `arm64` host, now also applies an M1 Max-specific release
+toolchain profile instead of the older generic-tuning-only release flags.
+
 ## Production compiler and linker flags
 
 ### Library build (`src/Makefile`)
@@ -37,7 +40,14 @@ The current production library build uses:
 -fPIC
 -O3
 -flto
--mtune=generic
+-ffast-math
+-fstrict-aliasing
+-funroll-loops
+-fomit-frame-pointer
+-ffunction-sections
+-fdata-sections
+-mcpu=apple-m1
+-mtune=apple-m1
 -std=c++11
 -Wshadow
 -Wsign-conversion
@@ -73,6 +83,8 @@ The normal library link step uses:
 
 ```text
 -shared
+-Wl,-dead_strip
+-Wl,-dead_strip_dylibs
 -fPIC
 ```
 
@@ -90,7 +102,14 @@ The production test binaries use the same release optimization level and the sam
 ```text
 -O3
 -flto
--mtune=generic
+-ffast-math
+-fstrict-aliasing
+-funroll-loops
+-fomit-frame-pointer
+-ffunction-sections
+-fdata-sections
+-mcpu=apple-m1
+-mtune=apple-m1
 -std=c++11
 -Wshadow
 -Wsign-conversion
@@ -128,6 +147,13 @@ These binaries link against:
 ../src/build/libdds.so
 ```
 
+with additional Apple release link trimming:
+
+```text
+-Wl,-dead_strip
+-Wl,-dead_strip_dylibs
+```
+
 with runtime library lookup set to:
 
 ```text
@@ -149,7 +175,8 @@ This is the normal optimized build.
 
 - library output: `src/build/libdds.so`
 - test output: `test/build/`
-- optimization flags: `-O3 -flto`
+- on Apple `arm64`: `-O3 -flto -ffast-math -fstrict-aliasing -funroll-loops -fomit-frame-pointer -ffunction-sections -fdata-sections -mcpu=apple-m1 -mtune=apple-m1`
+- on other hosts: the Makefiles still keep the generic non-M1 path available
 
 ## Profile / debug-like
 

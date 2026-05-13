@@ -12,6 +12,62 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-12 — Aggressive Apple M1 Max compiler/linker tuning on current working tree
+
+- Captured artifacts:
+  - `test/build/m1_max_tuning_20260512-120937/baseline_serial.log`
+  - `test/build/m1_max_tuning_20260512-120937/baseline_parallel.log`
+  - `test/build/m1_max_tuning_20260512-120937/tuned_serial.log`
+  - `test/build/m1_max_tuning_20260512-120937/tuned_parallel.log`
+  - `test/build/m1_max_tuning_20260512-120937/repeat_summary.md`
+  - `test/build/m1_max_tuning_20260512-120937/repeat_summary.json`
+  - `test/build/m1_max_tuning_20260512-120937/dtest_list10_tuned.log`
+  - `test/build/m1_max_tuning_20260512-120937/regression_api_list1_tuned.log`
+  - `test/build/m1_max_tuning_20260512-120937/regression_api_list10_thomas1_tuned.log`
+- Platform: Apple-Silicon macOS host, `arm64`, Apple clang `21.0.0`
+- Goal: compare the prior Apple release configuration (`-O3 -flto -mtune=generic` with the existing `DDS_TARGET_APPLE_M1_MAX` source path) against a maximally aggressive M1 Max-targeted toolchain profile while keeping the non-Apple build path available.
+- New Apple `arm64` release flags:
+  - compile: `-O3 -flto -ffast-math -fstrict-aliasing -funroll-loops -fomit-frame-pointer -ffunction-sections -fdata-sections -mcpu=apple-m1 -mtune=apple-m1`
+  - link: `-Wl,-dead_strip -Wl,-dead_strip_dylibs`
+- Method:
+  - first record one baseline serial run and one baseline board-parallel run with the then-current generic-tuned release build
+  - then change the Makefiles to default Apple `arm64` release builds to the aggressive M1 Max profile above
+  - rebuild the normal release artifacts and confirm correctness
+  - because the exact `benchmark_alpha` workload is now only millisecond-scale on this tree, rebuild a side-by-side generic-flag variant (`build-m1-generic`) and run repeated A/B timing with `5` warmups and `50` measured repeats per case; use medians as the meaningful comparison
+
+### Repeated timing summary (`5` warmups, `50` measured repeats)
+
+| Case | Median total (s) | Mean total (s) | Min (s) | Max (s) | Median per board (s) | Delta vs generic baseline |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| generic baseline, serial | `0.026010` | `0.026871` | `0.023871` | `0.042160` | `0.002876` | baseline |
+| tuned M1 Max, serial | `0.024417` | `0.024725` | `0.023624` | `0.027710` | `0.002701` | `-6.12%` total, `-6.08%` per board |
+| generic baseline, board-parallel | `0.010183` | `0.010311` | `0.008685` | `0.018426` | `0.004345` | baseline |
+| tuned M1 Max, board-parallel | `0.010165` | `0.010587` | `0.008307` | `0.024872` | `0.004579` | `-0.18%` total, `+5.39%` per board |
+
+### Single-shot smoke runs taken before/after the change
+
+| Case | Total (s) | Per board (s) | Mismatches |
+| --- | ---: | ---: | ---: |
+| generic baseline, serial | `0.025333` | `0.002801` | `0` |
+| tuned M1 Max, serial | `0.025344` | `0.002804` | `0` |
+| generic baseline, board-parallel | `0.009705` | `0.004286` | `0` |
+| tuned M1 Max, board-parallel | `0.011766` | `0.005097` | `0` |
+
+### Correctness and regression checks
+
+| Check | Result |
+| --- | --- |
+| repeated benchmark medians (`generic` and `tuned`) | pass (`mismatches=0` on all `200` measured runs) |
+| `DYLD_LIBRARY_PATH=../src/build ./build/dtest -f ../hands/list10.txt -s solve` | pass (`Avg user time (ms) 10.46`) |
+| `DYLD_LIBRARY_PATH=../src/build ./build/regression_api ../hands/list1.txt` | pass |
+| `DYLD_LIBRARY_PATH=../src/build ./build/regression_api ../hands/list10.txt ../hands/thomas1.txt` | pass |
+
+### Conclusion
+
+- On this exact benchmark, the aggressive Apple M1 Max compile/link profile is a **real serial win**: about **`6.1%` faster** on the repeated serial median.
+- The board-parallel wall-clock total is effectively **neutral** on the repeated median (`-0.18%`), which is the right way to read this now that the whole workload finishes in about `10 ms` and startup/scheduling noise is a first-order effect.
+- So the practical result is: keep the aggressive M1 Max release profile as the default on Apple `arm64`, keep the generic non-Apple build path intact, and treat any future throughput claims on this exact micro-workload as requiring repeated medians rather than single-shot runs.
+
 ## 2026-05-09 — `MergeSort` network reorder experiment (`case 9/10/12`) on current working tree
 
 - Captured artifacts:
