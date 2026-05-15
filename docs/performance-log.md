@@ -12,6 +12,44 @@ _Entries that include a `Timing stabilization` section use warmup runs plus adap
 
 _If an entry includes `Graph outliers`, those workload values remain recorded below but are shown as hollow X markers and excluded from the corresponding trend line in the graph._
 
+## 2026-05-14 — Frozen full alpha-mu future-comparison baseline on commit `ccf40d3` (dirty)
+
+- Captured artifacts:
+  - `test/build/full_alpha_mu_runs/20260514-191252/summary.md`
+  - `test/build/full_alpha_mu_runs/20260514-191252/summary.json`
+  - `test/build/full_alpha_mu_runs/20260514-191252/03_play_board1_depth2_w32_run1.log`
+  - `test/build/full_alpha_mu_runs/20260514-191252/03_play_board1_depth2_w32_run2.log`
+  - `test/build/full_alpha_mu_runs/20260514-191252/03_play_board1_depth2_w32_run3.log`
+  - `test/build/full_alpha_mu_runs/20260514-191252/04_play_board3_depth2_w32_run1.log`
+  - `test/build/full_alpha_mu_runs/20260514-191252/04_play_board3_depth2_w32_run2.log`
+  - `test/build/full_alpha_mu_runs/20260514-191252/04_play_board3_depth2_w32_run3.log`
+- Platform: Apple-Silicon macOS host, `arm64`, Apple clang `21.0.0`
+- Goal: freeze an end-to-end alpha-mu benchmark that exercises the real
+  `solve` path rather than the exact-leaf-only `benchmark_alpha` path, because
+  the exact benchmark is now too small to serve as the main future-comparison
+  workload for full alpha-mu work.
+- Runner: `python3 test/full_alpha_mu_benchmark.py --repeats 3`
+- Frozen cases:
+  - `./build/alpha_mu solve ../hands/alpha_mu_play.txt 1 2 32`
+  - `./build/alpha_mu solve ../hands/alpha_mu_play.txt 3 2 32`
+
+### Summary
+
+| Case | Median total (s) | Mean total (s) | Min (s) | Max (s) | Median world gen (s) | Median search (s) | Median DDS leaves (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `play_board1_depth2_w32` | `0.051803` | `0.061148` | `0.034246` | `0.097395` | `0.000113` | `0.051439` | `0.000000` |
+| `play_board3_depth2_w32` | `22.392190` | `22.475941` | `22.297273` | `22.738359` | `5.374536` | `17.015901` | `16.454370` |
+
+### Interpretation
+
+- `play_board1_depth2_w32` is the fast continuation sanity case.
+- `play_board3_depth2_w32` is the important reference workload for future full
+  alpha-mu work: it starts from `184756` raw worlds, samples to `32`, and on
+  this baseline spends about `24%` of wall time in world generation and about
+  `73%` in DDS leaves.
+- These two medians are now the frozen end-to-end comparison baseline and are
+  also recorded in `docs/alpha-mu-benchmark-baseline.md`.
+
 ## 2026-05-12 — Aggressive Apple M1 Max compiler/linker tuning on current working tree
 
 - Captured artifacts:

@@ -76,6 +76,28 @@ Used for hardware-counter profiling with `pmu_single_run`.
 - Mode: serial
 - Provides: cycles, instructions, IPC, branch mispredictions, L1D cache misses
 
+### Full alpha-mu decision-suite workload
+
+Used for end-to-end future comparisons of the real alpha-mu `solve` path rather
+than the exact-leaf-only `benchmark_alpha` path.
+
+- Runner: `python3 test/full_alpha_mu_benchmark.py --repeats 3`
+- Output bundle: `test/build/full_alpha_mu_runs/<timestamp>/`
+- Cases:
+  - `play_board1_depth2_w32`:
+    `./build/alpha_mu solve ../hands/alpha_mu_play.txt 1 2 32`
+  - `play_board3_depth2_w32`:
+    `./build/alpha_mu solve ../hands/alpha_mu_play.txt 3 2 32`
+- Metrics:
+  - median total time,
+  - median world-generation time,
+  - median search time,
+  - median DDS-leaf time.
+- Why these cases:
+  - board 1 is the fast continuation sanity case,
+  - board 3 is the heavier multi-world reference case with meaningful world
+    generation and DDS-leaf cost.
+
 ## Frozen baseline numbers
 
 All numbers from the performance log on Apple M1 Max (macOS 26.4.x, arm64).
@@ -127,6 +149,26 @@ The packed `moveType` is performance-neutral on wall/CPU time but reduces both
 instruction count and store misses, confirming the smaller struct size saves
 memory bandwidth.
 
+### Frozen full alpha-mu baseline: commit `ccf40d3`
+
+Measured on 2026-05-14 with `test/full_alpha_mu_benchmark.py --repeats 3`.
+These medians are the **future-comparison baseline for full alpha-mu work**.
+
+Artifacts:
+
+- `test/build/full_alpha_mu_runs/20260514-191252/summary.md`
+- `test/build/full_alpha_mu_runs/20260514-191252/summary.json`
+
+| Case | Median total (s) | Mean total (s) | Min (s) | Max (s) | Median world gen (s) | Median search (s) | Median DDS leaves (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `play_board1_depth2_w32` | **0.051803** | 0.061148 | 0.034246 | 0.097395 | 0.000113 | 0.051439 | 0.000000 |
+| `play_board3_depth2_w32` | **22.392190** | 22.475941 | 22.297273 | 22.738359 | 5.374536 | 17.015901 | 16.454370 |
+
+The second case is the important one for algorithmic work: with `184756` raw
+worlds sampled down to `32`, it spends about `24%` of its time in world
+generation and about `73%` in DDS leaves, so it exposes both information-state
+construction cost and bridge/DDS orchestration cost.
+
 This retained set is also the closed Stage-5 / preserved-fallback endpoint for
 the current Apple-Silicon `P1.6` plan: the standard Apple `arm64` build is now
 the M1 Max-optimised release build, while non-Apple and non-`arm64` builds
@@ -142,6 +184,20 @@ still retain their own compile path.
 4. Run the serial benchmark command above
 5. Record CPU time from the `getrusage`-based `cpu_seconds` output
 6. Compare against the frozen baseline
+
+### For full alpha-mu comparisons
+
+1. Run `python3 test/full_alpha_mu_benchmark.py --repeats 3`
+2. Keep the frozen case list unchanged unless the benchmark document is updated
+   in the same change
+3. Compare medians first, not single-shot runs
+4. Check both cases:
+   - `play_board1_depth2_w32` for fast-path sanity,
+   - `play_board3_depth2_w32` for real multi-world cost
+5. When reporting regressions or gains, break the result down into:
+   - world generation,
+   - total search,
+   - DDS-leaf time.
 
 ### For PMU profiling
 
