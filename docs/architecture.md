@@ -146,26 +146,27 @@ There are two concrete backends:
 
 ## Alpha-mu module ownership
 
-The alpha-mu implementation currently lives under `test/` as a test-area engine
-that calls DDS as a leaf oracle. The modules and their responsibilities are:
+The alpha-mu production implementation now lives under `src/`, while the CLI
+runner, compatibility wrappers, benchmark scripts, and regression bundles stay
+under `test/`. The modules and their responsibilities are:
 
-- focused wrapper headers under `test/alpha_mu/` now provide narrower module
-  boundaries (`api.h`, `bridge.h`, `tests.h`) while the implementation remains
-  in the historical incubation area;
-- the umbrella `test/alpha_mu_core.h` still exists for compatibility, but new
-  call sites should prefer the narrower wrappers where practical.
+- focused wrapper headers under `test/alpha_mu/` still provide narrow include
+  boundaries for the runner (`api.h`, `bridge.h`, `tests.h`);
+- the umbrella `test/alpha_mu_core.h` now exists as a compatibility wrapper
+  over the production header in `src/alpha_mu_core.h`.
 
 | File | Responsibility |
 | --- | --- |
 | `test/alpha_mu.cpp` | CLI entry point: command parsing, mode dispatch, benchmark runner |
-| `test/alpha_mu_core.h` | Shared data structures: `WorldMask`, `OutcomeVector`, `ParetoFront`, `BridgeState`, `TranspositionTable`, `BridgeSearchStats`, `AlphaMuSolveResult`, and all callable entry points |
-| `test/alpha_mu_core.cpp` | Bridge search engine: `SearchBridgeStateInternal`, `MakeBridgeDDSLeafFront`, TT storage/lookup, iterative deepening, root-cut logic, solve orchestration |
-| `test/alpha_mu_front.cpp` | Front and toy-search helpers: `ParetoFront` insert/merge/product/min, `SearchToy`, optimistic completion, outcome-vector operations |
-| `test/alpha_mu_worlds.cpp` | World construction and information-state helpers: `ConstructCandidateWorldsFromHistory`, `GeneratePossibleWorlds`, staged filtering pipeline, follow-suit inference, bidding narrowing |
-| `test/alpha_mu_bridge.cpp` | Bridge-state transition and legality: `MakeBridgeState`, `ApplyBridgeMove`, `GenerateBridgeMoves`, DDS leaf handoff, bridge-state serialization |
-| `test/alpha_mu_decision.cpp` | Decision-point analysis: `SolveDecisionPoint`, information-state assembly, world pipeline routing, comparison reporting |
-| `test/alpha_mu_reporting.cpp` | Output formatting: decision report printing, root summary, per-world explanation, machine-readable log lines |
-| `test/alpha_mu_support.cpp` | Configuration and utility: parallel-mode naming, executable path, option parsing support |
+| `test/alpha_mu_core.h` | Compatibility umbrella include for existing test-area call sites |
+| `src/alpha_mu_core.h` | Shared data structures: `WorldMask`, `OutcomeVector`, `ParetoFront`, `BridgeState`, `TranspositionTable`, `BridgeSearchStats`, `AlphaMuSolveResult`, and all callable entry points |
+| `src/alpha_mu_core.cpp` | Bridge search engine: `SearchBridgeStateInternal`, `MakeBridgeDDSLeafFront`, TT storage/lookup, iterative deepening, root-cut logic, solve orchestration |
+| `src/alpha_mu_front.cpp` | Front and toy-search helpers: `ParetoFront` insert/merge/product/min, `SearchToy`, optimistic completion, outcome-vector operations |
+| `src/alpha_mu_worlds.cpp` | World construction and information-state helpers: `ConstructCandidateWorldsFromHistory`, `GeneratePossibleWorlds`, staged filtering pipeline, follow-suit inference, bidding narrowing |
+| `src/alpha_mu_bridge.cpp` | Bridge-state transition and legality: `MakeBridgeState`, `ApplyBridgeMove`, `GenerateBridgeMoves`, DDS leaf handoff, bridge-state serialization |
+| `src/alpha_mu_decision.cpp` | Decision-point analysis: `SolveDecisionPoint`, information-state assembly, world pipeline routing, comparison reporting |
+| `src/alpha_mu_reporting.cpp` | Output formatting: decision report printing, root summary, per-world explanation, machine-readable log lines |
+| `src/alpha_mu_support.cpp` | Configuration and utility: parallel-mode naming, executable path, option parsing support |
 | `test/alpha_mu_tests.h` | Regression bundle declarations: `RunDefaultTestSuite`, `RunBridgeDDSTestSuite`, individual semantic-gate entry points |
 | `test/alpha_mu_tests.cpp` | Regression bundle implementations: all focused and full-suite test cases |
 

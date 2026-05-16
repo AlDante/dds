@@ -1,6 +1,7 @@
 # Alpha-Mu Solver Runner
 
-This file documents the standalone alpha-mu solver runner added as a separate test component.
+This file documents the standalone alpha-mu solver runner and the production
+alpha-mu engine it drives.
 
 ## Goal
 
@@ -35,13 +36,15 @@ It is meant to validate the core paper semantics before deeper optimization work
 ## Files
 
 - `test/alpha_mu.cpp` — thin CLI runner / mode dispatcher
-- `test/alpha_mu_core.h` — shared types and callable alpha-mu API
-- `test/alpha_mu_front.cpp` — Pareto-front/outcome-vector helpers and the paper-faithful toy alpha-mu search harness
-- `test/alpha_mu_worlds.cpp` — information-state, world-construction, and world-filtering helpers
-- `test/alpha_mu_bridge.cpp` — bridge-state assembly, play-history parsing, move legality/transition, DDS-leaf handoff, and bridge search/reporting helpers
-- `test/alpha_mu_core.cpp` — TT, benchmark, and DDS-side shared core support
-- `test/alpha_mu_decision.cpp` — decision-point solve assembly and DDS/actual-play comparison helpers
-- `test/alpha_mu_reporting.cpp` — benchmark, comparison, and solve-result formatting/reporting helpers
+- `test/alpha_mu_core.h` — compatibility umbrella include for existing test-area includes
+- `src/alpha_mu_core.h` — shared types and callable alpha-mu API
+- `src/alpha_mu_front.cpp` — Pareto-front/outcome-vector helpers and the paper-faithful toy alpha-mu search harness
+- `src/alpha_mu_worlds.cpp` — information-state, world-construction, and world-filtering helpers
+- `src/alpha_mu_bridge.cpp` — bridge-state assembly, play-history parsing, move legality/transition, DDS-leaf handoff, and bridge search/reporting helpers
+- `src/alpha_mu_core.cpp` — TT, benchmark, and DDS-side shared core support
+- `src/alpha_mu_decision.cpp` — decision-point solve assembly and DDS/actual-play comparison helpers
+- `src/alpha_mu_reporting.cpp` — benchmark, comparison, and solve-result formatting/reporting helpers
+- `src/alpha_mu_support.cpp` — shared configuration, parsing helpers, and execution support
 - `test/alpha_mu_tests.cpp` — regression suite and grouped test runners
 
 The decision-point runner now also reports the first `Workstream 6`

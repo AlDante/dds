@@ -163,19 +163,22 @@ PLAYREG_SOURCE_FILES	=	\
 
 PLAYREG_OBJ_FILES	= $(OBJ_DIR)/$(PLAYREG).o $(OBJ_DIR)/examples/hands.o
 
-ALPHAMU_SOURCE_FILES	=	\
+ALPHAMU_LOCAL_SOURCE_FILES	=	\
 	parse.cpp		\
-	alpha_mu_support.cpp	\
-	alpha_mu_front.cpp	\
-	alpha_mu_worlds.cpp	\
-	alpha_mu_bridge.cpp	\
-	alpha_mu_core.cpp	\
-	alpha_mu_decision.cpp	\
-	alpha_mu_reporting.cpp	\
 	alpha_mu_tests.cpp	\
 	alpha_mu.cpp
 
-ALPHAMU_OBJ_FILES	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(ALPHAMU_SOURCE_FILES)))
+ALPHAMU_PROD_SOURCE_FILES	=	\
+	../src/alpha_mu_support.cpp	\
+	../src/alpha_mu_front.cpp	\
+	../src/alpha_mu_worlds.cpp	\
+	../src/alpha_mu_bridge.cpp	\
+	../src/alpha_mu_core.cpp	\
+	../src/alpha_mu_decision.cpp	\
+	../src/alpha_mu_reporting.cpp
+
+ALPHAMU_OBJ_FILES	= $(addprefix $(OBJ_DIR)/,$(subst .cpp,.o,$(ALPHAMU_LOCAL_SOURCE_FILES))) \
+	$(addprefix $(OBJ_DIR)/src/,$(patsubst ../src/%.cpp,%.o,$(ALPHAMU_PROD_SOURCE_FILES)))
 
 MOVESORTBENCH_SOURCE_FILES	=	\
 	moves_sort_benchmark.cpp

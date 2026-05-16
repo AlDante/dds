@@ -7,6 +7,9 @@ The `ALPHA_MU root ...` prefix is historical and retained for parser/log compati
 
 ## Files
 
+The benchmark/runner entry points remain under `test/`, while the production
+alpha-mu engine modules now live under `src/`.
+
 - `test/alpha_mu_benchmark.py`
 - `test/alpha_mu_backend_compare.py`
 - `test/alpha_mu_dds_compare.py`
