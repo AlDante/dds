@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "alpha_mu/api.h"
+#include "../include/alpha_mu/api.h"
 #include "alpha_mu/tests.h"
 
 using namespace std;

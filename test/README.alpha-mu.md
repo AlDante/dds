@@ -15,8 +15,9 @@ alpha-mu engine modules now live under `src/`.
 - `test/alpha_mu_dds_compare.py`
 - `test/run_alpha_mu_benchmark.py`
 - `test/alpha_mu.cpp`
-- `test/alpha_mu/api.h`
-- `test/alpha_mu/bridge.h`
+- `include/alpha_mu/api.h`
+- `include/alpha_mu/bridge.h`
+- `include/alpha_mu/core.h`
 - `test/alpha_mu/tests.h`
 - `test/README.alpha-mu-solver.md`
 

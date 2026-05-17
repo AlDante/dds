@@ -1,11 +1,17 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file PlayAnalyser.cpp
+ * @brief DDS played-line analysis over successive prefixes of a trace.
+ *
+ * The play analyser repeatedly solves the remaining position after each played
+ * card so the caller can compare an actual line with perfect-information best
+ * play. The implementation must update trick winner tracking, remaining-card
+ * state, and the declarer/defender remainder counts incrementally.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #include "PlayAnalyser.h"
 #include "SolverIF.h"

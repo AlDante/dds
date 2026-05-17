@@ -2,6 +2,10 @@
 
 ## What alpha-mu means here
 
+For the concrete code layout and call flow in this repository, see
+[alpha-mu-architecture.md](alpha-mu-architecture.md) and
+[architecture-diagrams.md](architecture-diagrams.md).
+
 After reviewing the original paper and the optimization paper, there are **two different things** that need to be distinguished clearly:
 
 1. **Alpha-mu proper**

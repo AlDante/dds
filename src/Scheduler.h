@@ -1,11 +1,16 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file Scheduler.h
+ * @brief Batch-work scheduler for multi-board DDS operations.
+ *
+ * The scheduler groups similar boards, predicts relative cost, preserves repeat
+ * detection, and hands work out to worker threads so the batch APIs spend more
+ * time solving and less time rebuilding equivalent state.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #ifndef DDS_SCHEDULER_H
 #define DDS_SCHEDULER_H
@@ -33,6 +38,12 @@ using namespace std;
 #endif
 
 
+/**
+ * @brief One scheduler-assigned work item.
+ *
+ * `number` is the board index to solve next. `repeatOf` points at an earlier
+ * equivalent board when the result can be copied rather than recomputed.
+ */
 struct schedType
 {
   int number = -1;
@@ -40,6 +51,12 @@ struct schedType
 };
 
 
+/**
+ * @brief Board scheduler used by the high-throughput DDS batch APIs.
+ *
+ * The class clusters hands, tracks per-thread progress, and optionally records
+ * timing breakdowns when scheduler instrumentation is enabled.
+ */
 class Scheduler
 {
   private:

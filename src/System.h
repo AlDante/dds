@@ -1,18 +1,17 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file System.h
+ * @brief Runtime system abstraction for DDS threading, hardware probing, and batch execution.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #ifndef DDS_SYSTEM_H
 #define DDS_SYSTEM_H
 
-/*
-   This class encapsulates all the system-dependent stuff.
- */
+/** @brief Per-thread worker callback for simple batched runs. */
 
 #include <string>
 #include <vector>
@@ -22,12 +21,21 @@
 using namespace std;
 
 typedef void (*fptrType)(const int thid);
+/** @brief Callback used to detect duplicate boards before solving. */
 typedef void (*fduplType)(
   const boards& bds, vector<int>& uniques, vector<int>& crossrefs);
+/** @brief Callback used to run one specific board index on one worker. */
 typedef void (*fsingleType)(const int thid, const int bno);
+/** @brief Callback used to copy repeated-board results after solving uniques. */
 typedef void (*fcopyType)(const vector<int>& crossrefs);
 
 
+/**
+ * @brief Encapsulates DDS runtime threading and platform-dependent execution.
+ *
+ * `System` owns backend selection, hardware/resource discovery, and the logic
+ * needed to launch the appropriate parallel runner for batch DDS work.
+ */
 class System
 {
   private:

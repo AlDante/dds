@@ -121,7 +121,7 @@ EXTRA_COMPILE_FLAGS ?=
 EXTRA_LINK_FLAGS ?=
 
 COMPILE_FLAGS	= $(OPT_FLAGS) $(M1_MAX_ARCH_FLAGS) \
-		$(WARN_FLAGS) -std=c++11 $(THREADING) $(M1_MAX_FLAGS) $(EXTRA_COMPILE_FLAGS)
+		$(WARN_FLAGS) -std=c++11 -I../include $(THREADING) $(M1_MAX_FLAGS) $(EXTRA_COMPILE_FLAGS)
 
 .PHONY:	dtest regression_api timer_regression play_analysis_benchmark alpha_mu moves_sort_benchmark itest profile_binaries depend clean
 

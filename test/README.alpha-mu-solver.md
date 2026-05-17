@@ -36,6 +36,7 @@ It is meant to validate the core paper semantics before deeper optimization work
 ## Files
 
 - `test/alpha_mu.cpp` — thin CLI runner / mode dispatcher
+- `include/alpha_mu/core.h` — public umbrella include for the alpha-mu solver API
 - `test/alpha_mu_core.h` — compatibility umbrella include for existing test-area includes
 - `src/alpha_mu_core.h` — shared types and callable alpha-mu API
 - `src/alpha_mu_front.cpp` — Pareto-front/outcome-vector helpers and the paper-faithful toy alpha-mu search harness
@@ -45,6 +46,8 @@ It is meant to validate the core paper semantics before deeper optimization work
 - `src/alpha_mu_decision.cpp` — decision-point solve assembly and DDS/actual-play comparison helpers
 - `src/alpha_mu_reporting.cpp` — benchmark, comparison, and solve-result formatting/reporting helpers
 - `src/alpha_mu_support.cpp` — shared configuration, parsing helpers, and execution support
+- `include/alpha_mu/api.h` — supported solve, benchmark, exact-PBN, and reporting surface
+- `include/alpha_mu/bridge.h` — focused bridge-state, move-generation, and DDS-leaf search surface
 - `test/alpha_mu_tests.cpp` — regression suite and grouped test runners
 
 The decision-point runner now also reports the first `Workstream 6`

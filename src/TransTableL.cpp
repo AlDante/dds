@@ -1,11 +1,16 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file TransTableL.cpp
+ * @brief Large-memory DDS transposition-table backend implementation.
+ *
+ * This file contains the fastest and most memory-intensive TT backend in DDS.
+ * It uses hashed distribution buckets, fixed-size win-match blocks, page pools,
+ * and block harvesting to cache large volumes of perfect-information bounds.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 /*
    Explanation of full memory version:

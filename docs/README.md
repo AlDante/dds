@@ -49,9 +49,13 @@ The generated site includes:
 
 - `mainpage.md` — landing page
 - `architecture.md` — high-level DDS architecture
+- `dds-code-flow.md` — detailed DDS request flow, recursive search roles, and algorithm notes
 - `dds-invariants.md` — concise solver-side invariant guide for core DDS changes
 - `api-overview.md` — key public APIs and usage patterns
 - `data-structures.md` — important internal and public data structures
+- `alpha-mu-architecture.md` — production alpha-mu code layout, search semantics, and world pipeline
+- `architecture-diagrams.md` — D2, Mermaid, PlantUML, and GraphViz architecture views
+- `legacy-dll-description-guide.md` — maintained bridge to the historical DLL/API description in `../doc/dll-description.md`
 - `code-audit-recommendations.md` — recommended C++ correctness, performance, and software-design improvements from the repository-wide code review
 - `alpha-mu.md` — alpha-mu background and DDS integration notes
 - `alpha-mu-information-state.md` — current contract for hard constraints, derived follow-suit facts, and reporting-only plausibility hints in alpha-mu world construction

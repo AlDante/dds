@@ -7,8 +7,12 @@ This documentation set combines curated Markdown guides with generated API pages
 ## Contents
 
 - [Architecture](architecture.md)
+- [DDS code flow and algorithms](dds-code-flow.md)
 - [Key data structures](data-structures.md)
 - [API overview](api-overview.md)
+- [Alpha-mu architecture and implementation](alpha-mu-architecture.md)
+- [Architecture diagrams](architecture-diagrams.md)
+- [Legacy DLL description guide](legacy-dll-description-guide.md)
 - [C++ codebase audit recommendations](code-audit-recommendations.md)
 - [Alpha-mu and DDS](alpha-mu.md)
 - [Alpha-mu: bridge player's guide](alpha-mu-guide.md)
@@ -41,6 +45,8 @@ This documentation set combines curated Markdown guides with generated API pages
 - Transposition tables: `src/TransTable.h`, `src/TransTableS.*`, `src/TransTableL.*`
 - Per-thread memory and state: `src/Memory.h`
 - Parallel execution and scheduling: `src/System.h`, `src/Scheduler.h`, `src/Init.cpp`
+- Alpha-mu public surface: `include/alpha_mu/*.h`
+- Alpha-mu production engine: `src/alpha_mu_*.{h,cpp}`
 - Tests and regression harnesses: `test/`
 
 ## Scope of this documentation

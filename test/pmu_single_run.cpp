@@ -7,7 +7,7 @@
 #include <ctime>
 #include <mach/mach_time.h>
 #include "pmu_counters.h"
-#include "alpha_mu/api.h"
+#include "../include/alpha_mu/api.h"
 
 using namespace alpha_mu;
 

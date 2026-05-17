@@ -1,11 +1,16 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file TransTableS.cpp
+ * @brief Compact DDS transposition-table backend implementation.
+ *
+ * The small TT backend packs entries by trick/leader, suit-length signature, and
+ * winning-card pattern so DDS can reuse perfect-information bounds with much
+ * lower memory consumption than `TransTableL`.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #include <iomanip>
 

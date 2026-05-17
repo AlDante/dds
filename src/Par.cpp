@@ -1,11 +1,17 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file Par.cpp
+ * @brief Par-contract and par-score calculation over DDS table results.
+ *
+ * This file converts double-dummy tables into bridge par results, including
+ * dealer-sensitive and side-to-bid variants plus text conversion helpers. The
+ * logic is based on the ACBLmerge-derived contract-selection algorithm adapted
+ * into DDS.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 
 #include <stdexcept>

@@ -4,6 +4,12 @@
 
 DDS is organized as a layered solver library:
 
+For deeper walkthroughs, see:
+
+- [DDS code flow and algorithms](dds-code-flow.md)
+- [Alpha-mu architecture and implementation](alpha-mu-architecture.md)
+- [Architecture diagrams](architecture-diagrams.md)
+
 1. **Public API layer**
    - `include/dll.h`
    - Exposes C-compatible entry points and public data structures.
@@ -146,19 +152,16 @@ There are two concrete backends:
 
 ## Alpha-mu module ownership
 
-The alpha-mu production implementation now lives under `src/`, while the CLI
-runner, compatibility wrappers, benchmark scripts, and regression bundles stay
-under `test/`. The modules and their responsibilities are:
-
-- focused wrapper headers under `test/alpha_mu/` still provide narrow include
-  boundaries for the runner (`api.h`, `bridge.h`, `tests.h`);
-- the umbrella `test/alpha_mu_core.h` now exists as a compatibility wrapper
-  over the production header in `src/alpha_mu_core.h`.
+The alpha-mu production implementation lives under `src/`, while the supported
+public include surface lives under `include/alpha_mu/`. The CLI runner,
+benchmark scripts, and regression bundles stay under `test/`.
 
 | File | Responsibility |
 | --- | --- |
 | `test/alpha_mu.cpp` | CLI entry point: command parsing, mode dispatch, benchmark runner |
-| `test/alpha_mu_core.h` | Compatibility umbrella include for existing test-area call sites |
+| `include/alpha_mu/core.h` | Public umbrella include for the alpha-mu solver surface |
+| `include/alpha_mu/api.h` | Focused public request/result include |
+| `include/alpha_mu/bridge.h` | Focused bridge-state and DDS-leaf include |
 | `src/alpha_mu_core.h` | Shared data structures: `WorldMask`, `OutcomeVector`, `ParetoFront`, `BridgeState`, `TranspositionTable`, `BridgeSearchStats`, `AlphaMuSolveResult`, and all callable entry points |
 | `src/alpha_mu_core.cpp` | Bridge search engine: `SearchBridgeStateInternal`, `MakeBridgeDDSLeafFront`, TT storage/lookup, iterative deepening, root-cut logic, solve orchestration |
 | `src/alpha_mu_front.cpp` | Front and toy-search helpers: `ParetoFront` insert/merge/product/min, `SearchToy`, optimistic completion, outcome-vector operations |
@@ -173,7 +176,7 @@ under `test/`. The modules and their responsibilities are:
 For detailed algorithm references and invariants, see
 [alpha-mu-invariants.md](alpha-mu-invariants.md). For the core DDS solver-side
 invariant checklist, see [dds-invariants.md](dds-invariants.md). For the
-data-flow diagram, see [alpha-mu-dataflow.md](alpha-mu-dataflow.md).
+visual architecture set, see [architecture-diagrams.md](architecture-diagrams.md).
 
 ## Current architectural guidance for changes
 

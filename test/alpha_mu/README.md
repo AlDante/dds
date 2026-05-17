@@ -1,14 +1,14 @@
 # Alpha-Mu module boundary
 
-This directory provides focused wrapper headers for the alpha-mu engine while the
-implementation still lives in the historical `test/` incubation area.
+This directory now keeps only the remaining test-local alpha-mu headers plus
+compatibility shims for older includes.
 
-## Current focused entry points
+## Current files
 
-- `api.h` — supported solve, benchmark, exact-PBN, and reporting surface
-- `bridge.h` — bridge-state, move-generation, and DDS-leaf search surface
-- `tests.h` — regression-bundle entry points
+- `tests.h` — regression-bundle entry points that remain test-only
+- `api.h` — compatibility shim forwarding to `include/alpha_mu/api.h`
+- `bridge.h` — compatibility shim forwarding to `include/alpha_mu/bridge.h`
 
-The wrappers are intentionally incremental. They keep the existing build stable
-while separating alpha-mu consumption from the broader test harness plumbing and
-large umbrella headers.
+The supported public wrappers now live under `include/alpha_mu/`. The shims here
+keep older test-area include paths working while the remaining compatibility
+surface is trimmed back to test-specific entry points.

@@ -46,8 +46,8 @@ Goal:
 
 Key files:
 
-- `test/alpha_mu_core.h`
-- `test/alpha_mu_core.cpp`
+- `src/alpha_mu_core.h`
+- `src/alpha_mu_core.cpp`
 - `test/alpha_mu.cpp`
 - `test/alpha_mu_tests.cpp`
 
@@ -68,8 +68,8 @@ Goal:
 
 Key files:
 
-- `test/alpha_mu_core.h`
-- `test/alpha_mu_core.cpp`
+- `src/alpha_mu_core.h`
+- `src/alpha_mu_core.cpp`
 - `test/alpha_mu.cpp`
 - `test/run_alpha_mu_benchmark.py`
 - `test/alpha_mu_tests.cpp`

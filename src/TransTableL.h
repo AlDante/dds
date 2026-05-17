@@ -1,31 +1,28 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file TransTableL.h
+ * @brief Large-memory DDS transposition-table backend.
+ *
+ * `TransTableL` spends substantially more memory than `TransTableS` in exchange
+ * for faster lookups and updates. It uses hash buckets, block pools, and page/
+ * harvest logic to keep a large cache of perfect-information bound results.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #ifndef DDS_TRANSTABLEL_H
 #define DDS_TRANSTABLEL_H
-
-/*
-   This is an implementation of the transposition table that requires
-   a lot of memory and is somewhat faster than the small version.
-*/
-
 
 #include <vector>
 #include <string>
 
 #include "../include/dll.h"
 #include "dds.h"
-
 #include "TransTable.h"
 
 using namespace std;
-
 
 #ifndef NUM_PAGES_DEFAULT
   #define NUM_PAGES_DEFAULT 15
@@ -46,11 +43,20 @@ using namespace std;
 
 #define TT_PERCENTILE 0.9
 
-
+/**
+ * @brief Large-memory implementation of the DDS transposition-table interface.
+ *
+ * The table is organized around:
+ * - a hash of the hand-distribution signature,
+ * - per-bucket distribution entries,
+ * - blocks of winning-card matches,
+ * - and a memory/page recycling policy for bounded long-running use.
+ */
 class TransTableL: public TransTable
 {
   private:
 
+    /** @brief One compact winning-card signature plus stored DDS bound payload. */
     struct winMatchType // 52 bytes
     {
       unsigned xorSet;
@@ -61,6 +67,7 @@ class TransTableL: public TransTable
       nodeCardsType first;
     };
 
+    /** @brief Fixed-size block of win-match entries for one distribution bucket. */
     struct winBlockType // 6508 bytes when BLOCKS_PER_ENTRY == 125
     {
       int nextMatchNo;
@@ -69,12 +76,14 @@ class TransTableL: public TransTable
       winMatchType list[BLOCKS_PER_ENTRY];
     };
 
+    /** @brief Distribution-hash entry keyed by compact hand-distribution signature. */
     struct posSearchType // 16 bytes (inefficiency, 12 bytes enough)
     {
       winBlockType * posBlock;
       long long key;
     };
 
+    /** @brief Small hash bucket of distribution entries. */
     struct distHashType // 520 bytes when DISTS_PER_ENTRY == 32
     {
       int nextNo;
@@ -82,12 +91,14 @@ class TransTableL: public TransTable
       posSearchType list[DISTS_PER_ENTRY];
     };
 
+    /** @brief Precomputed aggregate-byte expansion for a 13-bit holding pattern. */
     struct aggrType // 80 bytes
     {
       unsigned aggrRanks[DDS_SUITS];
       unsigned aggrBytes[DDS_SUITS][TT_BYTES];
     };
 
+    /** @brief One page in the TT block pool. */
     struct poolType // 16 bytes
     {
       poolType * next;
@@ -96,6 +107,7 @@ class TransTableL: public TransTable
       winBlockType * list;
     };
 
+    /** @brief Allocation/reset/harvest counters for diagnostic reporting. */
     struct pageStatsType
     {
       int numResets;
@@ -105,12 +117,14 @@ class TransTableL: public TransTable
       int lastCurrent;
     };
 
+    /** @brief Blocks reclaimed from old pages and ready for reuse. */
     struct harvestedType // 16 bytes
     {
       int nextBlockNo;
       winBlockType * list [BLOCKS_PER_PAGE];
     };
 
+    /** @brief Current source of newly requested blocks. */
     enum memStateType
     {
       FROM_POOL,

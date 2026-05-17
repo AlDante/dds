@@ -1,11 +1,18 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file SolveBoard.cpp
+ * @brief Multi-board solve orchestration layered above the single-board DDS solver.
+ *
+ * The public batch APIs eventually route through this file, which combines:
+ * - exact duplicate detection,
+ * - scheduler-issued work distribution,
+ * - per-worker calls into `SolveBoard()`, and
+ * - copy-forward reuse of earlier exact results when safe.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 
 #include "SolverIF.h"

@@ -30,26 +30,41 @@ INPUT                  = . \
                          ../INSTALL \
                          ../examples/README \
                          ../doc/alpha-mu-integration.md \
-                         ../doc/dll-description.md \
+                         ./legacy-dll-description-guide.md \
                          ../include/dll.h \
                          ../src/dds.h \
                          ../src/Memory.h \
                          ../src/TransTable.h \
+                         ../src/TransTableS.h \
+                         ../src/TransTableL.h \
                          ../src/Scheduler.h \
                          ../src/System.h \
                          ../src/SolverIF.h \
+                         ../src/CalcTables.h \
+                         ../src/PlayAnalyser.h \
+                         ../src/SolveBoard.h \
                          ../src/ABsearch.h \
+                         ../src/Moves.h \
                          ../src/QuickTricks.h \
                          ../src/LaterTricks.h \
+                         ../src/CalcTables.cpp \
+                         ../src/PlayAnalyser.cpp \
+                         ../src/Par.cpp \
+                         ../src/SolveBoard.cpp \
+                         ../src/TransTableS.cpp \
+                         ../src/TransTableL.cpp \
+                         ../include/alpha_mu/core.h \
+                         ../include/alpha_mu/api.h \
+                         ../include/alpha_mu/bridge.h \
+                         ../src/alpha_mu_core.h \
+                         ../src/alpha_mu_core.cpp \
+                         ../src/alpha_mu_front.cpp \
+                         ../src/alpha_mu_worlds.cpp \
+                         ../src/alpha_mu_bridge.cpp \
+                         ../src/alpha_mu_decision.cpp \
+                         ../src/alpha_mu_reporting.cpp \
+                         ../src/alpha_mu_support.cpp \
                          ../test/alpha_mu.cpp \
-                         ../test/alpha_mu_core.h \
-                         ../test/alpha_mu_core.cpp \
-                         ../test/alpha_mu_front.cpp \
-                         ../test/alpha_mu_worlds.cpp \
-                         ../test/alpha_mu_bridge.cpp \
-                         ../test/alpha_mu_decision.cpp \
-                         ../test/alpha_mu_reporting.cpp \
-                         ../test/alpha_mu_support.cpp \
                          ../test/alpha_mu_tests.h \
                          ../test/alpha_mu_tests.cpp
 FILE_PATTERNS          = *.md \

@@ -8,11 +8,15 @@ The most important existing text sources are:
 
 - [`../README.md`](../README.md)
 - [`../INSTALL`](../INSTALL)
-- [`../doc/dll-description.md`](../doc/dll-description.md)
+- `../doc/dll-description.md`
 - [`../doc/alpha-mu-integration.md`](../doc/alpha-mu-integration.md)
 - [`../examples/README`](../examples/README)
 
-These files remain authoritative historical sources and are included in the Doxygen input set for this documentation build.
+These files remain authoritative historical sources.
+
+For the generated documentation site, the legacy DLL description is now exposed
+through the maintained guide [legacy-dll-description-guide.md](legacy-dll-description-guide.md)
+rather than being parsed directly.
 
 ## Historical archive under `doc/`
 
@@ -37,7 +41,8 @@ For current work on DDS and alpha-mu, the recommended order is:
 6. `alpha-mu-test-set.md`
 7. `implementation-plan.md`
 8. `action-plan.md`
-9. `../doc/dll-description.md` for historical API detail
+9. `legacy-dll-description-guide.md`
+10. `../doc/dll-description.md` for the raw historical API wording and revision log
 
 ## Relationship to the new docs folder
 

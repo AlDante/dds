@@ -1,11 +1,16 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file Memory.h
+ * @brief Per-thread DDS solver state and the top-level thread-memory manager.
+ *
+ * DDS keeps almost all mutable search state thread-local. `ThreadData` is the
+ * package searched by one worker at a time, while `Memory` owns the pool of
+ * `ThreadData` instances sized according to the configured threading mode.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #ifndef DDS_MEMORY_H
 #define DDS_MEMORY_H
@@ -31,12 +36,14 @@
 using namespace std;
 
 
+/** @brief Requested TT footprint class for newly allocated worker memories. */
 enum TTmemory
 {
   DDS_TT_SMALL = 0,
   DDS_TT_LARGE = 1
 };
 
+/** @brief Winning and runner-up rank information for one suit. */
 struct WinnerEntryType
 {
   int suit;
@@ -46,6 +53,7 @@ struct WinnerEntryType
   int secondHand;
 };
 
+/** @brief Bundle of immediate winning-card descriptors for the current node. */
 struct WinnersType
 {
   int number;
@@ -53,6 +61,18 @@ struct WinnersType
 };
 
 
+/**
+ * @brief Thread-local mutable state for one DDS worker.
+ *
+ * This struct intentionally groups together the objects that must not be shared
+ * across concurrent searches:
+ * - the active recursive position,
+ * - TT handle,
+ * - move generator,
+ * - pruning and best-move helpers,
+ * - search counters, and
+ * - optional debug/timing/reporting sinks.
+ */
 struct ThreadData
 {
   int nodeTypeStore[DDS_HANDS];
@@ -112,6 +132,12 @@ struct ThreadData
 };
 
 
+/**
+ * @brief Owner of all allocated `ThreadData` objects.
+ *
+ * The `System` and API layers use this class to resize the worker pool, fetch a
+ * thread slot by id, and release all per-thread resources at shutdown.
+ */
 class Memory
 {
   private:

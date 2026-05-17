@@ -316,15 +316,14 @@ inside one oversized core implementation unit under `test/`.
 This workstream is now **functionally landed at the current planned scope**:
 
 - the CLI runner is isolated in `test/alpha_mu.cpp`,
-- the shared data structures live in `test/alpha_mu_core.h`,
-- Pareto-front / toy-search helpers can be extracted into focused units such as
-  `test/alpha_mu_front.cpp`,
-- information-state and world-construction helpers can be extracted into
-  focused units such as `test/alpha_mu_worlds.cpp`,
-- bridge-state and legality/search helpers can be extracted into focused units
-  such as `test/alpha_mu_bridge.cpp`,
-- the bridge search / TT core remains in `test/alpha_mu_core.cpp`,
-- the regression bundles are isolated in
+- the supported public alpha-mu include surface lives in `include/alpha_mu/`,
+- the shared production data structures live in `src/alpha_mu_core.h`,
+- Pareto-front / toy-search helpers live in `src/alpha_mu_front.cpp`,
+- information-state and world-construction helpers live in
+  `src/alpha_mu_worlds.cpp`,
+- bridge-state and legality/search helpers live in `src/alpha_mu_bridge.cpp`,
+- the bridge search / TT core lives in `src/alpha_mu_core.cpp`,
+- the regression bundles remain isolated in
   `test/alpha_mu_tests.h` and `test/alpha_mu_tests.cpp`.
 
 The remaining `Workstream 5` task is therefore maintenance rather than a major

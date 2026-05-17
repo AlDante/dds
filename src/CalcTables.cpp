@@ -1,11 +1,19 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file CalcTables.cpp
+ * @brief Batch orchestration for DDS double-dummy table calculation.
+ *
+ * The table path solves each deal/strain combination for all four declarers.
+ * It therefore mixes:
+ * - one full `SolveBoard()` call for the first declarer,
+ * - repeated `SolveSameBoard()` calls for the remaining declarers,
+ * - scheduler-level duplicate reuse,
+ * - and batch/chunk worker loops.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 
 #include "CalcTables.h"

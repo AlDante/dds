@@ -1,11 +1,22 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file dll.h
+ * @brief Stable C-compatible public API for the DDS double-dummy solver.
+ *
+ * This header is the supported integration surface for callers that want to:
+ * - solve a single bridge position,
+ * - solve batches of positions,
+ * - build double-dummy tables,
+ * - compute par contracts, and
+ * - analyse a played line against perfect-information optimal play.
+ *
+ * The library keeps the ABI deliberately C-friendly so it can be consumed from
+ * C, C++, and foreign-function interfaces in other languages.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 
 #ifndef DDS_DLL_H
@@ -159,6 +170,12 @@
 
 
 
+/**
+ * @brief Candidate-card result list returned by the solve APIs.
+ *
+ * `cards` is the number of populated entries. Each entry describes one legal
+ * card choice and the double-dummy trick result associated with it.
+ */
 struct futureTricks
 {
   int nodes;
@@ -169,6 +186,13 @@ struct futureTricks
   int score[13];
 };
 
+/**
+ * @brief Binary in-memory representation of one DDS solve position.
+ *
+ * `remainCards[hand][suit]` stores per-suit rank bitmasks for the cards still
+ * held by each seat. `currentTrickSuit` / `currentTrickRank` describe a partial
+ * trick when the position is not at trick start.
+ */
 struct deal
 {
   int trump;
@@ -179,6 +203,12 @@ struct deal
 };
 
 
+/**
+ * @brief PBN-string representation of one DDS solve position.
+ *
+ * This is equivalent in meaning to `deal` but uses compact textual card
+ * holdings in `remainCards`.
+ */
 struct dealPBN
 {
   int trump;
@@ -189,6 +219,7 @@ struct dealPBN
 };
 
 
+/** @brief Batched binary solve requests for `SolveAll*Bin()`. */
 struct boards
 {
   int noOfBoards;
@@ -198,6 +229,7 @@ struct boards
   int mode[MAXNOOFBOARDS];
 };
 
+/** @brief Batched PBN solve requests for `SolveAllBoards()` and `SolveAllChunks*()`. */
 struct boardsPBN
 {
   int noOfBoards;
@@ -207,45 +239,58 @@ struct boardsPBN
   int mode[MAXNOOFBOARDS];
 };
 
+/** @brief Batched solve results parallel to `boards` / `boardsPBN`. */
 struct solvedBoards
 {
   int noOfBoards;
   struct futureTricks solvedBoard[MAXNOOFBOARDS];
 };
 
+/** @brief One binary-format deal for double-dummy table computation. */
 struct ddTableDeal
 {
   unsigned int cards[DDS_HANDS][DDS_SUITS];
 };
 
+/** @brief Batched binary deals for `CalcAllTables()`. */
 struct ddTableDeals
 {
   int noOfTables;
   struct ddTableDeal deals[MAXNOOFTABLES * DDS_STRAINS];
 };
 
+/** @brief One PBN-format deal for double-dummy table computation. */
 struct ddTableDealPBN
 {
   char cards[80];
 };
 
+/** @brief Batched PBN deals for `CalcAllTablesPBN()`. */
 struct ddTableDealsPBN
 {
   int noOfTables;
   struct ddTableDealPBN deals[MAXNOOFTABLES * DDS_STRAINS];
 };
 
+/**
+ * @brief Double-dummy table for one deal.
+ *
+ * `resTable[strain][declarer]` stores the maximum number of tricks attainable
+ * by each declarer in each strain.
+ */
 struct ddTableResults
 {
   int resTable[DDS_STRAINS][DDS_HANDS];
 };
 
+/** @brief Batched double-dummy tables returned by `CalcAllTables*()`. */
 struct ddTablesRes
 {
   int noOfBoards;
   struct ddTableResults results[MAXNOOFTABLES * DDS_STRAINS];
 };
 
+/** @brief Text-oriented par result grouped by side-to-bid viewpoint. */
 struct parResults
 {
   /* index = 0 is NS view and index = 1
@@ -256,11 +301,18 @@ struct parResults
 };
 
 
+/** @brief Batched `parResults` bundle parallel to `ddTablesRes`. */
 struct allParResults
 {
   struct parResults presults[MAXNOOFTABLES];
 };
 
+/**
+ * @brief Dealer-sensitive par description in compact text form.
+ *
+ * This is convenient for user-facing reporting when the caller wants the par
+ * contracts from one dealer's bidding perspective.
+ */
 struct parResultsDealer
 {
   /* number: Number of contracts yielding the par score.
@@ -275,6 +327,7 @@ struct parResultsDealer
   char contracts[10][10];
 };
 
+/** @brief Structured machine-readable par contract description. */
 struct contractType
 {
   int underTricks; /* 0 = make 1-13 = sacrifice */
@@ -286,6 +339,7 @@ struct contractType
 				   0 = N 1 = E, 2 = S, 3 = W, 4 = NS, 5 = EW */
 };
 
+/** @brief Structured par result used by the binary par APIs. */
 struct parResultsMaster
 {
   int score; /* Sign according to the NS view */
@@ -293,6 +347,7 @@ struct parResultsMaster
   struct contractType contracts[10]; /* Par contracts */
 };
 
+/** @brief Converted text representation of `parResultsMaster`. */
 struct parTextResults
 {
   char parText[2][128]; /* Short text for par information, e.g.
@@ -302,6 +357,7 @@ struct parTextResults
 };
 
 
+/** @brief Binary-format played-card trace for play-analysis APIs. */
 struct playTraceBin
 {
   int number;
@@ -309,36 +365,47 @@ struct playTraceBin
   int rank[52];
 };
 
+/** @brief PBN-format played-card trace for play-analysis APIs. */
 struct playTracePBN
 {
   int number;
   char cards[106];
 };
 
+/** @brief Per-ply trick totals produced by play-analysis APIs. */
 struct solvedPlay
 {
   int number;
   int tricks[53];
 };
 
+/** @brief Batched binary-format play traces. */
 struct playTracesBin
 {
   int noOfBoards;
   struct playTraceBin plays[MAXNOOFBOARDS];
 };
 
+/** @brief Batched PBN-format play traces. */
 struct playTracesPBN
 {
   int noOfBoards;
   struct playTracePBN plays[MAXNOOFBOARDS];
 };
 
+/** @brief Batched play-analysis results. */
 struct solvedPlays
 {
   int noOfBoards;
   struct solvedPlay solved[MAXNOOFBOARDS];
 };
 
+/**
+ * @brief Runtime/build description of the compiled DDS library.
+ *
+ * This records the detected platform, compiler, threading backend, and thread
+ * sizing policy so applications can log or validate the execution environment.
+ */
 struct DDSInfo
 {
   // Version 2.8.0 has 2, 8, 0 and a string of 2.8.0
@@ -385,18 +452,34 @@ struct DDSInfo
 
 
 
+/** @name Configuration and lifecycle */
+/** @{ */
+
+/** @brief Override the number of worker threads DDS may use. */
 EXTERN_C DLLEXPORT void STDCALL SetMaxThreads(
   int userThreads);
 
+/** @brief Request a specific compiled threading backend. */
 EXTERN_C DLLEXPORT int STDCALL SetThreading(
   int code);
 
+/** @brief Set memory and thread resource limits for subsequent calls. */
 EXTERN_C DLLEXPORT void STDCALL SetResources(
   int maxMemoryMB,
   int maxThreads);
 
+/** @brief Release long-lived DDS global/thread-local resources. */
 EXTERN_C DLLEXPORT void STDCALL FreeMemory();
 
+/** @} */
+
+/** @name Single-board solve APIs */
+/** @{ */
+
+/**
+ * @brief Solve one binary-format bridge position.
+ * @return DDS status code such as `RETURN_NO_FAULT`.
+ */
 EXTERN_C DLLEXPORT int STDCALL SolveBoard(
   struct deal dl,
   int target,
@@ -405,6 +488,7 @@ EXTERN_C DLLEXPORT int STDCALL SolveBoard(
   struct futureTricks * futp,
   int threadIndex);
 
+/** @brief Solve one PBN-format bridge position. */
 EXTERN_C DLLEXPORT int STDCALL SolveBoardPBN(
   struct dealPBN dlpbn,
   int target,
@@ -413,14 +497,22 @@ EXTERN_C DLLEXPORT int STDCALL SolveBoardPBN(
   struct futureTricks * futp,
   int thrId);
 
+/** @} */
+
+/** @name Double-dummy table APIs */
+/** @{ */
+
+/** @brief Compute the full declarer/strain trick table for one binary deal. */
 EXTERN_C DLLEXPORT int STDCALL CalcDDtable(
   struct ddTableDeal tableDeal,
   struct ddTableResults * tablep);
 
+/** @brief Compute the full declarer/strain trick table for one PBN deal. */
 EXTERN_C DLLEXPORT int STDCALL CalcDDtablePBN(
   struct ddTableDealPBN tableDealPBN,
   struct ddTableResults * tablep);
 
+/** @brief Compute many double-dummy tables in one batched call. */
 EXTERN_C DLLEXPORT int STDCALL CalcAllTables(
   struct ddTableDeals * dealsp,
   int mode,
@@ -428,6 +520,7 @@ EXTERN_C DLLEXPORT int STDCALL CalcAllTables(
   struct ddTablesRes * resp,
   struct allParResults * presp);
 
+/** @brief Batched PBN-format table calculation companion to `CalcAllTables()`. */
 EXTERN_C DLLEXPORT int STDCALL CalcAllTablesPBN(
   struct ddTableDealsPBN * dealsp,
   int mode,
@@ -435,105 +528,147 @@ EXTERN_C DLLEXPORT int STDCALL CalcAllTablesPBN(
   struct ddTablesRes * resp,
   struct allParResults * presp);
 
+/** @} */
+
+/** @name Batch solving APIs */
+/** @{ */
+
+/** @brief Solve a batch of PBN-format positions. */
 EXTERN_C DLLEXPORT int STDCALL SolveAllBoards(
   struct boardsPBN * bop,
   struct solvedBoards * solvedp);
 
+/** @brief Solve a batch of binary-format positions. */
 EXTERN_C DLLEXPORT int STDCALL SolveAllBoardsBin(
   struct boards * bop,
   struct solvedBoards * solvedp);
 
+/** @brief Solve a PBN batch in fixed-size scheduler chunks. */
 EXTERN_C DLLEXPORT int STDCALL SolveAllChunks(
   struct boardsPBN * bop,
   struct solvedBoards * solvedp,
   int chunkSize);
 
+/** @brief Solve a binary batch in fixed-size scheduler chunks. */
 EXTERN_C DLLEXPORT int STDCALL SolveAllChunksBin(
   struct boards * bop,
   struct solvedBoards * solvedp,
   int chunkSize);
 
+/** @brief Alias-preserving PBN chunked batch solve entry point. */
 EXTERN_C DLLEXPORT int STDCALL SolveAllChunksPBN(
   struct boardsPBN * bop,
   struct solvedBoards * solvedp,
   int chunkSize);
 
+/** @} */
+
+/** @name Par-calculation APIs */
+/** @{ */
+
+/** @brief Compute text-oriented par information from an existing DD table. */
 EXTERN_C DLLEXPORT int STDCALL Par(
   struct ddTableResults * tablep,
   struct parResults * presp,
   int vulnerable);
 
+/** @brief Compute a DD table and par result for one binary deal. */
 EXTERN_C DLLEXPORT int STDCALL CalcPar(
   struct ddTableDeal tableDeal,
   int vulnerable,
   struct ddTableResults * tablep,
   struct parResults * presp);
 
+/** @brief Compute a DD table and par result for one PBN deal. */
 EXTERN_C DLLEXPORT int STDCALL CalcParPBN(
   struct ddTableDealPBN tableDealPBN,
   struct ddTableResults * tablep,
   int vulnerable,
   struct parResults * presp);
 
+/** @brief Compute side-to-bid par information in dealer-sensitive form. */
 EXTERN_C DLLEXPORT int STDCALL SidesPar(
   struct ddTableResults * tablep,
   struct parResultsDealer sidesRes[2],
   int vulnerable);
 
+/** @brief Compute par information for one dealer seat. */
 EXTERN_C DLLEXPORT int STDCALL DealerPar(
   struct ddTableResults * tablep,
   struct parResultsDealer * presp,
   int dealer,
   int vulnerable);
 
+/** @brief Binary-output variant of `DealerPar()`. */
 EXTERN_C DLLEXPORT int STDCALL DealerParBin(
   struct ddTableResults * tablep,
   struct parResultsMaster * presp,
   int dealer, 
   int vulnerable);
 
+/** @brief Binary-output side-to-bid par calculation. */
 EXTERN_C DLLEXPORT int STDCALL SidesParBin(
   struct ddTableResults * tablep,
   struct parResultsMaster sidesRes[2],
   int vulnerable);
 
+/** @brief Convert a structured dealer-par result into text. */
 EXTERN_C DLLEXPORT int STDCALL ConvertToDealerTextFormat(
   struct parResultsMaster * pres,
   char * resp);
 
+/** @brief Convert structured side-par results into text. */
 EXTERN_C DLLEXPORT int STDCALL ConvertToSidesTextFormat(
   struct parResultsMaster * pres,
   struct parTextResults * resp);
 
+/** @} */
+
+/** @name Play-analysis APIs */
+/** @{ */
+
+/** @brief Analyse a played line against optimal play for a binary deal. */
 EXTERN_C DLLEXPORT int STDCALL AnalysePlayBin(
   struct deal dl,
   struct playTraceBin play,
   struct solvedPlay * solved,
   int thrId);
 
+/** @brief Analyse a played line against optimal play for a PBN deal. */
 EXTERN_C DLLEXPORT int STDCALL AnalysePlayPBN(
   struct dealPBN dlPBN,
   struct playTracePBN playPBN,
   struct solvedPlay * solvedp,
   int thrId);
 
+/** @brief Analyse many played lines for binary-format deals. */
 EXTERN_C DLLEXPORT int STDCALL AnalyseAllPlaysBin(
   struct boards * bop,
   struct playTracesBin * plp,
   struct solvedPlays * solvedp,
   int chunkSize);
 
+/** @brief Analyse many played lines for PBN-format deals. */
 EXTERN_C DLLEXPORT int STDCALL AnalyseAllPlaysPBN(
   struct boardsPBN * bopPBN,
   struct playTracesPBN * plpPBN,
   struct solvedPlays * solvedp,
   int chunkSize);
 
+/** @} */
+
+/** @name Diagnostics */
+/** @{ */
+
+/** @brief Populate a `DDSInfo` record describing this build/runtime. */
 EXTERN_C DLLEXPORT void STDCALL GetDDSInfo(
   struct DDSInfo * info);
 
+/** @brief Convert a DDS return code into a short user-facing message. */
 EXTERN_C DLLEXPORT void STDCALL ErrorMessage(
   int code,
   char line[80]);
+
+/** @} */
 
 #endif

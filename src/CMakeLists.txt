@@ -19,7 +19,7 @@ endif()
 
 #find_package(OpenMP REQUIRED)
 
-include_directories(../dds/include ../dds/examples /opt/homebrew/opt/libomp/include . ${DDS_THREAD_INCLUDE_DIRS})
+include_directories(../include ../examples /opt/homebrew/opt/libomp/include . ${DDS_THREAD_INCLUDE_DIRS})
 
 find_package(Doxygen QUIET)
 

@@ -1,21 +1,19 @@
-/*
-   DDS, a bridge double dummy solver.
-
-   Copyright (C) 2006-2014 by Bo Haglund /
-   2014-2018 by Bo Haglund & Soren Hein.
-
-   See LICENSE and README.
-*/
+/**
+ * @file TransTableS.h
+ * @brief Compact-memory DDS transposition-table backend.
+ *
+ * `TransTableS` trades memory footprint for somewhat higher lookup/update cost.
+ * It organizes entries through suit-length search nodes and linked win-card sets
+ * rather than the larger block/page structure used by `TransTableL`.
+ *
+ * Copyright (C) 2006-2014 by Bo Haglund /
+ * 2014-2018 by Bo Haglund & Soren Hein.
+ *
+ * See LICENSE and README.
+ */
 
 #ifndef DDS_TRANSTABLES_H
 #define DDS_TRANSTABLES_H
-
-/*
-   This is an object for managing transposition tables and the
-   associated memory.  Compared to TransTableL it uses a lot less
-   memory and takes somewhat longer time.
-*/
-
 
 #include <vector>
 #include <string>
@@ -24,13 +22,22 @@
 
 using namespace std;
 
-
+/**
+ * @brief Small-memory implementation of the DDS transposition-table interface.
+ *
+ * The key hierarchy is roughly:
+ * - trick count and first hand,
+ * - suit-length signature,
+ * - aggregated winning-card order/mask information,
+ * - compact bound payload.
+ */
 class TransTableS: public TransTable
 {
   private:
 
     // Structures for the small memory option.
 
+    /** @brief Linked node for one winning-card pattern under a length signature. */
     struct winCardType
     {
       int orderSet;
@@ -41,6 +48,7 @@ class TransTableS: public TransTable
       winCardType * next;
     };
 
+    /** @brief BST node keyed by compacted suit-length signature. */
     struct posSearchTypeSmall
     {
       winCardType * posSearchPoint;
@@ -49,12 +57,14 @@ class TransTableS: public TransTable
       posSearchTypeSmall * right;
     };
 
+    /** @brief Precomputed aggregate-rank and win-mask expansion for one 13-bit holding. */
     struct ttAggrType
     {
       int aggrRanks[DDS_SUITS];
       int winMask[DDS_SUITS];
     };
 
+    /** @brief Reset counters grouped by reset cause. */
     struct statsResetsType
     {
       int noOfResets;
