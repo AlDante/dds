@@ -15,6 +15,7 @@
 #ifndef DDS_MEMORY_H
 #define DDS_MEMORY_H
 
+#include <string>
 #include <vector>
 
 #include "TransTable.h"
@@ -32,9 +33,6 @@
 #ifdef DDS_TIMING
   #include "TimerList.h"
 #endif
-
-using namespace std;
-
 
 /** @brief Requested TT footprint class for newly allocated worker memories. */
 enum TTmemory
@@ -142,9 +140,9 @@ class Memory
 {
   private:
 
-    vector<ThreadData *> memory;
+    std::vector<ThreadData *> memory;
 
-    vector<string> threadSizes;
+    std::vector<std::string> threadSizes;
 
   public:
 
@@ -152,21 +150,27 @@ class Memory
 
     ~Memory();
 
+    /** @brief Release one worker slot back to the idle pool after a top-level run. */
     void ReturnThread(const unsigned thrId);
 
+    /** @brief Resize the worker pool and choose the requested TT footprint class. */
     void Resize(
       const unsigned n,
       const TTmemory flag,
       const int memDefault_MB,
       const int memMaximum_MB);
 
+    /** @brief Return the number of currently allocated worker slots. */
     unsigned NumThreads() const;
 
+    /** @brief Fetch the mutable thread-local state block for one worker id. */
     ThreadData * GetPtr(const unsigned thrId);
 
+    /** @brief Report the currently allocated footprint of one worker in megabytes. */
     double MemoryInUseMB(const unsigned thrId) const;
 
-    string ThreadSize(const unsigned thrId) const;
+    /** @brief Return the textual TT footprint label for one worker slot. */
+    std::string ThreadSize(const unsigned thrId) const;
 };
 
 #endif

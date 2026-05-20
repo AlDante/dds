@@ -7,9 +7,10 @@
    See LICENSE and README.
 */
 
+#include <array>
+#include <cassert>
 #include <iostream>
 #include <sstream>
-#include <assert.h>
 
 #include "TransTable.h"
 #include "Moves.h"
@@ -651,7 +652,7 @@ bool ABsearch3(
 {
   /* This is a specialized AB function for handRelFirst == 3. */
 
-  unsigned short int makeWinRank[DDS_SUITS];
+  std::array<unsigned short, DDS_SUITS> makeWinRank = {};
 
   int hand = handId(posPoint->first[depth], 3);
   bool success = (thrp->nodeTypeStore[hand] == MAXNODE ? true : false);
@@ -689,7 +690,7 @@ bool ABsearch3(
       TIMER_END(TIMER_NO_AB_ITERATION_CONTROL, depth);
       break;
     }
-    Make3(posPoint, makeWinRank, depth, mply, thrp);
+    Make3(posPoint, makeWinRank.data(), depth, mply, thrp);
 
     thrp->trickNodes++; // As handRelFirst == 0
 
