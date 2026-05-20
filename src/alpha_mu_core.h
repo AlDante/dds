@@ -36,6 +36,13 @@
 
 #include "../test/parse.h"
 #include "../include/dll.h"
+
+#if __cplusplus >= 201703L
+  #define ALPHA_MU_NODISCARD [[nodiscard]]
+#else
+  #define ALPHA_MU_NODISCARD
+#endif
+
 namespace alpha_mu
 {
   namespace chrono = std::chrono;
@@ -168,44 +175,37 @@ namespace alpha_mu
     }
 
     /** @brief Return whether a world index is currently enabled in the mask. */
-    bool Has(const unsigned index) const
+    ALPHA_MU_NODISCARD bool Has(const unsigned index) const
     {
       return index < count && ((bits & (1ULL << index)) != 0ULL);
     }
 
     /** @brief Count the number of active worlds represented by this mask. */
-    unsigned PopCount() const
+    ALPHA_MU_NODISCARD unsigned PopCount() const
     {
-      unsigned n = 0;
-      unsigned long long copy = bits;
-      while (copy != 0ULL)
-      {
-        n += static_cast<unsigned>(copy & 1ULL);
-        copy >>= 1;
-      }
-      return n;
+      return static_cast<unsigned>(__builtin_popcountll(bits));
     }
 
     /** @brief Return the set-theoretic union of two world masks. */
-    WorldMask Union(const WorldMask& other) const
+    ALPHA_MU_NODISCARD WorldMask Union(const WorldMask& other) const
     {
       return WorldMask(count, bits | other.bits);
     }
 
     /** @brief Return the set-theoretic intersection of two world masks. */
-    WorldMask Intersection(const WorldMask& other) const
+    ALPHA_MU_NODISCARD WorldMask Intersection(const WorldMask& other) const
     {
       return WorldMask(count, bits & other.bits);
     }
 
     /** @brief Return whether no worlds survive in the mask. */
-    bool Empty() const
+    ALPHA_MU_NODISCARD bool Empty() const
     {
       return bits == 0ULL;
     }
 
     /** @brief Render the active world indices in a compact debug form. */
-    string ToString() const
+    ALPHA_MU_NODISCARD string ToString() const
     {
       ostringstream oss;
       oss << "{";
@@ -256,7 +256,7 @@ namespace alpha_mu
      *
      * Dominance is only defined for vectors over the same valid-world set.
      */
-    bool Dominates(const OutcomeVector& other) const
+    ALPHA_MU_NODISCARD bool Dominates(const OutcomeVector& other) const
     {
       if (! (valid == other.valid))
         return false;
@@ -270,7 +270,7 @@ namespace alpha_mu
     }
 
     /** @brief Return the mean score over the currently valid worlds. */
-    double Mean() const
+    ALPHA_MU_NODISCARD double Mean() const
     {
       const unsigned n = valid.PopCount();
       if (n == 0)
@@ -292,7 +292,7 @@ namespace alpha_mu
      * This is the per-world minimum used by the alpha-mu Min backup rule before
      * Pareto reduction is applied at the front level.
      */
-    OutcomeVector MinWith(const OutcomeVector& other) const
+    ALPHA_MU_NODISCARD OutcomeVector MinWith(const OutcomeVector& other) const
     {
       if (values.size() != other.values.size())
         throw runtime_error("OutcomeVector size mismatch");
@@ -322,7 +322,7 @@ namespace alpha_mu
      * This models the optimization-paper idea that some worlds no longer affect
      * the Min backup once the current front already proves them irrelevant.
      */
-    OutcomeVector RestrictToUseful(const WorldMask& useful) const
+    ALPHA_MU_NODISCARD OutcomeVector RestrictToUseful(const WorldMask& useful) const
     {
       OutcomeVector result(*this);
       result.valid = valid.Intersection(useful);
@@ -340,7 +340,7 @@ namespace alpha_mu
      * This corresponds to the optimization-paper discussion of comparing sparse
      * fronts by giving impossible or unexpanded worlds optimistic completions.
      */
-    OutcomeVector CompleteOptimistically(
+    ALPHA_MU_NODISCARD OutcomeVector CompleteOptimistically(
       const WorldMask& useful,
       const OutcomeVector& optimistic) const
     {
@@ -366,7 +366,7 @@ namespace alpha_mu
     }
 
     /** @brief Render the vector as debug text with `x` for invalid worlds. */
-    string ToString() const
+    ALPHA_MU_NODISCARD string ToString() const
     {
       ostringstream oss;
       oss << "[";
@@ -408,9 +408,9 @@ namespace alpha_mu
     void Insert(const OutcomeVector& candidate)
     {
       NoteFrontInsertAttempt();
-      for (unsigned i = 0; i < vectors.size(); i++)
+      for (const auto& existing : vectors)
       {
-        if (vectors[i].Dominates(candidate))
+        if (existing.Dominates(candidate))
         {
           NoteFrontInsertRejectedByDominance();
           return;
@@ -420,10 +420,10 @@ namespace alpha_mu
       vector<OutcomeVector> kept;
       kept.reserve(vectors.size() + 1U);
       unsigned removed = 0;
-      for (unsigned i = 0; i < vectors.size(); i++)
+      for (const auto& existing : vectors)
       {
-        if (! candidate.Dominates(vectors[i]))
-          kept.push_back(vectors[i]);
+        if (! candidate.Dominates(existing))
+          kept.push_back(existing);
         else
           removed++;
       }
@@ -434,14 +434,14 @@ namespace alpha_mu
     }
 
     /** @brief Return whether every vector in @p other is dominated here. */
-    bool DominatesFront(const ParetoFront& other) const
+    ALPHA_MU_NODISCARD bool DominatesFront(const ParetoFront& other) const
     {
-      for (unsigned i = 0; i < other.vectors.size(); i++)
+      for (const auto& otherVector : other.vectors)
       {
         bool found = false;
-        for (unsigned j = 0; j < vectors.size(); j++)
+        for (const auto& existing : vectors)
         {
-          if (vectors[j].Dominates(other.vectors[i]))
+          if (existing.Dominates(otherVector))
           {
             found = true;
             break;
@@ -460,11 +460,11 @@ namespace alpha_mu
      * The solver uses this as the root `mu` value for iterative deepening and
      * the root-cut optimization.
      */
-    double Mu() const
+    ALPHA_MU_NODISCARD double Mu() const
     {
       double best = 0.0;
-      for (unsigned i = 0; i < vectors.size(); i++)
-        best = max(best, vectors[i].Mean());
+      for (const auto& vector : vectors)
+        best = max(best, vector.Mean());
       return best;
     }
 
@@ -475,10 +475,10 @@ namespace alpha_mu
     {
       NoteMaxMergeCall();
       ParetoFront result(left.worldCount);
-      for (unsigned i = 0; i < left.vectors.size(); i++)
-        result.Insert(left.vectors[i]);
-      for (unsigned i = 0; i < right.vectors.size(); i++)
-        result.Insert(right.vectors[i]);
+      for (const auto& vector : left.vectors)
+        result.Insert(vector);
+      for (const auto& vector : right.vectors)
+        result.Insert(vector);
       return result;
     }
 
@@ -502,7 +502,7 @@ namespace alpha_mu
      *
      * This implements the optimization-paper notion of useful worlds.
      */
-    WorldMask UsefulWorlds() const
+    ALPHA_MU_NODISCARD WorldMask UsefulWorlds() const
     {
       WorldMask useful = WorldMask::None(worldCount);
       for (unsigned w = 0; w < worldCount; w++)
@@ -524,33 +524,31 @@ namespace alpha_mu
     }
 
     /** @brief Return the union of worlds mentioned by any vector in the front. */
-    WorldMask ValidWorlds() const
+    ALPHA_MU_NODISCARD WorldMask ValidWorlds() const
     {
       WorldMask valid = WorldMask::None(worldCount);
-      for (unsigned i = 0; i < vectors.size(); i++)
-        valid = valid.Union(vectors[i].valid);
+      for (const auto& vector : vectors)
+        valid = valid.Union(vector.valid);
       return valid;
     }
 
     /// @brief Apply useful-world reduction to every vector in the front.
-    ParetoFront RestrictToUseful(const WorldMask& useful) const
+    ALPHA_MU_NODISCARD ParetoFront RestrictToUseful(const WorldMask& useful) const
     {
       ParetoFront result(worldCount);
-      for (unsigned i = 0; i < vectors.size(); i++)
-        result.Insert(vectors[i].RestrictToUseful(useful));
+      for (const auto& vector : vectors)
+        result.Insert(vector.RestrictToUseful(useful));
       return result;
     }
 
     /// @brief Optimistically complete every vector for sparse-front comparison.
-    ParetoFront CompleteOptimistically(
+    ALPHA_MU_NODISCARD ParetoFront CompleteOptimistically(
       const WorldMask& useful,
       const OutcomeVector& optimistic) const
     {
       ParetoFront result(worldCount);
-      for (unsigned i = 0; i < vectors.size(); i++)
-      {
-        result.Insert(vectors[i].CompleteOptimistically(useful, optimistic));
-      }
+      for (const auto& vector : vectors)
+        result.Insert(vector.CompleteOptimistically(useful, optimistic));
       return result;
     }
 
@@ -559,15 +557,15 @@ namespace alpha_mu
      *
      * This is the condition used by the optimization-paper cut-on-win rule.
      */
-    bool WinsAll(const WorldMask& useful) const
+    ALPHA_MU_NODISCARD bool WinsAll(const WorldMask& useful) const
     {
-      for (unsigned i = 0; i < vectors.size(); i++)
+      for (const auto& vector : vectors)
       {
         bool wins = true;
         for (unsigned w = 0; w < useful.count; w++)
         {
           if (useful.Has(w) &&
-              (! vectors[i].valid.Has(w) || vectors[i].values[w] <= 0))
+              (! vector.valid.Has(w) || vector.values[w] <= 0))
           {
             wins = false;
             break;
@@ -582,15 +580,17 @@ namespace alpha_mu
     }
 
     /** @brief Render the front as a set of outcome vectors. */
-    string ToString() const
+    ALPHA_MU_NODISCARD string ToString() const
     {
       ostringstream oss;
       oss << "{";
-      for (unsigned i = 0; i < vectors.size(); i++)
+      bool first = true;
+      for (const auto& vector : vectors)
       {
-        if (i != 0)
+        if (! first)
           oss << ", ";
-        oss << vectors[i].ToString();
+        oss << vector.ToString();
+        first = false;
       }
       oss << "}";
       return oss.str();
@@ -701,9 +701,9 @@ namespace alpha_mu
   {
     map<string, TTEntry> entries;
 
-    bool Lookup(const string& key, ParetoFront& front) const
+    ALPHA_MU_NODISCARD bool Lookup(const string& key, ParetoFront& front) const
     {
-      map<string, TTEntry>::const_iterator it = entries.find(key);
+      const auto it = entries.find(key);
       if (it == entries.end())
         return false;
 
@@ -759,15 +759,15 @@ namespace alpha_mu
     HandFileData() :
       number(0),
       GIBmode(false),
-      dealerList(NULL),
-      vulList(NULL),
-      dealList(NULL),
-      futList(NULL),
-      tableList(NULL),
-      parList(NULL),
-      dealerParList(NULL),
-      playList(NULL),
-      traceList(NULL)
+      dealerList(nullptr),
+      vulList(nullptr),
+      dealList(nullptr),
+      futList(nullptr),
+      tableList(nullptr),
+      parList(nullptr),
+      dealerParList(nullptr),
+      playList(nullptr),
+      traceList(nullptr)
     {
     }
 
@@ -821,15 +821,15 @@ namespace alpha_mu
     {
       number = 0;
       GIBmode = false;
-      dealerList = NULL;
-      vulList = NULL;
-      dealList = NULL;
-      futList = NULL;
-      tableList = NULL;
-      parList = NULL;
-      dealerParList = NULL;
-      playList = NULL;
-      traceList = NULL;
+      dealerList = nullptr;
+      vulList = nullptr;
+      dealList = nullptr;
+      futList = nullptr;
+      tableList = nullptr;
+      parList = nullptr;
+      dealerParList = nullptr;
+      playList = nullptr;
+      traceList = nullptr;
     }
 
     void Free()
@@ -1759,7 +1759,7 @@ namespace alpha_mu
       workerBackend(ALPHA_MU_WORKER_BACKEND_STL),
       boardWorkers(1),
       rootWorkers(1),
-      benchmarkProgress(NULL),
+      benchmarkProgress(nullptr),
       bridgeSearch()
     {
     }
@@ -2034,8 +2034,8 @@ namespace alpha_mu
       const int declarerSeat,
       const vector<PlayHistoryEvent>& playedCards,
       const BridgeInformationState& information,
-      WorldGenerationStats* worldGenerationStats = NULL,
-      DecisionWorldPipelineResult* decisionWorldPipeline = NULL);
+      WorldGenerationStats* worldGenerationStats = nullptr,
+      DecisionWorldPipelineResult* decisionWorldPipeline = nullptr);
 
   /**
    * @brief Create a multi-world BridgeState from a partial-information scenario.
@@ -2609,7 +2609,9 @@ namespace alpha_mu
       const SearchExecutionContext& context,
       BridgeTranspositionTable* tt,
       BridgeTTStats* ttStats,
-      const BridgeRootReport* previousReport = NULL);
+      const BridgeRootReport* previousReport = nullptr);
 }
+
+#undef ALPHA_MU_NODISCARD
 
 #endif

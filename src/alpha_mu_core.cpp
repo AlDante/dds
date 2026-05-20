@@ -9,6 +9,8 @@
 #include "alpha_mu_core.h"
 
 #include <atomic>
+#include <exception>
+#include <functional>
 #include <mutex>
 #include <thread>
 
@@ -22,7 +24,7 @@ namespace alpha_mu
 
   namespace
   {
-    thread_local BridgeSearchStats * gActiveBridgeSearchStats = NULL;
+    thread_local BridgeSearchStats * gActiveBridgeSearchStats = nullptr;
   }
 
   const char kAlphaMuMessagePrefix[] = "alpha_mu: ";
@@ -35,19 +37,19 @@ namespace alpha_mu
 
   void NoteFrontInsertAttempt()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->frontInsertAttempts++;
   }
 
   void NoteFrontInsertRejectedByDominance()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->frontDominatedRejects++;
   }
 
   void NoteFrontInsertAccepted(const unsigned removedCount)
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
     {
       gActiveBridgeSearchStats->frontAcceptedInserts++;
       gActiveBridgeSearchStats->frontDominatedRemoved += removedCount;
@@ -56,73 +58,73 @@ namespace alpha_mu
 
   void NoteMaxMergeCall()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->maxMergeCalls++;
   }
 
   void NoteMinProductCall()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->minProductCalls++;
   }
 
   void NoteOptimisticCompletion()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->optimisticCompletions++;
   }
 
   void NoteEarlyAlphaCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->earlyAlphaCuts++;
   }
 
   void NoteDeepAlphaCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->deepAlphaCuts++;
   }
 
   void NoteCutOnWinCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->cutOnWinCuts++;
   }
 
   void NoteRootCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->rootCuts++;
   }
 
   void NoteEmptyWorldCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->emptyWorldCuts++;
   }
 
   void NoteTTCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->ttCuts++;
   }
 
   void NoteDDSLeafCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->ddsLeafCuts++;
   }
 
   void NoteNoMoveLeafCut()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->noMoveLeafCuts++;
   }
 
   void NoteTerminalFront()
   {
-    if (gActiveBridgeSearchStats != NULL)
+    if (gActiveBridgeSearchStats != nullptr)
       gActiveBridgeSearchStats->terminalFronts++;
   }
 
@@ -230,11 +232,11 @@ namespace alpha_mu
       const unsigned slot = (idx + i) & mask;
       const BridgeTTEntry& e = table[slot];
       if (! e.occupied)
-        return NULL;
+        return nullptr;
       if (e.hash == hash && e.worldMaskBits == worldMaskBits)
         return &e.front;
     }
-    return NULL;
+    return nullptr;
   }
 
   unsigned BridgeTranspositionTable::CountProbeCollisions(
@@ -437,8 +439,8 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
       for (unsigned workerIndex = 0; workerIndex < boardWorkerCount; workerIndex++)
         workers.push_back(thread(worker, workerIndex));
 
-      for (unsigned i = 0; i < workers.size(); i++)
-        workers[i].join();
+      for (auto& workerThread : workers)
+        workerThread.join();
     }
 
     void RunAlphaMuBoardWorkersGCD(
@@ -468,12 +470,12 @@ vector<unsigned> SelectBenchmarkBoardNumbers(
         {
           stopPtr->store(true);
           lock_guard<mutex> lock(* workerFailureMutexPtr);
-          if (* workerFailurePtr == NULL)
+          if (! *workerFailurePtr)
             *workerFailurePtr = current_exception();
         }
       });
 
-      if (workerFailure != NULL)
+      if (workerFailure)
         rethrow_exception(workerFailure);
 #else
       UNUSED(boardWorkerCount);
@@ -744,14 +746,14 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
         catch (...)
         {
           lock_guard<mutex> lock(workerFailureMutex);
-          if (workerFailure == NULL)
+          if (! workerFailure)
             workerFailure = current_exception();
         }
       };
 
       RunAlphaMuBoardWorkers(options.workerBackend, boardWorkerCount, worker);
 
-      if (workerFailure != NULL)
+      if (workerFailure)
         rethrow_exception(workerFailure);
 
       double reportedElapsedSeconds = 0.0;
@@ -802,7 +804,7 @@ BenchmarkMethodSummary BenchmarkAlphaMuExactBoards(
 double BenchmarkCheckpointIntervalSeconds()
   {
     const char * value = getenv("DDS_ALPHA_MU_BENCHMARK_CHECKPOINT_SECONDS");
-    if (value == NULL || *value == '\0')
+    if (value == nullptr || *value == '\0')
       return 0.0;
 
     const double parsed = atof(value);
@@ -811,7 +813,7 @@ double BenchmarkCheckpointIntervalSeconds()
 double BenchmarkProgressIntervalSeconds()
   {
     const char * value = getenv("DDS_ALPHA_MU_BENCHMARK_PROGRESS_SECONDS");
-    if (value != NULL && *value != '\0')
+    if (value != nullptr && *value != '\0')
     {
       const double parsed = atof(value);
       if (parsed > 0.0)
@@ -826,7 +828,7 @@ void MaybeReportBenchmarkBoardProgress(
     const SearchExecutionContext& context)
   {
     BenchmarkBoardProgressContext * progress = context.benchmarkProgress;
-    if (progress == NULL || progress->reportIntervalSeconds <= 0.0)
+    if (progress == nullptr || progress->reportIntervalSeconds <= 0.0)
     {
       return;
     }
