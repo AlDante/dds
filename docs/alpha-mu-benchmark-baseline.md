@@ -201,13 +201,37 @@ still retain their own compile path.
 
 ### For PMU profiling
 
-1. Build `test/build/pmu_single_run` (or use `test/run_pmu_ladder_v2.sh`)
+This is the **privileged hardware-counter path**.
+
+1. Build `test/build/pmu_single_run`
 2. Run on `list9.txt` board 1, depth 2
 3. Record all 6 counters: cycles, instructions, branch mispredictions,
    L1D miss loads, L1D miss stores, plus derived IPC
 4. Compare deterministic counters (instructions, branch mispredictions)
    first — these are stable across runs
 5. Compare cycles and wall time second — these have run-to-run noise
+
+Because `pmu_single_run` uses Apple PMU access through `kperf`, it may require
+`sudo` or a suitable performance-monitoring entitlement on macOS.
+
+### For historical ladder benchmarks
+
+This is the **ordinary benchmark path**.
+
+- `test/run_pmu_ladder.sh`
+- `test/run_pmu_ladder_v2.sh`
+- `test/run_pmu_ladder_full.sh`
+- `test/run_cpu_benchmark_ladder.sh`
+
+These scripts run the standard `alpha_mu benchmark_alpha` binary across code
+snapshots. They do not access PMU counters directly.
+
+- Run them as your normal user
+- Do **not** use `sudo`
+- Their logs under `test/build/` should remain owned by `david`
+
+Running the ladder scripts as root is incorrect and creates root-owned build and
+log artifacts under `test/build/`.
 
 ### Acceptance criteria for optimization changes
 

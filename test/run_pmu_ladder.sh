@@ -1,10 +1,18 @@
 #!/bin/bash
-# PMU benchmark ladder: measures cycles, instructions, branch mispredictions,
-# and L1D cache misses for each cache-layout variant.
-# Must be run with sudo.
-# Usage: sudo bash test/run_pmu_ladder.sh
+# Historical benchmark ladder across cache-layout variants.
+# This script runs the standard alpha-mu benchmark binary and must NOT be run
+# with sudo, otherwise it will create root-owned build and log artifacts.
+# Usage: bash test/run_pmu_ladder.sh
 
 set -e
+
+if [ "$(id -u)" -eq 0 ]; then
+  echo "error: do not run test/run_pmu_ladder.sh with sudo or as root." >&2
+  echo "This ladder uses the standard alpha-mu benchmark and should create user-owned files." >&2
+  echo "If you need privileged PMU counters, use test/build/pmu_single_run separately." >&2
+  exit 1
+fi
+
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 SRC="$ROOT/src"
