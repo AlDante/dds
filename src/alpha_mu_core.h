@@ -489,10 +489,10 @@ namespace alpha_mu
     {
       NoteMinProductCall();
       ParetoFront result(left.worldCount);
-      for (unsigned i = 0; i < left.vectors.size(); i++)
+      for (const auto& leftVector : left.vectors)
       {
-        for (unsigned j = 0; j < right.vectors.size(); j++)
-          result.Insert(left.vectors[i].MinWith(right.vectors[j]));
+        for (const auto& rightVector : right.vectors)
+          result.Insert(leftVector.MinWith(rightVector));
       }
       return result;
     }
@@ -508,9 +508,9 @@ namespace alpha_mu
       for (unsigned w = 0; w < worldCount; w++)
       {
         bool keep = false;
-        for (unsigned i = 0; i < vectors.size(); i++)
+        for (const auto& vector : vectors)
         {
-          if (! vectors[i].valid.Has(w) || vectors[i].values[w] > 0)
+          if (! vector.valid.Has(w) || vector.values[w] > 0)
           {
             keep = true;
             break;

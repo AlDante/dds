@@ -322,9 +322,8 @@ set<unsigned> ParseSkippedBoardNumbers(
       return skipped;
 
     const vector<string> parts = SplitString(skipSpec, ',', false);
-    for (unsigned i = 0; i < parts.size(); i++)
+    for (const auto& token : parts)
     {
-      const string token = parts[i];
       const size_t dash = token.find('-');
       if (dash == string::npos)
       {

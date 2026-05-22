@@ -9,8 +9,6 @@
 
 #include <array>
 #include <cassert>
-#include <iostream>
-#include <sstream>
 
 #include "TransTable.h"
 #include "Moves.h"
@@ -20,40 +18,39 @@
 #include "ABstats.h"
 #include "TimerList.h"
 #include "dump.h"
-#include "debug.h"
 
 
 void Make3Simple(
   pos * posPoint,
   unsigned short trickCards[DDS_SUITS],
-  const int depth,
+  int depth,
   moveType const * mply,
   ThreadData * thrp);
 
 void Undo0(
   pos * posPoint,
-  const int depth,
+  int depth,
   const moveType& mply,
   ThreadData const * thrp);
 
 void Undo0Simple(
   pos * posPoint,
-  const int depth,
+  int depth,
   const moveType& mply);
 
 void Undo1(
   pos * posPoint,
-  const int depth,
+  int depth,
   const moveType& mply);
 
 void Undo2(
   pos * posPoint,
-  const int depth,
+  int depth,
   const moveType& mply);
 
 void Undo3(
   pos * posPoint,
-  const int depth,
+  int depth,
   const moveType& mply);
 
 
@@ -853,10 +850,16 @@ void Make3(
 
       int aggr = posPoint->aggr[st];
 
-      posPoint->winner[st].rank = thrp->rel[aggr].absRank[1][st].rank;
-      posPoint->winner[st].hand = thrp->rel[aggr].absRank[1][st].hand;
-      posPoint->secondBest[st].rank = thrp->rel[aggr].absRank[2][st].rank;
-      posPoint->secondBest[st].hand = thrp->rel[aggr].absRank[2][st].hand;
+      posPoint->winner[st].rank =
+        static_cast<int>(static_cast<unsigned char>(
+          thrp->rel[aggr].absRank[1][st].rank));
+      posPoint->winner[st].hand =
+        static_cast<int>(thrp->rel[aggr].absRank[1][st].hand);
+      posPoint->secondBest[st].rank =
+        static_cast<int>(static_cast<unsigned char>(
+          thrp->rel[aggr].absRank[2][st].rank));
+      posPoint->secondBest[st].hand =
+        static_cast<int>(thrp->rel[aggr].absRank[2][st].hand);
 
     }
   }
@@ -996,7 +999,7 @@ evalType Evaluate(
 {
   int s, h, hmax = 0, count = 0, k = 0;
   unsigned short rmax = 0;
-  evalType eval;
+  evalType eval = {};
 
   int firstHand = posPoint->first[0];
   assert((firstHand >= 0) && (firstHand <= 3));
