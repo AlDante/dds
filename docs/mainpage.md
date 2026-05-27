@@ -6,6 +6,7 @@ This documentation set combines curated Markdown guides with generated API pages
 
 ## Contents
 
+- [Repository layout and directory guide](repository-layout.md)
 - [Architecture](architecture.md)
 - [DDS code flow and algorithms](dds-code-flow.md)
 - [Key data structures](data-structures.md)

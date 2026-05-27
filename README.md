@@ -33,16 +33,26 @@ Soren Hein made a number of contributions before becoming a co-author starting w
 Overview
 ========
 
-The distribution consists of the following directories.
+The distribution consists of the following top-level directories.
 
-* **src**, the source code for the library.
-* **include**, where the public interface of the library is specified.
-* **lib**, the place where the library file is "installed" for test purposes.
-* **doc**, where the historical library/interface documentation and algorithm notes live.
-* **docs**, where the maintained Doxygen/Markdown documentation set and build files live.
-* **hands**, a repository for input files to the test programs.
-* **test**, a test program.
-* **examples**, some minimal programs showing how to interface in practice with a number of library functions.
+* **src**, the DDS library implementation together with platform Makefiles and per-variant build output directories.
+* **include**, the public C API (`dll.h`) plus the maintained alpha-mu public wrapper headers under `include/alpha_mu/`.
+* **test**, regression binaries, benchmark tools, performance scripts, test-local alpha-mu shims, and their build output directories.
+* **examples**, small sample programs showing how to call the DDS API in practice.
+* **hands**, curated and historical input files used by the test and benchmark programs.
+* **docs**, the maintained Markdown + Doxygen documentation set, background research notes, and generated HTML output under `docs/build/`.
+* **doc**, the historical archive of DLL/API write-ups, algorithm notes, and older performance documentation.
+* **build**, a top-level CMake/Doxygen-generated directory used for IDE and documentation-generation work rather than the supported library/test build.
+
+Important repository-level files include:
+
+* **README.md**, this introduction.
+* **INSTALL**, the supported build and test workflow.
+* **Makefile**, convenience targets for docs, correctness checks, profiling, sanitizers, and performance runs.
+* **ChangeLog**, release notes.
+* **LICENSE**, the Apache 2.0 license text.
+
+For a more detailed directory-by-directory guide, including important nested folders such as `src/Makefiles/`, `test/Makefiles/`, `docs/background/`, and the generated build directories, see `docs/repository-layout.md`.
 
 There is a parallel distribution, [**ddd**](https://github.com/dds-bridge/ddd).  It consisting of an old driver program for DDS contributed under the GPL (not under the Apache license) by Flip Cronje, and updated by us to support the multi-threaded library file.
 
@@ -117,6 +127,8 @@ Docs
 The maintained documentation entry point is the `docs/` directory, which combines curated Markdown pages with a Doxygen build. Historical interface and algorithm documentation remains in `doc/`.
 
 For build instructions and IDE workflow, start with `docs/build-and-clion.md`.
+
+For a detailed map of what the repository directories contain, see `docs/repository-layout.md`.
 
 Bugs
 ====

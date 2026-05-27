@@ -48,6 +48,7 @@ make -C docs clean
 The generated site includes:
 
 - `mainpage.md` — landing page
+- `repository-layout.md` — repository-level directory guide and generated-output map
 - `architecture.md` — high-level DDS architecture
 - `dds-code-flow.md` — detailed DDS request flow, recursive search roles, and algorithm notes
 - `dds-invariants.md` — concise solver-side invariant guide for core DDS changes
