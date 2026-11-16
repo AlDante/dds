@@ -18,8 +18,8 @@
 
 #include "ThreadMgr.h"
 
-mutex mtx;
-mutex mtxPrint;
+static mutex mtx;
+static mutex mtxPrint;
 
 
 ThreadMgr::ThreadMgr()
@@ -58,25 +58,25 @@ void ThreadMgr::Reset(const int nThreads)
 int ThreadMgr::Occupy(const int machineId)
 {
   const unsigned m = static_cast<unsigned>(machineId);
-  if (m >= numMachineThreads)
-  {
-    numMachineThreads = m + 1;
-    machineThreads.resize(numMachineThreads);
-    for (unsigned t = m; t < numMachineThreads; t++)
-      machineThreads[t] = -1;
-  }
-
-  if (machineThreads[m] != -1)
-  {
-    // Error: Already in use.
-    return -1;
-  }
-
   int res = -1;
 
   do
   {
+    // machineThreads may be resized, so every access is under the lock.
     mtx.lock();
+    if (m >= numMachineThreads)
+    {
+      machineThreads.resize(m + 1, -1);
+      numMachineThreads = m + 1;
+    }
+
+    if (machineThreads[m] != -1)
+    {
+      // Error: Already in use.
+      mtx.unlock();
+      return -1;
+    }
+
     for (unsigned t = 0; t < numRealThreads; t++)
     {
       if (realThreads[t] == false)
@@ -88,8 +88,6 @@ int ThreadMgr::Occupy(const int machineId)
         break;
       }
     }
-    // ThreadMgr::Print("thr.txt", "In Occupy " + 
-      // to_string(machineId) + " " + to_string(res));
     mtx.unlock();
 
     if (res == -1)
@@ -109,7 +107,7 @@ bool ThreadMgr::Release(const int machineId)
 
   bool ret;
   const unsigned m = static_cast<unsigned>(machineId);
-  const int r = machineThreads[m];
+  const int r = (m < numMachineThreads ? machineThreads[m] : -1);
   const unsigned ru = static_cast<unsigned>(r);
 
   if (r == -1)

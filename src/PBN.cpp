@@ -23,13 +23,14 @@ int ConvertFromPBN(
       remainCards[h][s] = 0;
 
   int bp = 0;
-  while (((dealBuff[bp] != 'W') && (dealBuff[bp] != 'N') &&
+  while ((dealBuff[bp] != '\0') &&
+         ((dealBuff[bp] != 'W') && (dealBuff[bp] != 'N') &&
           (dealBuff[bp] != 'E') && (dealBuff[bp] != 'S') &&
           (dealBuff[bp] != 'w') && (dealBuff[bp] != 'n') &&
           (dealBuff[bp] != 'e') && (dealBuff[bp] != 's')) && (bp < 3))
     bp++;
 
-  if (bp >= 3)
+  if (bp >= 3 || dealBuff[bp] == '\0')
     return 0;
 
   int first;
@@ -43,6 +44,8 @@ int ConvertFromPBN(
     first = 3;
 
   bp++;
+  if (dealBuff[bp] == '\0')
+    return 0;
   bp++;
 
   int handRelFirst = 0;
@@ -54,6 +57,11 @@ int ConvertFromPBN(
     card = IsCard(dealBuff[bp]);
     if (card)
     {
+      // Reject deals with more than four hands or four suits: they
+      // would index outside remainCards.
+      if (handRelFirst >= DDS_HANDS || suitInHand >= DDS_SUITS)
+        return 0;
+
       switch (first)
       {
         case 0:

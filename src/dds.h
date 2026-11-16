@@ -29,6 +29,8 @@
 
 // Thread memory configuration moved to TTConfig.h
 // Override at compile time (-D flags) or runtime (env vars).
+#include <atomic>
+
 #include "TTConfig.h"
 
 /** @brief Logical search side at a DDS node. */
@@ -223,7 +225,7 @@ struct paramType
   int noOfBoards;
   boards * bop;
   solvedBoards * solvedp;
-  int error;
+  std::atomic<int> error; // Written by worker threads.
 };
 
 /** @brief High-level operation category used by the scheduler and threading layer. */

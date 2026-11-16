@@ -537,7 +537,7 @@ int System::RunThreadsSTLIMPL()
   (* CallbackDuplList[runCat])(* bop, uniques, crossrefs);
 
   static atomic<int> thrIdNext = 0;
-  bool err = false;
+  atomic<bool> err(false);
 
   threadMgr.Reset(numThreads);
 
@@ -613,7 +613,7 @@ int System::RunThreadsPPLIMPL()
   (* CallbackDuplList[runCat])(* bop, uniques, crossrefs);
 
   static atomic<int> thrIdNext = 0;
-  bool err = false, err2 = false;
+  atomic<bool> err(false), err2(false);
 
   threadMgr.Reset(numThreads);
 

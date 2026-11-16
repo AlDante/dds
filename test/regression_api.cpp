@@ -511,6 +511,27 @@ static void CheckMalformedInputs(const dealPBN& validDeal)
     RETURN_PBN_FAULT,
     TEXT_PBN_FAULT);
 
+  // Extra suits, extra hands and truncated strings must be rejected
+  // rather than indexing outside the parsed deal.
+  const char * overflowDeals[] =
+  {
+    "N:AKQJ.T98.765.43.2 .... .... ....",
+    "N:AKQJ.T98.765.432 .... .... .... 2.2.2.2",
+    "N",
+    ""
+  };
+  for (const char * overflow : overflowDeals)
+  {
+    ddTableDealPBN overflowDeal;
+    memset(&overflowDeal, 0, sizeof(overflowDeal));
+    strcpy(overflowDeal.cards, overflow);
+    ExpectReturnAndText(
+      string("CalcDDtablePBN overflowing PBN: ") + overflow,
+      CalcDDtablePBN(overflowDeal, &table),
+      RETURN_PBN_FAULT,
+      TEXT_PBN_FAULT);
+  }
+
   ddTableDealsPBN badTableBatch;
   int trumpFilter[DDS_STRAINS] = {0, 0, 0, 0, 0};
   memset(&badTableBatch, 0, sizeof(badTableBatch));
