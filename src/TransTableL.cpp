@@ -84,6 +84,7 @@
 */
 
 
+#include <new>
 #include <iomanip>
 #include <sstream>
 #include <math.h>
@@ -133,6 +134,9 @@ TransTableL::TransTableL()
   pageStats.lastCurrent = 0;
 
   TTInUse = 0;
+  for (int t = 0; t < TT_TRICKS; t++)
+    for (int h = 0; h < DDS_HANDS; h++)
+      TTroot[t][h] = nullptr;
 }
 
 
@@ -284,7 +288,11 @@ void TransTableL::MakeTT()
                        (malloc(256 * sizeof(distHashType)));
 
         if (TTroot[t][h] == nullptr)
-          exit(1);
+        {
+          // Release the roots acquired so far so MakeTT can be retried.
+          TransTableL::ReleaseTT();
+          throw std::bad_alloc();
+        }
       }
     }
   }
@@ -325,6 +333,7 @@ void TransTableL::ReleaseTT()
         continue;
 
       free(TTroot[t][h]);
+      TTroot[t][h] = nullptr;
     }
   }
 }
@@ -453,13 +462,18 @@ TransTableL::winBlockType * TransTableL::GetNextCardBlock()
     // Have to be able to get at least one pool.
     poolp = static_cast<poolType *>(calloc(1, sizeof(poolType)));
     if (poolp == nullptr)
-      exit(1);
+      throw std::bad_alloc();
 
     poolp->list = static_cast<winBlockType *>
                   (malloc(BLOCKS_PER_PAGE * sizeof(winBlockType)));
 
     if (! poolp->list)
-      exit(1);
+    {
+      // Leave no half-built pool behind: the next call must retry from scratch.
+      free(poolp);
+      poolp = nullptr;
+      throw std::bad_alloc();
+    }
 
     poolp->next = nullptr;
     poolp->prev = nullptr;

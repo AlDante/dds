@@ -16,6 +16,7 @@
  */
 
 
+#include <exception>
 #include "CalcTables.h"
 #include "SolverIF.h"
 #include "SolveBoard.h"
@@ -36,7 +37,7 @@ int CalcAllBoardsN(
   solvedBoards * solvedp);
 
 
-void CalcSingleCommon(
+static void CalcSingleCommonImpl(
   const int thrId,
   const int bno)
 {
@@ -59,7 +60,7 @@ void CalcSingleCommon(
   if (res == 1)
     cparam.solvedp->solvedBoard[bno].score[0] = fut.score[0];
   else
-    cparam.error = res;
+    RecordRunError(cparam, bno, res);
 
   ThreadData * thrp = memory.GetPtr(static_cast<unsigned>(thrId));
   for (int k = 1; k < DDS_HANDS; k++)
@@ -73,9 +74,25 @@ void CalcSingleCommon(
     if (res == 1)
       cparam.solvedp->solvedBoard[bno].score[k] = fut.score[0];
     else
-      cparam.error = res;
+      RecordRunError(cparam, bno, res);
   }
   END_THREAD_TIMER(thrId);
+}
+
+
+void CalcSingleCommon(
+  const int thrId,
+  const int bno)
+{
+  // Worker threads must not let exceptions escape.
+  try
+  {
+    CalcSingleCommonImpl(thrId, bno);
+  }
+  catch (const std::exception&)
+  {
+    RecordRunError(cparam, bno, RETURN_UNKNOWN_FAULT);
+  }
 }
 
 
@@ -135,7 +152,9 @@ int CalcAllBoardsN(
   boards * bop,
   solvedBoards * solvedp)
 {
+  std::lock_guard<std::recursive_mutex> guard(ddsApiMutex);
   cparam.error = 0;
+  cparam.errorBoard = 0;
 
   if (bop->noOfBoards > MAXNOOFBOARDS)
     return RETURN_TOO_MANY_BOARDS;

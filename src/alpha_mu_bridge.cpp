@@ -7,6 +7,7 @@
  */
 
 #include "alpha_mu/bridge.h"
+#include "SafeCopy.h"
 
 namespace alpha_mu
 {
@@ -342,7 +343,7 @@ namespace alpha_mu
     const string remain = SerializePBNWorld(world);
     Check(remain.size() < sizeof(deal.remainCards),
       "bridge DDS leaf serialization should fit into dealPBN.remainCards");
-    strcpy(deal.remainCards, remain.c_str());
+    CopyTruncated(deal.remainCards, remain);
     return deal;
   }
 

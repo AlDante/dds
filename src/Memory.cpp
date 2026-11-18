@@ -8,6 +8,8 @@
 */
 
 
+#include <stdexcept>
+#include <string>
 #include "Memory.h"
 
 
@@ -88,8 +90,8 @@ ThreadData * Memory::GetPtr(const unsigned thrId)
 {
   if (thrId >= memory.size())
   {
-    cout << "Memory::GetPtr: " << thrId << " vs. " << memory.size() << endl;
-    exit(1);
+    throw std::out_of_range("Memory::GetPtr: thread id " +
+      std::to_string(thrId) + " vs. " + std::to_string(memory.size()));
   }
   return memory[thrId];
 }

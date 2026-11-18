@@ -7,6 +7,7 @@
    See LICENSE and README.
 */
 
+#include <exception>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -247,8 +248,17 @@ int STDCALL SolveBoard(
   if (! sysdep.ThreadOK(thrId))
     return RETURN_THREAD_INDEX;
 
-  return SolveBoardInternal(memory.GetPtr(static_cast<unsigned>(thrId)), 
-    dl, target, solutions, mode, futp);
+  // Exceptions (allocation failure, internal invariants) must not cross
+  // the C API boundary.
+  try
+  {
+    return SolveBoardInternal(memory.GetPtr(static_cast<unsigned>(thrId)),
+      dl, target, solutions, mode, futp);
+  }
+  catch (const std::exception&)
+  {
+    return RETURN_UNKNOWN_FAULT;
+  }
 }
 
 

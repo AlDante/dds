@@ -110,6 +110,9 @@ class TransTableS: public TransTable
 
     void SetConstants();
 
+    /** Allocates all TT storage; throws std::bad_alloc on failure. */
+    void AllocateTT();
+
     void Wipe();
 
     void InitTT();

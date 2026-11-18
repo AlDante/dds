@@ -381,7 +381,7 @@ make -C test -f Makefiles/Makefile_Mac_clang moves_sort_benchmark alpha_mu
 - executable: `/Users/david/Documents/dev/CLionProjects/dds/test/build/regression_api`
 - working directory: `/Users/david/Documents/dev/CLionProjects/dds/test`
 - environment: `DYLD_LIBRARY_PATH=../src/build`
-- program arguments: `../hands/list10.txt ../hands/thomas1.txt`
+- program arguments: `../hands/list10.txt` (add `../hands/thomas1.txt` only for the ~45 min slow run)
 
 ### `dtest` solve (release)
 

@@ -12,12 +12,14 @@
 #include <string.h>
 
 #include "Init.h"
+#include "SafeCopy.h"
 #include "System.h"
 #include "Scheduler.h"
 #include "ThreadMgr.h"
 #include "debug.h"
 
 
+std::recursive_mutex ddsApiMutex;
 System sysdep;
 Memory memory;
 Scheduler scheduler;
@@ -88,6 +90,7 @@ void STDCALL SetResources(
   int maxMemoryMB,
   int maxThreadsIn)
 {
+  std::lock_guard<std::recursive_mutex> guard(ddsApiMutex);
   // Figure out system resources.
   int ncores;
   unsigned long long kilobytesFree;
@@ -194,6 +197,7 @@ void STDCALL SetResources(
 int STDCALL SetThreading(
   int code)
 {
+  std::lock_guard<std::recursive_mutex> guard(ddsApiMutex);
   return sysdep.PreferThreading(static_cast<unsigned>(code));
 }
 
@@ -610,6 +614,7 @@ void STDCALL GetDDSInfo(DDSInfo * info)
 
 void STDCALL FreeMemory()
 {
+  std::lock_guard<std::recursive_mutex> guard(ddsApiMutex);
   for (unsigned thrId = 0; thrId < memory.NumThreads(); thrId++)
     memory.ReturnThread(thrId);
 }
@@ -626,94 +631,73 @@ double ThreadMemoryUsed()
 }
 
 
-void STDCALL ErrorMessage(int code, char line[80])
+static const char * ErrorText(const int code)
 {
   switch (code)
   {
     case RETURN_NO_FAULT:
-      strcpy(line, TEXT_NO_FAULT);
-      break;
+      return TEXT_NO_FAULT;
     case RETURN_UNKNOWN_FAULT:
-      strcpy(line, TEXT_UNKNOWN_FAULT);
-      break;
+      return TEXT_UNKNOWN_FAULT;
     case RETURN_ZERO_CARDS:
-      strcpy(line, TEXT_ZERO_CARDS);
-      break;
+      return TEXT_ZERO_CARDS;
     case RETURN_TARGET_TOO_HIGH:
-      strcpy(line, TEXT_TARGET_TOO_HIGH);
-      break;
+      return TEXT_TARGET_TOO_HIGH;
     case RETURN_DUPLICATE_CARDS:
-      strcpy(line, TEXT_DUPLICATE_CARDS);
-      break;
+      return TEXT_DUPLICATE_CARDS;
     case RETURN_TARGET_WRONG_LO:
-      strcpy(line, TEXT_TARGET_WRONG_LO);
-      break;
+      return TEXT_TARGET_WRONG_LO;
     case RETURN_TARGET_WRONG_HI:
-      strcpy(line, TEXT_TARGET_WRONG_HI);
-      break;
+      return TEXT_TARGET_WRONG_HI;
     case RETURN_SOLNS_WRONG_LO:
-      strcpy(line, TEXT_SOLNS_WRONG_LO);
-      break;
+      return TEXT_SOLNS_WRONG_LO;
     case RETURN_SOLNS_WRONG_HI:
-      strcpy(line, TEXT_SOLNS_WRONG_HI);
-      break;
+      return TEXT_SOLNS_WRONG_HI;
     case RETURN_TOO_MANY_CARDS:
-      strcpy(line, TEXT_TOO_MANY_CARDS);
-      break;
+      return TEXT_TOO_MANY_CARDS;
     case RETURN_SUIT_OR_RANK:
-      strcpy(line, TEXT_SUIT_OR_RANK);
-      break;
+      return TEXT_SUIT_OR_RANK;
     case RETURN_PLAYED_CARD:
-      strcpy(line, TEXT_PLAYED_CARD);
-      break;
+      return TEXT_PLAYED_CARD;
     case RETURN_CARD_COUNT:
-      strcpy(line, TEXT_CARD_COUNT);
-      break;
+      return TEXT_CARD_COUNT;
     case RETURN_THREAD_INDEX:
-      strcpy(line, TEXT_THREAD_INDEX);
-      break;
+      return TEXT_THREAD_INDEX;
     case RETURN_MODE_WRONG_LO:
-      strcpy(line, TEXT_MODE_WRONG_LO);
-      break;
+      return TEXT_MODE_WRONG_LO;
     case RETURN_MODE_WRONG_HI:
-      strcpy(line, TEXT_MODE_WRONG_HI);
-      break;
+      return TEXT_MODE_WRONG_HI;
     case RETURN_TRUMP_WRONG:
-      strcpy(line, TEXT_TRUMP_WRONG);
-      break;
+      return TEXT_TRUMP_WRONG;
     case RETURN_FIRST_WRONG:
-      strcpy(line, TEXT_FIRST_WRONG);
-      break;
+      return TEXT_FIRST_WRONG;
     case RETURN_PLAY_FAULT:
-      strcpy(line, TEXT_PLAY_FAULT);
-      break;
+      return TEXT_PLAY_FAULT;
     case RETURN_PBN_FAULT:
-      strcpy(line, TEXT_PBN_FAULT);
-      break;
+      return TEXT_PBN_FAULT;
     case RETURN_TOO_MANY_BOARDS:
-      strcpy(line, TEXT_TOO_MANY_BOARDS);
-      break;
+      return TEXT_TOO_MANY_BOARDS;
     case RETURN_THREAD_CREATE:
-      strcpy(line, TEXT_THREAD_CREATE);
-      break;
+      return TEXT_THREAD_CREATE;
     case RETURN_THREAD_WAIT:
-      strcpy(line, TEXT_THREAD_WAIT);
-      break;
+      return TEXT_THREAD_WAIT;
     case RETURN_THREAD_MISSING:
-      strcpy(line, TEXT_THREAD_MISSING);
-      break;
+      return TEXT_THREAD_MISSING;
     case RETURN_NO_SUIT:
-      strcpy(line, TEXT_NO_SUIT);
-      break;
+      return TEXT_NO_SUIT;
     case RETURN_TOO_MANY_TABLES:
-      strcpy(line, TEXT_TOO_MANY_TABLES);
-      break;
+      return TEXT_TOO_MANY_TABLES;
     case RETURN_CHUNK_SIZE:
-      strcpy(line, TEXT_CHUNK_SIZE);
-      break;
+      return TEXT_CHUNK_SIZE;
     default:
-      strcpy(line, "Not a DDS error code");
-      break;
+      return "Not a DDS error code";
   }
+}
+
+
+void STDCALL ErrorMessage(int code, char line[80])
+{
+  // The C API fixes the buffer at 80 bytes; truncate rather than overflow.
+  CopyTruncated(line, 80, ErrorText(code));
 }
 

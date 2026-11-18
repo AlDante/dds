@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
+#include <chrono>
 
 #include "../include/dll.h"
 #include "parse.h"
@@ -21,6 +22,19 @@
 #include "print.h"
 
 using namespace std;
+
+
+// Prints the wall time spent since the previous call, to show which check is slow.
+static void Phase(const char * name)
+{
+  static std::chrono::steady_clock::time_point last =
+    std::chrono::steady_clock::now();
+  const std::chrono::steady_clock::time_point now =
+    std::chrono::steady_clock::now();
+  cerr << "  [" << name << "] "
+       << std::chrono::duration<double>(now - last).count() << " s\n";
+  last = now;
+}
 
 
 static bool FileExists(const string& fname)
@@ -386,6 +400,72 @@ static void CheckSolveAllBoardsBatch(
 }
 
 
+// Exercises batch paths the plain batch test misses: duplicate boards
+// (de-duplicated by the scheduler and copied from the first solve), the
+// chunked entry points, and the argument limits.
+static void CheckBatchVariants(
+  const dealPBN * deals,
+  const futureTricks * expected,
+  const int count)
+{
+  if (count < 2)
+    return;
+
+  // Order: 0, 1, 0, 1, 0 so that every later board duplicates an earlier one.
+  const int order[5] = { 0, 1, 0, 1, 0 };
+  boardsPBN boards;
+  solvedBoards solved;
+
+  for (int variant = 0; variant < 3; variant++)
+  {
+    memset(&boards, 0, sizeof(boards));
+    memset(&solved, 0, sizeof(solved));
+    boards.noOfBoards = 5;
+    for (int i = 0; i < 5; i++)
+    {
+      boards.deals[i] = deals[order[i]];
+      boards.target[i] = -1;
+      boards.solutions[i] = 3;
+      boards.mode[i] = 1;
+    }
+
+    int ret = 0;
+    if (variant == 0)
+      ret = SolveAllChunks(&boards, &solved, 1);
+    else if (variant == 1)
+      ret = SolveAllChunksPBN(&boards, &solved, 2);
+    else
+      ret = SolveAllBoards(&boards, &solved);
+
+    CheckReturn("batch variant", ret);
+    if (solved.noOfBoards != 5)
+      Fail("batch variant returned the wrong solved.noOfBoards");
+    for (int i = 0; i < 5; i++)
+    {
+      if (! compare_FUT(solved.solvedBoard[i], expected[order[i]]))
+        Fail("duplicate-board batch != golden FUT");
+    }
+  }
+
+  memset(&boards, 0, sizeof(boards));
+  memset(&solved, 0, sizeof(solved));
+  boards.noOfBoards = 1;
+  boards.deals[0] = deals[0];
+  boards.target[0] = -1;
+  boards.solutions[0] = 3;
+  boards.mode[0] = 1;
+
+  if (SolveAllChunks(&boards, &solved, 0) != RETURN_CHUNK_SIZE)
+    Fail("SolveAllChunks accepted chunkSize 0");
+  if (SolveAllChunksPBN(&boards, &solved, -1) != RETURN_CHUNK_SIZE)
+    Fail("SolveAllChunksPBN accepted a negative chunkSize");
+
+  boards.noOfBoards = MAXNOOFBOARDS + 1;
+  if (SolveAllBoards(&boards, &solved) != RETURN_TOO_MANY_BOARDS)
+    Fail("SolveAllBoards accepted too many boards");
+}
+
+
 static void CheckCalcAllTablesBatch(
   const dealPBN * deals,
   const ddTableResults * expectedTables,
@@ -685,8 +765,11 @@ static void CheckHandFile(const string& fname)
       par_list[i],
       dealerpar_list[i]);
 
+    Phase("par");
     CheckSolveGolden(deal_list[i], fut_list[i]);
+    Phase("solve golden");
     CheckSolveConsistency(deal_list[i], fut_list[i]);
+    Phase("solve consistency");
 
     if (play_list[i].number > 0)
     {
@@ -701,12 +784,17 @@ static void CheckHandFile(const string& fname)
   }
 
   CheckSolveAllBoardsBatch(deal_list, fut_list, batchCount);
+  Phase("play checks");
+  CheckBatchVariants(deal_list, fut_list, batchCount);
+  Phase("batch variants");
   CheckCalcAllTablesBatch(deal_list, table_list, par_list, batchCount);
 
   if (! playBatch.empty())
     CheckAnalyseAllPlaysBatch(playBatchDeals, playBatch, traceBatch);
 
+  Phase("calc tables/analyse batch");
   CheckMalformedInputs(deal_list[0]);
+  Phase("malformed");
   CheckRepeatedPublicCalls(
     dealer_list[0],
     vul_list[0],
@@ -756,8 +844,6 @@ int main(int argc, char * argv[])
   else
   {
     files.push_back(ResolvePath("hands/list10.txt"));
-    files.push_back(ResolvePath("hands/thomas1.txt"));
-    files.push_back(ResolvePath("hands/thomas2.txt"));
   }
 
   for (size_t i = 0; i < files.size(); i++)

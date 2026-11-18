@@ -38,7 +38,7 @@ DEFAULT_WORKLOADS = [
     {
         "name": "regression_api_smoke",
         "cwd": "test",
-        "command": ["./build/regression_api", "../hands/list10.txt", "../hands/thomas1.txt"],
+        "command": ["./build/regression_api", "../hands/list10.txt"],
         "requires_dyld": True,
     },
     {

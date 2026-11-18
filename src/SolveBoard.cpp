@@ -59,7 +59,7 @@ void SolveSingleCommon(
   if (res == 1)
     param.solvedp->solvedBoard[bno] = fut;
   else
-    param.error = res;
+    RecordRunError(param, bno, res);
 }
 
 
@@ -118,7 +118,9 @@ int SolveAllBoardsN(
   boards& bds,
   solvedBoards& solved)
 {
+  std::lock_guard<std::recursive_mutex> guard(ddsApiMutex);
   param.error = 0;
+  param.errorBoard = 0;
 
   if (bds.noOfBoards > MAXNOOFBOARDS)
     return RETURN_TOO_MANY_BOARDS;

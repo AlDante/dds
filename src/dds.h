@@ -30,6 +30,7 @@
 // Thread memory configuration moved to TTConfig.h
 // Override at compile time (-D flags) or runtime (env vars).
 #include <atomic>
+#include <mutex>
 
 #include "TTConfig.h"
 
@@ -219,6 +220,14 @@ struct relRanksType // 120 bytes
   absRankType absRank[15][DDS_SUITS];
 };
 
+/**
+ * @brief Serialises API calls that use the process-wide run state
+ * (`sysdep`, `memory`, `scheduler`, `param`, `cparam`, `playparam`).
+ *
+ * Only one batch run, resource change or memory release is active at a time.
+ */
+extern std::recursive_mutex ddsApiMutex;
+
 /** @brief Shared batch-run parameter block used by worker backends. */
 struct paramType
 {
@@ -226,7 +235,23 @@ struct paramType
   boards * bop;
   solvedBoards * solvedp;
   std::atomic<int> error; // Written by worker threads.
+  int errorBoard; // Board that produced `error`; guarded by RecordRunError.
 };
+
+/**
+ * @brief Records a worker error, keeping the one from the lowest board index
+ * so that failures are reproducible regardless of thread scheduling.
+ */
+inline void RecordRunError(paramType& p, const int bno, const int code)
+{
+  static std::mutex errorMutex;
+  std::lock_guard<std::mutex> guard(errorMutex);
+  if (p.error == 0 || bno < p.errorBoard)
+  {
+    p.error = code;
+    p.errorBoard = bno;
+  }
+}
 
 /** @brief High-level operation category used by the scheduler and threading layer. */
 enum RunMode

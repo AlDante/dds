@@ -12,6 +12,7 @@
  * See LICENSE and README.
  */
 
+#include <new>
 #include <iomanip>
 
 #include "TransTableS.h"
@@ -36,6 +37,22 @@ TransTableS::TransTableS()
     _constantsSet = true;
     TransTableS::SetConstants();
   }
+
+  // Every pointer must be null so that ReturnAllMemory is safe even if
+  // MakeTT failed part-way through (see MakeTT).
+  maxmem = 0;
+  maxIndex = 0;
+  wcount = 0;
+  ncount = 0;
+  aggp = nullptr;
+  pw = nullptr;
+  pn = nullptr;
+  for (int k = 0; k < 14; k++)
+    for (int h = 0; h < DDS_HANDS; h++)
+    {
+      pl[k][h] = nullptr;
+      lcount[k][h] = 0;
+    }
 
   TTInUse = 0;
 }
@@ -121,12 +138,29 @@ void TransTableS::SetMemoryMaximum(const int megabytes)
 
 void TransTableS::MakeTT()
 {
+  if (TTInUse)
+    return;
+
+  TTInUse = 1;
+  try
+  {
+    AllocateTT();
+  }
+  catch (...)
+  {
+    // Free whatever was acquired so that the object is back in its
+    // pristine state and MakeTT may be retried.
+    ReturnAllMemory();
+    throw;
+  }
+}
+
+
+void TransTableS::AllocateTT()
+{
   int i;
 
-  if (!TTInUse)
   {
-    TTInUse = 1;
-
     summem = (WINIT + 1) * sizeof(winCardType) +
              (NINIT + 1) * sizeof(nodeCardsType) +
              (LSIZE + 1) * 52 * sizeof(posSearchTypeSmall);
@@ -138,11 +172,11 @@ void TransTableS::MakeTT()
 
     pw = static_cast<winCardType **>(calloc(static_cast<unsigned int>(maxIndex + 1), sizeof(winCardType *)));
     if (pw == NULL)
-      exit(1);
+      throw std::bad_alloc();
 
     pn = static_cast<nodeCardsType **>(calloc(static_cast<unsigned int>(maxIndex + 1), sizeof(nodeCardsType *)));
     if (pn == NULL)
-      exit(1);
+      throw std::bad_alloc();
 
     for (int k = 1; k <= 13; k++)
       for (int h = 0; h < DDS_HANDS; h++)
@@ -151,7 +185,7 @@ void TransTableS::MakeTT()
                    <posSearchTypeSmall **>(calloc(static_cast<unsigned int>(maxIndex + 1),
                                              sizeof(posSearchTypeSmall *)));
         if (pl[k][h] == NULL)
-          exit(1);
+          throw std::bad_alloc();
       }
 
     for (i = 0; i <= maxIndex; i++)
@@ -183,11 +217,11 @@ void TransTableS::MakeTT()
 
     pw[0] = static_cast<winCardType *>(calloc(WINIT + 1, sizeof(winCardType)));
     if (pw[0] == NULL)
-      exit(1);
+      throw std::bad_alloc();
 
     pn[0] = static_cast<nodeCardsType *>(calloc(NINIT + 1, sizeof(nodeCardsType)));
     if (pn[0] == NULL)
-      exit(1);
+      throw std::bad_alloc();
 
     for (int k = 1; k <= 13; k++)
       for (int h = 0; h < DDS_HANDS; h++)
@@ -195,12 +229,12 @@ void TransTableS::MakeTT()
         pl[k][h][0] = static_cast<posSearchTypeSmall *>(calloc((LSIZE + 1),
                       sizeof(posSearchTypeSmall)));
         if (pl[k][h][0] == NULL)
-          exit(1);
+          throw std::bad_alloc();
       }
 
     aggp = static_cast<ttAggrType *>(calloc(8192, sizeof(ttAggrType)));
     if (aggp == NULL)
-      exit(1);
+      throw std::bad_alloc();
 
     InitTT();
 
@@ -320,21 +354,31 @@ void TransTableS::ReturnAllMemory()
 
   Wipe();
 
-  if (pw[0])
-    free(pw[0]);
-  pw[0] = NULL;
+  if (pw)
+  {
+    if (pw[0])
+      free(pw[0]);
+    pw[0] = NULL;
+  }
 
-  if (pn[0])
-    free(pn[0]);
-  pn[0] = NULL;
+  if (pn)
+  {
+    if (pn[0])
+      free(pn[0]);
+    pn[0] = NULL;
+  }
 
   for (int k = 1; k <= 13; k++)
   {
     for (int h = 0; h < DDS_HANDS; h++)
     {
-      if (pl[k][h][0])
-        free(pl[k][h][0]);
-      pl[k][h][0] = NULL;
+      if (pl[k][h])
+      {
+        if (pl[k][h][0])
+          free(pl[k][h][0]);
+        free(pl[k][h]);
+        pl[k][h] = NULL;
+      }
     }
   }
 

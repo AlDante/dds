@@ -17,6 +17,13 @@
 
 using namespace std;
 
+// Copies src into dst, truncating rather than overflowing.
+template <size_t N>
+static void CopyText(char (&dst)[N], const string& src)
+{
+  snprintf(dst, N, "%s", src.c_str());
+}
+
 
 /* First index: 0 nonvul, 1 vul. Second index: tricks down */
 int DOUBLED_SCORES[2][14] =
@@ -192,7 +199,7 @@ int STDCALL DealerPar(
   if (side == -1)
   {
     presp->number = 1;
-    strcpy(presp->contracts[0], "pass");
+    CopyText(presp->contracts[0], "pass");
     return RETURN_NO_FAULT;
   }
 
@@ -259,8 +266,7 @@ int STDCALL DealerPar(
       int no = lists[n].no, plus;
       reduce_contract(no, sac_gap[n], plus);
 
-      strcpy(presp->contracts[res_no],
-        contract_as_text(* tablep, side, no, lists[n].dno, plus).c_str());
+      CopyText(presp->contracts[res_no], contract_as_text(* tablep, side, no, lists[n].dno, plus));
       res_no++;
     }
   }
@@ -516,8 +522,7 @@ void sacrifices_as_text(
     if (eno != dno)
     {
       const int no_sac = sacr_list[eno].no + 5 * best_down;
-      strcpy(results[res_no], 
-        contract_as_text(table, other, no_sac, eno, -best_down).c_str());
+      CopyText(results[res_no], contract_as_text(table, other, no_sac, eno, -best_down));
       res_no++;
       continue;
     }
@@ -549,8 +554,7 @@ void sacrifices_as_text(
     const int ns0 = sac_list[0];
     if (p_hit == 1)
     {
-      strcpy(results[res_no],
-        sacrifice_as_text(ns0, pno_list[0], best_down).c_str());
+      CopyText(results[res_no], sacrifice_as_text(ns0, pno_list[0], best_down));
       res_no++;
       continue;
     }
@@ -559,15 +563,13 @@ void sacrifices_as_text(
     if (ns0 == ns1)
     {
       /* Both players */
-      strcpy(results[res_no], 
-        contract_as_text(table, other, ns0, eno, -best_down).c_str());
+      CopyText(results[res_no], contract_as_text(table, other, ns0, eno, -best_down));
       res_no++;
       continue;
     }
 
     const int p = (ns0 < ns1 ? 0 : 1);
-    strcpy(results[res_no],
-      sacrifice_as_text(sac_list[p], pno_list[p], best_down).c_str());
+    CopyText(results[res_no], sacrifice_as_text(sac_list[p], pno_list[p], best_down));
     res_no++;
   }
 }

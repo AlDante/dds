@@ -34,7 +34,7 @@ alpha-mu engine modules now live under `src/`.
 
 ## Default workloads
 
-- `regression_api` on `hands/list10.txt` and `hands/thomas1.txt`
+- `regression_api` on `hands/list10.txt` (`thomas1`/`thomas2` are excluded: ~45 min; use `make check-slow`)
 - `dtest -f ../hands/list10.txt -s solve`
 - `dtest -f ../hands/list100.txt -s solve`
 - `play_analysis_benchmark`

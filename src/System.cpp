@@ -22,6 +22,7 @@
 #include "PlayAnalyser.h"
 #include "parallel.h"
 #include "System.h"
+#include "SafeCopy.h"
 #include "Memory.h"
 #include "Scheduler.h"
 #include "ThreadMgr.h"
@@ -536,6 +537,11 @@ int System::RunThreadsSTLIMPL()
   vector<int> crossrefs;
   (* CallbackDuplList[runCat])(* bop, uniques, crossrefs);
 
+  // Deliberately never reset between runs. Each worker thread caches the id
+  // it receives in a thread_local, and pool threads outlive a run, so
+  // resetting this counter would hand a second thread an id that a cached
+  // thread still holds. Ids only need to be unique, not dense: ThreadMgr maps
+  // them onto the real [0, numThreads) slots via Occupy/Release.
   static atomic<int> thrIdNext = 0;
   atomic<bool> err(false);
 
@@ -612,6 +618,11 @@ int System::RunThreadsPPLIMPL()
   vector<int> crossrefs;
   (* CallbackDuplList[runCat])(* bop, uniques, crossrefs);
 
+  // Deliberately never reset between runs. Each worker thread caches the id
+  // it receives in a thread_local, and pool threads outlive a run, so
+  // resetting this counter would hand a second thread an id that a cached
+  // thread still holds. Ids only need to be unique, not dense: ThreadMgr maps
+  // them onto the real [0, numThreads) slots via Occupy/Release.
   static atomic<int> thrIdNext = 0;
   atomic<bool> err(false), err2(false);
 
@@ -800,7 +811,7 @@ string System::GetThreading(int& thr) const
 }
 
 
-string System::GetThreadSizes(char * sizes) const
+string System::GetThreadSizes(char (&sizes)[128]) const
 {
   int l = 0, s = 0;
   for (unsigned i = 0; i < static_cast<unsigned>(numThreads); i++)
@@ -812,7 +823,7 @@ string System::GetThreadSizes(char * sizes) const
   }
 
   const string st = to_string(s) + " S, " + to_string(l) + " L";
-  strcpy(sizes, st.c_str());
+  CopyTruncated(sizes, st);
   return st;
 }
 
@@ -842,7 +853,7 @@ string System::str(DDSInfo * info) const
     info->minor, info->patch);
   ss << left << setw(13) << "Version" <<
     setw(20) << right << strVersion << "\n";
-  strcpy(info->versionString, strVersion.c_str());
+  CopyTruncated(info->versionString, strVersion);
 
   ss << left << setw(17) << "Memory max (MB)" <<
     setw(16) << right << sysMem_MB << "\n";
@@ -871,7 +882,7 @@ string System::str(DDSInfo * info) const
     setw(24) << right << strThreading << "\n";
 
   const string st = ss.str();
-  strcpy(info->systemString, st.c_str());
+  CopyTruncated(info->systemString, st);
   return st;
 }
 

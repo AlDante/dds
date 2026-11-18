@@ -52,7 +52,7 @@ def workload_definition(
 DEFAULT_WORKLOADS = [
     workload_definition(
         "regression_api_smoke",
-        ["./build/regression_api", "../hands/list10.txt", "../hands/thomas1.txt"],
+        ["./build/regression_api", "../hands/list10.txt"],
     ),
     workload_definition(
         "dtest_solve_list10",

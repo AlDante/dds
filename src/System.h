@@ -83,7 +83,7 @@ class System
     string GetCores(int& comp) const;
     string GetConstructor(int& cons) const;
     string GetThreading(int& thr) const;
-    string GetThreadSizes(char * c) const;
+    string GetThreadSizes(char (&c)[128]) const;
 
 
   public:

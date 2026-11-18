@@ -13,6 +13,7 @@
  * See LICENSE and README.
  */
 
+#include <exception>
 #include "PlayAnalyser.h"
 #include "SolverIF.h"
 #include "System.h"
@@ -47,7 +48,32 @@ extern Memory memory;
 extern Scheduler scheduler;
 
 
+static int AnalysePlayBinImpl(
+  deal dl,
+  playTraceBin play,
+  solvedPlay * solvedp,
+  int thrId);
+
+
 int STDCALL AnalysePlayBin(
+  deal dl,
+  playTraceBin play,
+  solvedPlay * solvedp,
+  int thrId)
+{
+  // Exceptions must not cross the C API boundary.
+  try
+  {
+    return AnalysePlayBinImpl(dl, play, solvedp, thrId);
+  }
+  catch (const std::exception&)
+  {
+    return RETURN_UNKNOWN_FAULT;
+  }
+}
+
+
+static int AnalysePlayBinImpl(
   deal dl,
   playTraceBin play,
   solvedPlay * solvedp,
@@ -287,7 +313,7 @@ void PlaySingleCommon(
   if (res == 1)
     traceparam.solvedp->solved[bno] = solved;
   else
-   playparam.error = res;
+    RecordRunError(playparam, bno, res);
 }
 
 
@@ -316,7 +342,9 @@ int STDCALL AnalyseAllPlaysBin(
 {
   UNUSED(chunkSize);
 
+  std::lock_guard<std::recursive_mutex> guard(ddsApiMutex);
   playparam.error = 0;
+  playparam.errorBoard = 0;
 
   if (bop->noOfBoards > MAXNOOFBOARDS)
     return RETURN_TOO_MANY_BOARDS;

@@ -7,6 +7,7 @@
  */
 
 #include "alpha_mu_core.h"
+#include "SafeCopy.h"
 
 #include <cctype>
 #include <fstream>
@@ -385,7 +386,7 @@ namespace alpha_mu
             "PBN [Deal] should not be empty");
           Check(dealText.size() < sizeof(board.deal.remainCards),
             "PBN [Deal] should fit into dealPBN.remainCards");
-          strcpy(board.deal.remainCards, dealText.c_str());
+          CopyTruncated(board.deal.remainCards, dealText);
           haveDeal = true;
         }
         else if (upperTag == "DECLARER" && ! haveDeclarer)
@@ -439,7 +440,7 @@ namespace alpha_mu
         cards += playTokens[i];
       Check(cards.size() < sizeof(play.cards),
         "PBN [Play] section should fit into playTracePBN.cards");
-      strcpy(play.cards, cards.c_str());
+      CopyTruncated(play.cards, cards);
 
       board.playHistory = ParsePBNPlayHistory(play, board.deal.first,
         (board.deal.trump == 4 ? -1 : board.deal.trump));

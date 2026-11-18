@@ -8,6 +8,7 @@
 */
 
 
+#include <stdexcept>
 #include <iomanip>
 #include <sstream>
 #include <cstdlib>
@@ -2013,8 +2014,7 @@ const trickDataType& Moves::GetTrickData(const int tricks)
 
   if (sum != 4)
   {
-    cout << "Sum " << sum << " is not four" << endl;
-    exit(1);
+    throw std::logic_error("Moves: trick does not have four cards");
   }
 
   data.bestRank = trackp->move[3].rank;
@@ -2704,10 +2704,7 @@ void Moves::UpdateStatsEntry(
   {
     if (stat.nfuncs >= MG_SIZE)
     {
-      cout << "Shouldn't happen, " << stat.nfuncs << endl;
-      for (int i = 0; i < stat.nfuncs; i++)
-        cout << i << " " << stat.list[i].findex << "\n";
-      exit(1);
+      throw std::logic_error("Moves: statistics list overflow");
     }
 
     funp = &stat.list[stat.nfuncs++];
@@ -2731,16 +2728,13 @@ void Moves::RegisterHit(
 
   if (findex == -1)
   {
-    cout << "RegisterHit trick " << trick << 
-      " relHand " << relHand << " findex -1" << endl;
-    exit(1);
+    throw std::logic_error("Moves::RegisterHit: no recorded call");
   }
 
   const int curr = list.current;
   if (curr < 1 || curr > len)
   {
-    cout << "current out of bounds" << endl;
-    exit(1);
+    throw std::logic_error("Moves::RegisterHit: current out of bounds");
   }
 
   const int moveSuit = list.move[curr-1].suit;

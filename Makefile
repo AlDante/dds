@@ -1,6 +1,7 @@
 .PHONY: docs profile profile-clean check api-check instrumented-build instrumented-check \
 	asan-build asan-check ubsan-build ubsan-check tsan-build tsan-check \
-	perf-build perf-check perf-bench perf apple-backend-compare
+	check-slow perf-build perf-check perf-bench perf apple-backend-compare \
+	coverage-build coverage-check coverage-report
 
 # ---------- Documentation ----------
 
@@ -56,6 +57,12 @@ INSTRUMENTED_EXTRA_COMPILE_FLAGS = -DDDS_ALPHA_MU_STATS -DDDS_TIMING -DDDS_MOVES
 ASAN_FLAGS         = -fsanitize=address,undefined -fno-omit-frame-pointer
 UBSAN_FLAGS        = -fsanitize=undefined -fno-omit-frame-pointer
 TSAN_FLAGS         = -fsanitize=thread -fno-omit-frame-pointer
+COV_FLAGS          = -fprofile-instr-generate -fcoverage-mapping
+COV_DDS_LIB_DIR    = src/build-cov
+COV_DIR            = test/build-cov/coverage
+COV_HANDS          = ../hands/list1.txt
+LLVM_COV           = xcrun llvm-cov
+LLVM_PROFDATA      = xcrun llvm-profdata
 
 perf-build:
 	$(MAKE) -C src macos
@@ -64,8 +71,16 @@ perf-build:
 api-check: check
 
 check: perf-build
+	$(MAKE) -C test -f Makefiles/Makefile_Mac_clang transtable_failure
+	@echo "=== TransTable allocation-failure test ==="
+	cd test && ./build/transtable_failure
 	@echo "=== Minimum correctness gate: regression_api ==="
-	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/regression_api ../hands/list10.txt ../hands/thomas1.txt
+	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/regression_api ../hands/list10.txt
+
+# thomas1 needs ~2 min per CalcAllTables on one M1 Max core (see
+# docs/improvement-plan.md) and regression_api runs it several times.
+check-slow: check
+	cd test && DYLD_LIBRARY_PATH=../$(DDS_LIB_DIR) ./build/regression_api ../hands/thomas1.txt
 
 instrumented-build:
 	$(MAKE) -C src BUILD_DIR=build-instrumented DDS_BEHAVIOR="$(INSTRUMENTED_DDS_BEHAVIOR)" macos
@@ -94,7 +109,7 @@ asan-build:
 		regression_api alpha_mu
 
 asan-check: asan-build
-	cd test && DYLD_LIBRARY_PATH=../$(ASAN_DDS_LIB_DIR) ./build-asan/regression_api ../hands/list10.txt ../hands/thomas1.txt
+	cd test && DYLD_LIBRARY_PATH=../$(ASAN_DDS_LIB_DIR) ./build-asan/regression_api ../hands/list10.txt
 
 ubsan-build:
 	$(MAKE) -C src PROFILE_BUILD=1 BUILD_DIR=build-ubsan EXTRA_COMPILE_FLAGS="$(UBSAN_FLAGS)" EXTRA_LINK_FLAGS="$(UBSAN_FLAGS)" macos
@@ -107,7 +122,7 @@ ubsan-build:
 		regression_api alpha_mu
 
 ubsan-check: ubsan-build
-	cd test && DYLD_LIBRARY_PATH=../$(UBSAN_DDS_LIB_DIR) ./build-ubsan/regression_api ../hands/list10.txt ../hands/thomas1.txt
+	cd test && DYLD_LIBRARY_PATH=../$(UBSAN_DDS_LIB_DIR) ./build-ubsan/regression_api ../hands/list10.txt
 
 tsan-build:
 	$(MAKE) -C src PROFILE_BUILD=1 BUILD_DIR=build-tsan EXTRA_COMPILE_FLAGS="$(TSAN_FLAGS)" EXTRA_LINK_FLAGS="$(TSAN_FLAGS)" macos
@@ -120,7 +135,39 @@ tsan-build:
 		regression_api alpha_mu
 
 tsan-check: tsan-build
-	cd test && DYLD_LIBRARY_PATH=../$(TSAN_DDS_LIB_DIR) ./build-tsan/regression_api ../hands/list10.txt ../hands/thomas1.txt
+	cd test && DYLD_LIBRARY_PATH=../$(TSAN_DDS_LIB_DIR) ./build-tsan/regression_api ../hands/list10.txt
+
+# ---------- Coverage (clang source-based) ----------
+#
+#   make coverage-check   -- build with coverage, run the suites, print a
+#                            per-file line-coverage summary for src/
+#   make coverage-report  -- additionally write an HTML report to $(COV_DIR)/html
+
+coverage-build:
+	$(MAKE) -C src PROFILE_BUILD=1 BUILD_DIR=build-cov EXTRA_COMPILE_FLAGS="$(COV_FLAGS)" EXTRA_LINK_FLAGS="$(COV_FLAGS)" macos
+	$(MAKE) -C test -f Makefiles/Makefile_Mac_clang PROFILE_BUILD=1 \
+		BUILD_DIR=build-cov \
+		DDS_BUILD_DIR=../src/build-cov \
+		RPATH_DIR=@loader_path/../../src/build-cov \
+		EXTRA_COMPILE_FLAGS="$(COV_FLAGS)" \
+		EXTRA_LINK_FLAGS="$(COV_FLAGS)" \
+		regression_api transtable_failure
+
+coverage-check: coverage-build
+	@mkdir -p $(COV_DIR)
+	rm -f $(COV_DIR)/*.profraw
+	cd test && LLVM_PROFILE_FILE=$(CURDIR)/$(COV_DIR)/api-%p.profraw DYLD_LIBRARY_PATH=../$(COV_DDS_LIB_DIR) \
+		./build-cov/regression_api $(COV_HANDS)
+	cd test && LLVM_PROFILE_FILE=$(CURDIR)/$(COV_DIR)/tt-%p.profraw ./build-cov/transtable_failure
+	$(LLVM_PROFDATA) merge -sparse $(COV_DIR)/*.profraw -o $(COV_DIR)/all.profdata
+	$(LLVM_COV) report $(COV_DDS_LIB_DIR)/libdds.so -object test/build-cov/transtable_failure \
+		-instr-profile=$(COV_DIR)/all.profdata -ignore-filename-regex='(test|include)/' src/*.cpp
+
+coverage-report: coverage-check
+	$(LLVM_COV) show $(COV_DDS_LIB_DIR)/libdds.so -object test/build-cov/transtable_failure \
+		-instr-profile=$(COV_DIR)/all.profdata -format=html -output-dir=$(COV_DIR)/html \
+		-ignore-filename-regex='(test|include)/' src/*.cpp
+	@echo "HTML report: $(COV_DIR)/html/index.html"
 
 perf-check: check
 	@echo "=== Correctness: dtest solve list10 ==="

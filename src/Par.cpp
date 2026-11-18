@@ -37,6 +37,24 @@ struct best_par_type
   int par_tricks;
 };
 
+// Size of the caller-supplied buffer for ConvertToDealerTextFormat.
+static const size_t kDealerTextSize = 128;
+
+// Appends src to the NUL-terminated dst of capacity cap, truncating
+// rather than overflowing.
+static void AppendText(char * dst, const size_t cap, const char * src)
+{
+  const size_t len = strlen(dst);
+  if (len + 1 < cap)
+    snprintf(dst + len, cap - len, "%s", src);
+}
+
+template <size_t N>
+static void AppendText(char (&dst)[N], const char * src)
+{
+  AppendText(dst, N, src);
+}
+
 struct parContr2Type
 {
   char contracts[10];
@@ -138,9 +156,9 @@ int STDCALL Par(
   presp->parScore[1][3] = '\0';
 
    snprintf(temp, sizeof(temp), "%d", sidesRes[0].score);
-  strcat(presp->parScore[0], temp);
+  AppendText(presp->parScore[0], temp);
   snprintf(temp, sizeof(temp), "%d", sidesRes[1].score);
-  strcat(presp->parScore[1], temp);
+  AppendText(presp->parScore[1], temp);
 
   presp->parContractsString[0][0] = 'N';
   presp->parContractsString[0][1] = 'S';
@@ -167,17 +185,17 @@ int STDCALL Par(
       for (k = 0; k < sidesRes[i].number; k++)
       {
 
-        strcat(presp->parContractsString[i], 
+        AppendText(presp->parContractsString[i], 
           seats[sidesRes[i].contracts[k].seats]);
         snprintf(temp, sizeof(temp), "%d", sidesRes[i].contracts[k].level);
         buff[0] = static_cast<char>(
           cardSuit[denom_conv[sidesRes[i].contracts[k].denom]]);
         buff[1] = 'x';
         buff[2] = '\0';
-        strcat(temp, buff);
-        strcat(presp->parContractsString[i], temp);
+        AppendText(temp, buff);
+        AppendText(presp->parContractsString[i], temp);
         if (k != (sidesRes[i].number - 1))
-          strcat(presp->parContractsString[i], contr_sep);
+          AppendText(presp->parContractsString[i], contr_sep);
       }
     }
     else
@@ -187,7 +205,7 @@ int STDCALL Par(
       for (k = 0; k < sidesRes[i].number; k++)
       {
 
-        strcat(presp->parContractsString[i], 
+        AppendText(presp->parContractsString[i], 
           seats[sidesRes[i].contracts[k].seats]);
 
         int n = CalcMultiContracts(sidesRes[i].contracts[k].overTricks, 
@@ -199,10 +217,10 @@ int STDCALL Par(
         buff[0] = static_cast<char>(
           cardSuit[denom_conv[sidesRes[i].contracts[k].denom]]);
         buff[1] = '\0';
-        strcat(temp, buff);
-        strcat(presp->parContractsString[i], temp);
+        AppendText(temp, buff);
+        AppendText(presp->parContractsString[i], temp);
         if (k != (sidesRes[i].number - 1))
-          strcat(presp->parContractsString[i], contr_sep);
+          AppendText(presp->parContractsString[i], contr_sep);
       }
     }
   }
@@ -1300,19 +1318,19 @@ int STDCALL SidesPar(
       switch (parm[i].contracts[k].denom)
       {
         case 0:
-          strcat(sidesRes[i].contracts[k], "N");
+          AppendText(sidesRes[i].contracts[k], "N");
           break;
         case 1:
-          strcat(sidesRes[i].contracts[k], "S");
+          AppendText(sidesRes[i].contracts[k], "S");
           break;
         case 2:
-          strcat(sidesRes[i].contracts[k], "H");
+          AppendText(sidesRes[i].contracts[k], "H");
           break;
         case 3:
-          strcat(sidesRes[i].contracts[k], "D");
+          AppendText(sidesRes[i].contracts[k], "D");
           break;
         case 4:
-          strcat(sidesRes[i].contracts[k], "C");
+          AppendText(sidesRes[i].contracts[k], "C");
           break;
         default:
           // Cannot happen, but keeps gcc happy.
@@ -1320,26 +1338,26 @@ int STDCALL SidesPar(
       }
       if (parm[i].contracts[k].underTricks > 0)
         /* Sacrifice */
-        strcat(sidesRes[i].contracts[k], "*");
+        AppendText(sidesRes[i].contracts[k], "*");
       switch (parm[i].contracts[k].seats)
       {
         case 0:
-          strcat(sidesRes[i].contracts[k], "-N");
+          AppendText(sidesRes[i].contracts[k], "-N");
           break;
         case 1:
-          strcat(sidesRes[i].contracts[k], "-E");
+          AppendText(sidesRes[i].contracts[k], "-E");
           break;
         case 2:
-          strcat(sidesRes[i].contracts[k], "-S");
+          AppendText(sidesRes[i].contracts[k], "-S");
           break;
         case 3:
-          strcat(sidesRes[i].contracts[k], "-W");
+          AppendText(sidesRes[i].contracts[k], "-W");
           break;
         case 4:
-          strcat(sidesRes[i].contracts[k], "-NS");
+          AppendText(sidesRes[i].contracts[k], "-NS");
           break;
         case 5:
-          strcat(sidesRes[i].contracts[k], "-EW");
+          AppendText(sidesRes[i].contracts[k], "-EW");
           break;
         default:
           // Cannot happen, but keeps gcc happy.
@@ -1349,13 +1367,13 @@ int STDCALL SidesPar(
       {
         /* Sacrifice */
         snprintf(buff, sizeof(buff), "-%d", parm[i].contracts[k].underTricks);
-        strcat(sidesRes[i].contracts[k], buff);
+        AppendText(sidesRes[i].contracts[k], buff);
       }
       else if (parm[i].contracts[k].overTricks > 0)
       {
         /* Make */
         snprintf(buff, sizeof(buff), "+%d", parm[i].contracts[k].overTricks);
-        strcat(sidesRes[i].contracts[k], buff);
+        AppendText(sidesRes[i].contracts[k], buff);
       }
     }
   }
@@ -1372,33 +1390,33 @@ int STDCALL ConvertToDealerTextFormat(
   int k, i;
   char buff[20];
 
-  snprintf(resp, sizeof(resp), "Par %d: ", pres->score);
+  snprintf(resp, kDealerTextSize, "Par %d: ", pres->score);
 
   for (k = 0; k < pres->number; k++)
   {
 
     if (k != 0)
-      strcat(resp, " ");
+      AppendText(resp, kDealerTextSize, " ");
 
     switch (pres->contracts[k].seats)
     {
       case 0:
-        strcat(resp, "N ");
+        AppendText(resp, kDealerTextSize, "N ");
         break;
       case 1:
-        strcat(resp, "E ");
+        AppendText(resp, kDealerTextSize, "E ");
         break;
       case 2:
-        strcat(resp, "S ");
+        AppendText(resp, kDealerTextSize, "S ");
         break;
       case 3:
-        strcat(resp, "W ");
+        AppendText(resp, kDealerTextSize, "W ");
         break;
       case 4:
-        strcat(resp, "NS ");
+        AppendText(resp, kDealerTextSize, "NS ");
         break;
       case 5:
-        strcat(resp, "EW ");
+        AppendText(resp, kDealerTextSize, "EW ");
         break;
       default:
         return RETURN_UNKNOWN_FAULT;
@@ -1408,24 +1426,24 @@ int STDCALL ConvertToDealerTextFormat(
     for (i = 0; i < 10; i++)
       buff[i] = '\0';
     snprintf(buff, sizeof(buff), "%d", pres->contracts[k].level);
-    strcat(resp, buff);
+    AppendText(resp, kDealerTextSize, buff);
 
     switch (pres->contracts[k].denom)
     {
       case 0:
-        strcat(resp, "N");
+        AppendText(resp, kDealerTextSize, "N");
         break;
       case 1:
-        strcat(resp, "S");
+        AppendText(resp, kDealerTextSize, "S");
         break;
       case 2:
-        strcat(resp, "H");
+        AppendText(resp, kDealerTextSize, "H");
         break;
       case 3:
-        strcat(resp, "D");
+        AppendText(resp, kDealerTextSize, "D");
         break;
       case 4:
-        strcat(resp, "C");
+        AppendText(resp, kDealerTextSize, "C");
         break;
       default:
         return RETURN_UNKNOWN_FAULT;
@@ -1434,19 +1452,19 @@ int STDCALL ConvertToDealerTextFormat(
 
     if (pres->contracts[k].underTricks > 0)
     {
-      strcat(resp, "x-");
+      AppendText(resp, kDealerTextSize, "x-");
       for (i = 0; i < 10; i++)
         buff[i] = '\0';
       snprintf(buff, sizeof(buff), "%d", pres->contracts[k].underTricks);
-      strcat(resp, buff);
+      AppendText(resp, kDealerTextSize, buff);
     }
     else if (pres->contracts[k].overTricks > 0)
     {
-      strcat(resp, "+");
+      AppendText(resp, kDealerTextSize, "+");
       for (i = 0; i < 10; i++)
         buff[i] = '\0';
       snprintf(buff, sizeof(buff), "%d", pres->contracts[k].overTricks);
-      strcat(resp, buff);
+      AppendText(resp, kDealerTextSize, buff);
     }
   }
   return RETURN_NO_FAULT;
@@ -1479,27 +1497,27 @@ int STDCALL ConvertToSidesTextFormat(
     {
 
       if (k != 0)
-        strcat(resp->parText[i], " ");
+        AppendText(resp->parText[i], " ");
 
       switch ((pres + i)->contracts[k].seats)
       {
         case 0:
-          strcat(resp->parText[i], "N ");
+          AppendText(resp->parText[i], "N ");
           break;
         case 1:
-          strcat(resp->parText[i], "E ");
+          AppendText(resp->parText[i], "E ");
           break;
         case 2:
-          strcat(resp->parText[i], "S ");
+          AppendText(resp->parText[i], "S ");
           break;
         case 3:
-          strcat(resp->parText[i], "W ");
+          AppendText(resp->parText[i], "W ");
           break;
         case 4:
-          strcat(resp->parText[i], "NS ");
+          AppendText(resp->parText[i], "NS ");
           break;
         case 5:
-          strcat(resp->parText[i], "EW ");
+          AppendText(resp->parText[i], "EW ");
           break;
         default:
           return RETURN_UNKNOWN_FAULT;
@@ -1509,24 +1527,24 @@ int STDCALL ConvertToSidesTextFormat(
       for (j = 0; j < 10; j++)
         buff[j] = '\0';
       snprintf(buff, sizeof(buff), "%d", (pres + i)->contracts[k].level);
-      strcat(resp->parText[i], buff);
+      AppendText(resp->parText[i], buff);
 
       switch ((pres + i)->contracts[k].denom)
       {
         case 0:
-          strcat(resp->parText[i], "NT");
+          AppendText(resp->parText[i], "NT");
           break;
         case 1:
-          strcat(resp->parText[i], "S");
+          AppendText(resp->parText[i], "S");
           break;
         case 2:
-          strcat(resp->parText[i], "H");
+          AppendText(resp->parText[i], "H");
           break;
         case 3:
-          strcat(resp->parText[i], "D");
+          AppendText(resp->parText[i], "D");
           break;
         case 4:
-          strcat(resp->parText[i], "C");
+          AppendText(resp->parText[i], "C");
           break;
         default:
           return RETURN_UNKNOWN_FAULT;
@@ -1535,19 +1553,19 @@ int STDCALL ConvertToSidesTextFormat(
 
       if ((pres + i)->contracts[k].underTricks > 0)
       {
-        strcat(resp->parText[i], "x-");
+        AppendText(resp->parText[i], "x-");
         for (j = 0; j < 10; j++)
           buff[j] = '\0';
         snprintf(buff, sizeof(buff), "%d", (pres + i)->contracts[k].underTricks);
-        strcat(resp->parText[i], buff);
+        AppendText(resp->parText[i], buff);
       }
       else if ((pres + i)->contracts[k].overTricks > 0)
       {
-        strcat(resp->parText[i], "+");
+        AppendText(resp->parText[i], "+");
         for (j = 0; j < 10; j++)
           buff[j] = '\0';
         snprintf(buff, sizeof(buff), "%d", (pres + i)->contracts[k].overTricks);
-        strcat(resp->parText[i], buff);
+        AppendText(resp->parText[i], buff);
       }
     }
 
